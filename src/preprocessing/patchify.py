@@ -9,7 +9,7 @@ import cv2  # import after setting OPENCV_IO_MAX_IMAGE_PIXELS
 if __name__ == '__main__':
     image_path = glob('../../raw_data/*.tif')[0]
     image_fname = os.path.basename(image_path).replace('.tif', '')
-    out_shape = (512, 512, 3)
+    out_shape = (256, 256, 3)
     out_folder = '../../data/'
     os.makedirs(out_folder, exist_ok=True)
 
@@ -43,6 +43,10 @@ if __name__ == '__main__':
                 patch = np.pad(patch,
                                pad_width=((0, h_diff), (0, w_diff), (0, 0)),
                                mode='constant')
+
+            # Do not save all-blank patches.
+            if (patch == 0).all():
+                continue
 
             patch = cv2.cvtColor(patch, cv2.COLOR_RGB2BGR)
             output_path = out_folder + image_fname + '_H%sW%s.jpg' % (
