@@ -41,6 +41,7 @@ def apply_watershed(img: Union[str, np.ndarray], markers: Optional[np.ndarray], 
 
 if __name__ == '__main__':
     image_path = '../data/NSCLC_S20-8466_03-01_HandE_H1792W9728.jpg'
+    save_path = '../output/Segmentation_NSCLC_S20-8466_03-01_HandE_H1792W9728.jpg'
     binarized_image, _ = apply_otsu_thresholding(image_path)
 
     blobs = detect_blob(binarized_image, min_sigma=3, max_sigma=50, num_sigma=30, threshold=0.12, overlap=0.5)
@@ -86,11 +87,11 @@ if __name__ == '__main__':
 
     ax[1,0].imshow(og_image, cmap=plt.cm.gray)
     ax[1,0].imshow(instance_labels, cmap=plt.cm.nipy_spectral, alpha=.5)
-    ax[1,0].set_title("Binarized Segmented %d cells" % np.max(instance_labels))
+    ax[1,0].set_title("Binarized + LoG Segmented %d cells" % np.max(instance_labels))
 
     ax[1,1].imshow(og_image, cmap=plt.cm.gray)
     ax[1,1].imshow(instance_labels_gradient, cmap=plt.cm.nipy_spectral, alpha=.5)
-    ax[1,1].set_title("Gradient Segmented %d cells" % np.max(instance_labels_gradient))
+    ax[1,1].set_title("Gradient + LoG Segmented %d cells" % np.max(instance_labels_gradient))
 
     # Optional 3: Using edit distance
     distance = ndi.distance_transform_edt(binarized_image)
@@ -110,7 +111,10 @@ if __name__ == '__main__':
         a.axis('off')
 
     plt.tight_layout()
+    plt.savefig(save_path)
+
     plt.show()
+
 
 
     
