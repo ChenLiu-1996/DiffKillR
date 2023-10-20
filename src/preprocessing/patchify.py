@@ -7,10 +7,11 @@ os.environ["OPENCV_IO_MAX_IMAGE_PIXELS"] = pow(2, 40).__str__()
 import cv2  # import after setting OPENCV_IO_MAX_IMAGE_PIXELS
 
 if __name__ == '__main__':
-    image_path = glob('../../raw_data/*.tif')[0]
+    image_path = sorted(glob('../../raw_data/*.tif'))[0]
     image_fname = os.path.basename(image_path).replace('.tif', '')
-    out_shape = (256, 256, 3)
-    out_folder = '../../data/'
+    out_shape = (64, 64, 3)
+    out_folder = '../../data/%s_patch_H%sW%s/' % (image_fname, out_shape[0],
+                                                  out_shape[1])
     os.makedirs(out_folder, exist_ok=True)
 
     image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
@@ -48,8 +49,12 @@ if __name__ == '__main__':
             if (patch == 0).all():
                 continue
 
+            # NOTE: This is a hot fix. Not sure what is a good heuristic.
+            # Only save patches with significant BLUE channel.
+            if patch[..., 2].max() < 180:
+                continue
             patch = cv2.cvtColor(patch, cv2.COLOR_RGB2BGR)
-            output_path = out_folder + image_fname + '_H%sW%s.jpg' % (
-                h_pointer, w_pointer)
+            output_path = out_folder + 'patch_H%sW%s.jpg' % (h_pointer,
+                                                             w_pointer)
 
             cv2.imwrite(output_path, patch)
