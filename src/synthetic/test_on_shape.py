@@ -11,6 +11,7 @@ from synthetic.generate_shapes import generate_shape
 from augmentation.aug_rotation import augment_rotation
 from augmentation.aug_stretch import augment_uniform_stretch, augment_directional_stretch
 
+
 def test_on_shape(shape: str = 'square'):
     fig = plt.figure(figsize=(10, 15))
 
@@ -75,6 +76,7 @@ def test_on_shape(shape: str = 'square'):
 
     fig.tight_layout()
     fig.savefig('synthetic_test_%s.png' % shape)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
