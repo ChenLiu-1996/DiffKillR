@@ -12,40 +12,64 @@ from augmentation.aug_rotation import augment_rotation
 from augmentation.aug_stretch import augment_uniform_stretch, augment_directional_stretch
 
 def test_on_shape(shape: str = 'square'):
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(5, 6, 1)
+    fig = plt.figure(figsize=(10, 15))
+
+    label = generate_shape(shape=shape, random_seed=1)
+    image = np.zeros_like(label)[..., None].repeat(3, axis=-1)
+    # Yale Blue color.
+    image[:, :, 0] = 15/255*generate_shape(shape=shape, random_seed=1)
+    image[:, :, 1] = 77/255*generate_shape(shape=shape, random_seed=1)
+    image[:, :, 2] = 146/255*generate_shape(shape=shape, random_seed=1)
+
+    ax = fig.add_subplot(10, 6, 1)
+    ax.imshow(image)
+    ax.set_axis_off()
+    ax.set_title('Input "image"')
+    ax = fig.add_subplot(10, 6, 7)
+    ax.imshow(label, cmap='gray')
+    ax.set_title('Input "label"')
     ax.set_axis_off()
 
-    image = generate_shape(shape=shape, random_seed=1)
-    ax.imshow(image, cmap='gray')
-    ax.set_title('Input shape')
-
     for seed in range(5):
-        ax = fig.add_subplot(5, 6, seed + 2)
-        image_rotated = augment_rotation(image=image, output_size=64, random_seed=seed)
-        ax.imshow(image_rotated, cmap='gray')
+        image_rotated, label_rotated = augment_rotation(image=image, label=label, output_size=64, random_seed=seed)
+        ax = fig.add_subplot(10, 6, seed + 2)
+        ax.imshow(image_rotated)
+        ax.set_title('Rotation\n(seed %s)' % seed)
+        ax.set_axis_off()
+        ax = fig.add_subplot(10, 6, seed + 8)
+        ax.imshow(label_rotated, cmap='gray')
         ax.set_title('Rotation\n(seed %s)' % seed)
         ax.set_axis_off()
 
     for seed in range(5):
-        ax = fig.add_subplot(5, 6, seed + 8)
-        image_stretched = augment_uniform_stretch(image=image,
-                                                  output_size=64,
-                                                  max_stretch_factor=1.5,
-                                                  can_squeeze=True,
-                                                  random_seed=seed)
-        ax.imshow(image_stretched, cmap='gray')
+        image_stretched, label_stretched = augment_uniform_stretch(image=image,
+                                                                   label=label,
+                                                                   output_size=64,
+                                                                   max_stretch_factor=1.5,
+                                                                   can_squeeze=True,
+                                                                   random_seed=seed)
+        ax = fig.add_subplot(10, 6, seed + 14)
+        ax.imshow(image_stretched)
+        ax.set_title('Uniform stretch\n(seed %s)' % seed)
+        ax.set_axis_off()
+        ax = fig.add_subplot(10, 6, seed + 20)
+        ax.imshow(label_stretched, cmap='gray')
         ax.set_title('Uniform stretch\n(seed %s)' % seed)
         ax.set_axis_off()
 
     for seed in range(5):
-        ax = fig.add_subplot(5, 6, seed + 14)
-        image_stretched = augment_directional_stretch(image=image,
-                                                      output_size=64,
-                                                      max_stretch_factor=1.5,
-                                                      can_squeeze=True,
-                                                      random_seed=seed)
-        ax.imshow(image_stretched, cmap='gray')
+        image_stretched, label_stretched = augment_directional_stretch(image=image,
+                                                                       label=label,
+                                                                       output_size=64,
+                                                                       max_stretch_factor=1.5,
+                                                                       can_squeeze=True,
+                                                                       random_seed=seed)
+        ax = fig.add_subplot(10, 6, seed + 26)
+        ax.imshow(image_stretched)
+        ax.set_title('Directional stretch\n(seed %s)' % seed)
+        ax.set_axis_off()
+        ax = fig.add_subplot(10, 6, seed + 32)
+        ax.imshow(label_stretched, cmap='gray')
         ax.set_title('Directional stretch\n(seed %s)' % seed)
         ax.set_axis_off()
 
