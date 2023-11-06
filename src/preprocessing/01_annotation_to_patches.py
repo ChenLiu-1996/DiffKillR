@@ -125,6 +125,7 @@ def patchify_and_save(image, label_map, class_centroid_map, patches_folder,
 if __name__ == '__main__':
     patch_size = 224
     image_path = '../../raw_data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00.tif'
+    
     annotation_file = '../../raw_data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00.tif_Annotations.json'
     patches_folder = '../../data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_patch_%dx%d/' % (
         patch_size, patch_size)

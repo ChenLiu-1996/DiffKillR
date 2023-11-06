@@ -9,7 +9,7 @@ sys.path.insert(0, import_dir)
 
 from synthetic.generate_shapes import generate_shape
 from augmentation.aug_rotation import augment_rotation
-from augmentation.aug_stretch import augment_uniform_stretch, augment_directional_stretch
+from augmentation.aug_stretch import augment_uniform_stretch, augment_directional_stretch, augment_volume_preserving_stretch
 
 
 def test_on_shape(shape: str = 'square'):
@@ -74,6 +74,22 @@ def test_on_shape(shape: str = 'square'):
         ax.set_title('Directional stretch\n(seed %s)' % seed)
         ax.set_axis_off()
 
+    for seed in range(5):
+        image_stretched, label_stretched = augment_volume_preserving_stretch(image=image,
+                                                                            label=label,
+                                                                            output_size=64,
+                                                                            max_stretch_factor=1.5,
+                                                                            random_seed=seed)
+                                                                            
+        ax = fig.add_subplot(10, 6, seed + 38)
+        ax.imshow(image_stretched)
+        ax.set_title('Volume preserving\n(seed %s)' % seed)
+        ax.set_axis_off()
+        ax = fig.add_subplot(10, 6, seed + 44)
+        ax.imshow(label_stretched, cmap='gray')
+        ax.set_title('Volume preserving\n(seed %s)' % seed)
+        ax.set_axis_off()
+
     fig.tight_layout()
     fig.savefig('synthetic_test_%s.png' % shape)
 
@@ -86,4 +102,4 @@ if __name__ == '__main__':
         type=str,
         default='square')
     args = vars(parser.parse_args())
-    test_on_shape()
+    test_on_shape(shape=args['shape'])
