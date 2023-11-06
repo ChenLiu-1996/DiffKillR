@@ -48,10 +48,10 @@ class AutoEncoder(BaseNetwork):
 
         self.conv1x1 = nn.Conv2d(in_channels, n_f, 1, 1)
 
-        self.down_list = []
-        self.down_conn_list = []
-        self.up_list = []
-        self.up_conn_list = []
+        self.down_list = nn.ModuleList([])
+        self.down_conn_list = nn.ModuleList([])
+        self.up_list = nn.ModuleList([])
+        self.up_conn_list = nn.ModuleList([])
 
         if self.use_residual:
             conv_block = ResConvBlock
