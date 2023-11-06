@@ -89,6 +89,7 @@ class AutoEncoder(BaseNetwork):
                                           align_corners=False)
 
         x = self.bottleneck(x)
+        latent = x.copy()
 
         for d in range(self.depth):
             x = nn.functional.interpolate(x,
@@ -100,7 +101,7 @@ class AutoEncoder(BaseNetwork):
 
         output = self.out_layer(x)
 
-        return output
+        return output, latent
 
 
 class ConvBlock(nn.Module):

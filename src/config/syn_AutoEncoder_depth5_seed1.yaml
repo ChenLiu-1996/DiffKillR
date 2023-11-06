@@ -1,0 +1,14 @@
+dataset_name: 'synthetic'
+target_dim: (64, 64)
+dataset_path: '$ROOT/data/synthesized/'
+model_save_path: '$ROOT/checkpoints/syn_AutoEncoder_depth5_seed1.pty'
+output_save_path: '$ROOT/results/syn_AutoEncoder_depth5_seed1/'
+log_folder: '$ROOT/logs'
+learning_rate: 1e-3
+max_epochs: 200
+batch_size: 64
+model: 'AutoEncoder'
+num_filters: 32
+num_workers: 4
+random_seed: 1
+train_val_test_ratio: '6:2:2'
