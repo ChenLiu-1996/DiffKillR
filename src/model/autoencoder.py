@@ -55,14 +55,16 @@ class AutoEncoder(BaseNetwork):
 
         if self.use_residual:
             conv_block = ResConvBlock
+            upconv_block = ResUpConvBlock
         else:
             conv_block = ConvBlock
+            upconv_block = UpConvBlock
 
         for d in range(self.depth):
             self.down_list.append(conv_block(n_f * 2 ** d))
             self.down_conn_list.append(nn.Conv2d(n_f * 2 ** d, n_f * 2 ** (d + 1), 1, 1))
             self.up_conn_list.append(nn.Conv2d(n_f * 2 ** (d + 1), n_f * 2 ** d, 1, 1))
-            self.up_list.append(conv_block(n_f * 2 ** d))
+            self.up_list.append(upconv_block(n_f * 2 ** d))
 
         self.up_list = self.up_list[::-1]
         self.up_conn_list = self.up_conn_list[::-1]
