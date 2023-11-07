@@ -14,7 +14,7 @@ def _generate_square(image_shape: Tuple[int] = (64, 64), edge_length: int = 32, 
 
     return image
 
-def _generate_elipse(image_shape: Tuple[int] = (64, 64), random_seed: int = None):
+def _generate_ellipse(image_shape: Tuple[int] = (64, 64), random_seed: int = None):
     image = np.zeros(image_shape, dtype=np.float32)
 
     if random_seed is not None:
@@ -32,7 +32,7 @@ def generate_shape(image_shape: Tuple[int] = (64, 64), shape: str = 'square', ra
     if shape == 'square':
         image = _generate_square(image_shape=image_shape, random_seed=random_seed)
     elif shape == 'ellipse':
-        image, _, _, _ = _generate_elipse(image_shape=image_shape, random_seed=random_seed)
+        image, _, _, _ = _generate_ellipse(image_shape=image_shape, random_seed=random_seed)
 
     return image
 
