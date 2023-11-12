@@ -78,7 +78,7 @@ class AutoEncoder(BaseNetwork):
         `interpolate` is used as a drop-in replacement for MaxPool2d.
         '''
 
-        assert x.shape[0] == 1
+        #assert x.shape[0] == 1 TODO:? why is this here?
 
         x = self.non_linearity(self.conv1x1(x))
 
@@ -91,7 +91,7 @@ class AutoEncoder(BaseNetwork):
                                           align_corners=False)
 
         x = self.bottleneck(x)
-        latent = x.copy()
+        latent = torch.clone(x)
 
         for d in range(self.depth):
             x = nn.functional.interpolate(x,

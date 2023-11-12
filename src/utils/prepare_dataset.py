@@ -1,6 +1,6 @@
 from torch.utils.data import DataLoader
 from datasets.synthetic import SyntheticDataset
-from utils.extend import ExtendedDataset
+from datasets.augmented import AugmentedDataset
 from utils.split import split_dataset
 from utils.attribute_hashmap import AttributeHashmap
 
@@ -10,21 +10,20 @@ def prepare_dataset(config: AttributeHashmap):
     if config.dataset_name == 'synthetic':
         dataset = SyntheticDataset(base_path=config.dataset_path,
                                    target_dim=config.target_dim)
+    elif config.dataset_name == 'augmented':
+        aug_lists = config.aug_methods.split(',')
+        dataset = AugmentedDataset(augmentation_methods=aug_lists,
+                                    base_path=config.dataset_path,
+                                    target_dim=config.target_dim)
     else:
         raise ValueError(
             'Dataset not found. Check `dataset_name` in config yaml file.')
-
-    num_image_channel = dataset.num_image_channel()
 
     # Load into DataLoader
     ratios = [float(c) for c in config.train_val_test_ratio.split(':')]
     ratios = tuple([c / sum(ratios) for c in ratios])
     train_set, val_set, test_set = split_dataset(
         dataset=dataset, splits=ratios, random_seed=config.random_seed)
-
-    min_batch_per_epoch = 5
-    desired_len = max(len(train_set), config.batch_size * min_batch_per_epoch)
-    train_set = ExtendedDataset(dataset=train_set, desired_len=desired_len)
 
     train_set = DataLoader(dataset=train_set,
                            batch_size=config.batch_size,
@@ -39,4 +38,4 @@ def prepare_dataset(config: AttributeHashmap):
                           shuffle=False,
                           num_workers=config.num_workers)
 
-    return train_set, val_set, test_set, num_image_channel
+    return dataset, train_set, val_set, test_set

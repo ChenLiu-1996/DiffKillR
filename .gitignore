@@ -1,6 +1,7 @@
 .DS_Store
 */.DS_Store
 .vscode
+src/test.py
 raw_data
 data
 external_models
