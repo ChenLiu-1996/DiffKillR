@@ -191,6 +191,11 @@ def main():
                                 'volume_preserving_stretch',
                                 'partial_stretch']:
         augment_and_save(augmentation_tuple_list, augmented_patch_size, augmented_folder, augmentation_method)
+    
+    print('Done.')
+    print('Augmentation tuple list:')
+    print(len(augmentation_tuple_list), augmentation_tuple_list[:10])
+    print('class_multiplier_map', class_multiplier_map)
 
 
 if __name__ == '__main__':
