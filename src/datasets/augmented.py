@@ -28,9 +28,9 @@ class AugmentedDataset(Dataset):
             if folder.split('/')[-2] in augmentation_methods
         ]
         
-        self.augmentation_folders_map = {}
+        self.augmentation_method_to_folder = {}
         for folder in self.augmentation_folders:
-            self.augmentation_folders_map[folder.split('/')[-2]] = folder
+            self.augmentation_method_to_folder[folder.split('/')[-2]] = folder
 
         self.image_paths_by_celltype = {
             celltype: [] for celltype in self.cell_types
@@ -70,8 +70,8 @@ class AugmentedDataset(Dataset):
                     self.image_paths_by_celltype[celltype].append(img_path)
                     self.label_paths_by_celltype[celltype].append(label_path)
                 print('-----------------------\n')
-        #print('augmentation_folders_map: ')
-        #print(self.augmentation_folders_map)
+        #print('augmentation_method_to_folder: ')
+        #print(self.augmentation_method_to_folder)
         print('original_cnt: ', original_cnt, 'aug_cnt: ', aug_cnt, 'og_dup_cnt: ', og_dup_cnt)
 
         self.all_image_paths = list(itertools.chain.from_iterable(self.image_paths_by_celltype.values()))
@@ -83,6 +83,9 @@ class AugmentedDataset(Dataset):
 
     def __len__(self) -> int:
         return len(self.all_image_paths)
+    
+    def __str__(self) -> str:
+        return 'AugmentedDataset: %d images' % len(self)
 
     def __getitem__(self, idx) -> Tuple[np.array, np.array, str]:
         image_path = self.all_image_paths[idx]
