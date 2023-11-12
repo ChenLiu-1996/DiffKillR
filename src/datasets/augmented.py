@@ -39,7 +39,7 @@ class AugmentedDataset(Dataset):
             celltype: [] for celltype in self.cell_types
         }
         
-        #TODO: make sure only 1 copy of patch_id_original.png exists in dataset
+        # Note: make sure only 1 copy of patch_id_original.png exists in dataset
         # Otherwise, can't perform super contrastive learning.            
         self.patch_id_to_canonical_pose_path = {}
         original_cnt = 0
