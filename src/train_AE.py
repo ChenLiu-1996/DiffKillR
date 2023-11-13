@@ -53,6 +53,7 @@ def train(config: AttributeHashmap):
         for iter, (images, labels, canonical_images, _, img_paths) in enumerate(tqdm(train_set)):
             images = images.to(device) # (bsz, in_chan, H, W)
             labels = labels.to(device) # (bsz, H, W)
+            canonical_images = canonical_images.to(device)
             bsz = images.shape[0]
 
             recon_images, latent_features = model(images)
@@ -100,9 +101,9 @@ def train(config: AttributeHashmap):
             train_loss += loss.item()
             train_contrastive_loss += contrastive_loss.item()
             train_recon_loss += recon_loss.item()
-            print('Iter %d, loss: %.3f, contrastive: %.3f, recon: %.3f' % (
-                iter, loss.item(), contrastive_loss.item(), recon_loss.item()
-            ))
+            # print('\rIter %d, loss: %.3f, contrastive: %.3f, recon: %.3f\n' % (
+            #     iter, loss.item(), contrastive_loss.item(), recon_loss.item()
+            # ))
 
             # Simulate `config.batch_size` by batched optimizer update.
             optimizer.zero_grad()
