@@ -146,7 +146,8 @@ class AugmentedDataset(Dataset):
     
     def _set_img_path_to_split(self, img_path_to_split: dict) -> None:
         '''
-            Set the img_path_to_split dict.
+            Set the img_path_to_split dict & img_path_by_celltype_and_split dict.
+            Needed during sampling augmentation, to make sure no leakage between train/val/test sets.
         '''
         print('Setting img_path_to_split dict and img_path_by_celltype_and_split ...')
 
