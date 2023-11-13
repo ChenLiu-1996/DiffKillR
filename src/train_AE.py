@@ -292,6 +292,10 @@ def test(config: AttributeHashmap):
         to_console=False)
     
 
+    # Visualize latent embeddings.
+
+    # Visualize input vs. reconstructed
+
 
     #...
     return
