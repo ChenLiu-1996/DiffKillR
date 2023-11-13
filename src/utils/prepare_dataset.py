@@ -25,17 +25,28 @@ def prepare_dataset(config: AttributeHashmap):
     train_set, val_set, test_set = split_dataset(
         dataset=dataset, splits=ratios, random_seed=config.random_seed)
 
-    train_set = DataLoader(dataset=train_set,
+    train_loader = DataLoader(dataset=train_set,
                            batch_size=config.batch_size,
                            shuffle=True,
                            num_workers=config.num_workers)
-    val_set = DataLoader(dataset=val_set,
+    val_loader = DataLoader(dataset=val_set,
                          batch_size=len(val_set),
                          shuffle=False,
                          num_workers=config.num_workers)
-    test_set = DataLoader(dataset=test_set,
+    test_loader = DataLoader(dataset=test_set,
                           batch_size=len(test_set),
                           shuffle=False,
                           num_workers=config.num_workers)
+    
+    # NOTE:Make sure no leakage between train/val/test sets when sampling augmentation.
+    # A hacky way, but works for now.
+    img_path_to_split = {}
+    for _, (_, _, _, _, img_path) in enumerate(train_set):
+        img_path_to_split[img_path] = 'train'
+    for _, (_, _, _, _, img_path) in enumerate(val_set):
+        img_path_to_split[img_path] = 'val'
+    for _, (_, _, _, _, img_path) in enumerate(test_set):
+        img_path_to_split[img_path] = 'test'
+    dataset._set_img_path_to_split(img_path_to_split=img_path_to_split)
 
-    return dataset, train_set, val_set, test_set
+    return dataset, train_loader, val_loader, test_loader

@@ -42,9 +42,6 @@ class AugmentedDataset(Dataset):
         # Note: make sure only 1 copy of patch_id_original.png exists in dataset
         # Otherwise, can't perform super contrastive learning.            
         self.patch_id_to_canonical_pose_path = {}
-        original_cnt = 0
-        og_dup_cnt = 0
-        aug_cnt = 0
 
         for folder in self.augmentation_folders:
             img_paths = sorted(glob('%s/image/*.png' % (folder)))
@@ -55,15 +52,11 @@ class AugmentedDataset(Dataset):
                 patch_id = "_".join(file_name.split('_')[:3]) # e.g. 'EndotheliaCell_H7589_W9064'
                 is_original = file_name.split('_')[-1].split('.')[0] == 'original'
                 if is_original == True:
-                    original_cnt += 1
                     if patch_id not in self.patch_id_to_canonical_pose_path.keys():
                         self.patch_id_to_canonical_pose_path[patch_id] = img_path
                         self.image_paths_by_celltype[celltype].append(img_path)
                         self.label_paths_by_celltype[celltype].append(label_path)
-                    else:
-                        og_dup_cnt += 1
                 else:
-                    aug_cnt += 1
                     self.image_paths_by_celltype[celltype].append(img_path)
                     self.label_paths_by_celltype[celltype].append(label_path)
 
@@ -72,6 +65,8 @@ class AugmentedDataset(Dataset):
 
         assert len(self.all_image_paths) == len(self.all_label_paths)
 
+        self.img_path_to_split = None
+        self.img_path_by_celltype_and_split = None
 
     def __len__(self) -> int:
         return len(self.all_image_paths)
@@ -115,7 +110,7 @@ class AugmentedDataset(Dataset):
     def num_classes(self) -> int:
         return len(self.label_paths_by_celltype.keys())
     
-    def sample_celltype(self, celltype: str, cnt: int = 1) -> Tuple[np.array, np.array]:
+    def sample_celltype(self, split: str, celltype: str, cnt: int = 1) -> Tuple[np.array, np.array]:
         '''
             Sample image, label with a specific celltype from the dataset.
     
@@ -125,11 +120,16 @@ class AugmentedDataset(Dataset):
         
         images = []
         labels = []
-        idxs = np.random.randint(0, len(self.label_paths_by_celltype[celltype]), cnt)
-        for idx in idxs:
-            image_path = self.image_paths_by_celltype[celltype][idx]
-            label_path = self.label_paths_by_celltype[celltype][idx]
+        
+        candiates = self.img_path_by_celltype_and_split[celltype][split]
+        if cnt > len(candiates):
+            raise ValueError('Not enough images for \
+                             celltype %s in split %s for %d views.' % (celltype, split, cnt))
+        idxs = np.random.randint(low=0, high=len(candiates), size=cnt)
+        sampled_img_paths = [candiates[idx] for idx in idxs]
 
+        for image_path in sampled_img_paths:
+            label_path = image_path.replace('image', 'label')
             image = load_image(path=image_path, target_dim=self.target_dim)
             label = np.array(cv2.imread(label_path, cv2.IMREAD_UNCHANGED))
 
@@ -143,7 +143,25 @@ class AugmentedDataset(Dataset):
             labels = labels[np.newaxis, ...]
 
         return images, labels
-        
+    
+    def _set_img_path_to_split(self, img_path_to_split: dict) -> None:
+        '''
+            Set the img_path_to_split dict.
+        '''
+        print('Setting img_path_to_split dict and img_path_by_celltype_and_split ...')
+
+        self.img_path_to_split = img_path_to_split
+        self.img_path_by_celltype_and_split = {
+            celltype: {} for celltype in self.cell_types
+        }
+        for img_path, split in self.img_path_to_split.items():
+            celltype = self.get_celltype(img_path=img_path)
+            if split not in self.img_path_by_celltype_and_split[celltype].keys():
+                self.img_path_by_celltype_and_split[celltype][split] = [img_path]
+            else:
+                self.img_path_by_celltype_and_split[celltype][split].append(img_path)
+
+        print('Finished setting img_path_to_split dict and img_path_by_celltype_and_split.\n')        
 
 
 def load_image(path: str, target_dim: Tuple[int] = None) -> np.array:

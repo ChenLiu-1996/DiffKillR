@@ -66,7 +66,9 @@ def train(config: AttributeHashmap):
                 cell_type = dataset.get_celltype(img_path=img_path)
                 cell_type_labels.append(dataset.cell_type_to_idx[cell_type])
                 if n_views > 1:
-                    aug_images, aug_labels = dataset.sample_celltype(celltype=cell_type, cnt=n_views-1)
+                    aug_images, aug_labels = dataset.sample_celltype(split='train',
+                                                                     celltype=cell_type, 
+                                                                     cnt=n_views-1)
                     aug_images = torch.Tensor(aug_images).to(device)
                     aug_labels = torch.Tensor(aug_labels).to(device)
 
