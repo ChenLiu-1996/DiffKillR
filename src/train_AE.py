@@ -53,7 +53,7 @@ def train(config: AttributeHashmap):
     for epoch_idx in tqdm(range(config.max_epochs)):
         train_loss, train_contrastive_loss, train_recon_loss = 0, 0, 0
         model.train()
-        for iter, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(train_set)):
+        for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(train_set)):
             images = images.float().to(device) # (bsz, in_chan, H, W)
             canonical_images = canonical_images.float().to(device)
 
@@ -115,9 +115,9 @@ def train(config: AttributeHashmap):
             loss.backward()
             optimizer.step()
 
-        train_loss = train_loss / (iter + 1) # avg loss over minibatches
-        train_contrastive_loss = train_contrastive_loss / (iter + 1)
-        train_recon_loss = train_recon_loss / (iter + 1)
+        train_loss = train_loss / (iter_idx + 1) # avg loss over minibatches
+        train_contrastive_loss = train_contrastive_loss / (iter_idx + 1)
+        train_recon_loss = train_recon_loss / (iter_idx + 1)
 
         lr_scheduler.step()
 
@@ -131,7 +131,7 @@ def train(config: AttributeHashmap):
         model.eval()
         with torch.no_grad():
             val_loss, val_contrastive_loss, val_recon_loss = 0, 0, 0
-            for _, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(val_set)):
+            for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(val_set)):
                 # NOTE: batch size is len(val_set) here.
                 # May need to change this if val_set is too large.
                 images = images.float().to(device)
@@ -179,9 +179,9 @@ def train(config: AttributeHashmap):
                 val_recon_loss += recon_loss.item()
                 val_loss += val_contrastive_loss + val_recon_loss
 
-        val_loss /= (iter + 1)
-        val_contrastive_loss /= (iter + 1)
-        val_recon_loss /= (iter + 1)
+        val_loss /= (iter_idx + 1)
+        val_contrastive_loss /= (iter_idx + 1)
+        val_recon_loss /= (iter_idx + 1)
 
         log('Validation [%s/%s] loss: %.3f, contrastive: %.3f, recon: %.3f\n'
             % (epoch_idx + 1, config.max_epochs, val_loss, val_contrastive_loss, 
@@ -236,7 +236,7 @@ def test(config: AttributeHashmap):
     model.eval()
     with torch.no_grad():
         test_loss, test_contrastive_loss, test_recon_loss = 0, 0, 0
-        for _, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(test_set)):
+        for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(test_set)):
             images = images.float().to(device)
             canonical_images = canonical_images.float().to(device)
 
@@ -282,9 +282,9 @@ def test(config: AttributeHashmap):
             test_recon_loss += recon_loss.item()
             test_loss += test_contrastive_loss + test_recon_loss
 
-    test_loss /= (iter + 1)
-    test_contrastive_loss /= (iter + 1)
-    test_recon_loss /= (iter + 1)
+    test_loss /= (iter_idx + 1)
+    test_contrastive_loss /= (iter_idx + 1)
+    test_recon_loss /= (iter_idx + 1)
 
     log('Test loss: %.3f, contrastive: %.3f, recon: %.3f\n'
         % (test_loss, test_contrastive_loss, test_recon_loss),
