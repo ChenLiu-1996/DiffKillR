@@ -30,7 +30,7 @@ def train(config: AttributeHashmap):
     except:
         raise ValueError('`config.model`: %s not supported.' % config.model)
 
-    model = model.double().to(device)
+    model = model.to(device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
     lr_scheduler = LinearWarmupCosineAnnealingLR(
@@ -54,8 +54,8 @@ def train(config: AttributeHashmap):
         train_loss, train_contrastive_loss, train_recon_loss = 0, 0, 0
         model.train()
         for iter, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(train_set)):
-            images = images.to(device) # (bsz, in_chan, H, W)
-            canonical_images = canonical_images.to(device)
+            images = images.float().to(device) # (bsz, in_chan, H, W)
+            canonical_images = canonical_images.float().to(device)
 
             '''
                 Reconstruction loss.
@@ -93,7 +93,7 @@ def train(config: AttributeHashmap):
                     else:
                         batch_images = torch.cat([image], dim=0)
             
-            batch_images = batch_images.to(device)
+            batch_images = batch_images.float().to(device)
 
             _, latent_features = model(batch_images) # (bsz * n_views, latent_dim)
             latent_features = latent_features.contiguous().view(bsz, n_views, -1) # (bsz, n_views, latent_dim)
@@ -134,8 +134,8 @@ def train(config: AttributeHashmap):
             for _, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(val_set)):
                 # NOTE: batch size is len(val_set) here.
                 # May need to change this if val_set is too large.
-                images = images.to(device)
-                canonical_images = canonical_images.to(device)
+                images = images.float().to(device)
+                canonical_images = canonical_images.float().to(device)
 
                 recon_images, latent_features = model(images)
                 recon_loss = mse_loss(recon_images, canonical_images)
@@ -166,7 +166,7 @@ def train(config: AttributeHashmap):
                         else:
                             batch_images = torch.cat([image], dim=0)
                 
-                batch_images = batch_images.to(device)
+                batch_images = batch_images.float().to(device)
                 
                 _, latent_features = model(batch_images) # (bsz * n_views, latent_dim)
                 latent_features = latent_features.contiguous().view(bsz, n_views, -1) # (bsz, n_views, latent_dim)
@@ -219,7 +219,7 @@ def test(config: AttributeHashmap):
     except:
         raise ValueError('`config.model`: %s not supported.' % config.model)
 
-    model = model.double().to(device)
+    model = model.to(device)
     model.load_weights(config.model_save_path, device=device)
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)
@@ -237,8 +237,8 @@ def test(config: AttributeHashmap):
     with torch.no_grad():
         test_loss, test_contrastive_loss, test_recon_loss = 0, 0, 0
         for _, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(test_set)):
-            images = images.to(device)
-            canonical_images = canonical_images.to(device)
+            images = images.float().to(device)
+            canonical_images = canonical_images.float().to(device)
 
             recon_images, latent_features = model(images)
             recon_loss = mse_loss(recon_images, canonical_images)
@@ -269,7 +269,7 @@ def test(config: AttributeHashmap):
                     else:
                         batch_images = torch.cat([image], dim=0)
             
-            batch_images = batch_images.to(device)
+            batch_images = batch_images.float().to(device)
             
             _, latent_features = model(batch_images) # (bsz * n_views, latent_dim)
             latent_features = latent_features.contiguous().view(bsz, n_views, -1) # (bsz, n_views, latent_dim)
