@@ -304,6 +304,7 @@ def test(config: AttributeHashmap):
             for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(test_set)):
                 images = images.float().to(device)
                 recon_images, latent_features = model(images)
+                latent_features = torch.flatten(latent_features, start_dim=1)
 
                 # Move to cpu to save memory on gpu.
                 images = images.cpu()
