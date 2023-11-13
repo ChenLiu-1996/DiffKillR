@@ -209,7 +209,7 @@ def train(config: AttributeHashmap):
 def test(config: AttributeHashmap):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    dataset, _, _, test_set = prepare_dataset(config=config)
+    dataset, train_set, val_set, test_set = prepare_dataset(config=config)
 
     # Build the model
     try:
@@ -224,8 +224,9 @@ def test(config: AttributeHashmap):
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)
 
-    save_path_fig_summary = '%s/results/summary.png' % config.output_save_path
-    os.makedirs(os.path.dirname(save_path_fig_summary), exist_ok=True)
+    save_path_fig_embeddings = '%s/results/embeddings.png' % config.output_save_path
+    save_path_fig_reconstructed = '%s/results/reconstructed.png' % config.output_save_path
+    os.makedirs(os.path.dirname(save_path_fig_embeddings), exist_ok=True)
 
     supercontrast_loss = SupConLoss(temperature=config.temp, 
                                     base_temperature=config.base_temp,
@@ -293,11 +294,97 @@ def test(config: AttributeHashmap):
     
 
     # Visualize latent embeddings.
+    embeddings = {split: None for split in ['train', 'val', 'test']}
+    embedding_labels = {split: [] for split in ['train', 'val', 'test']}
+    og_inputs = {split: None for split in ['train', 'val', 'test']}
+    reconstructed = {split: None for split in ['train', 'val', 'test']}
+
+    with torch.no_grad():
+        for split, split_set in zip(['train', 'val', 'test'], [train_set, val_set, test_set]):
+            for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(test_set)):
+                images = images.float().to(device)
+                recon_images, latent_features = model(images)
+
+                # Move to cpu to save memory on gpu.
+                images = images.cpu()
+                recon_images = recon_images.cpu()
+                latent_features = latent_features.cpu()
+
+                if embeddings[split] is None:
+                    embeddings[split] = latent_features  # (bsz, latent_dim)
+                else:
+                    embeddings[split] = torch.cat([embeddings[split], latent_features], dim=0)
+                if reconstructed[split] is None:
+                    reconstructed[split] = recon_images # (bsz, in_chan, H, W)
+                else:
+                    reconstructed[split] = torch.cat([reconstructed[split], recon_images], dim=0)
+                if og_inputs[split] is None:
+                    og_inputs[split] = images
+                else:
+                    og_inputs[split] = torch.cat([og_inputs[split], images], dim=0)
+                embedding_labels[split].extend([dataset.get_celltype(img_path=img_path) for img_path in img_paths])
+            
+            embeddings[split] = embeddings[split].numpy()
+            reconstructed[split] = reconstructed[split].numpy()
+            og_inputs[split] = og_inputs[split].numpy()
+            embedding_labels[split] = np.array(embedding_labels[split])
+            assert len(embeddings[split]) == len(reconstructed[split]) == len(embedding_labels[split])
+    
+    # Plot latent embeddings
+    import phate
+    import scprep
+    import matplotlib.pyplot as plt
+    
+    plt.rcParams['font.family'] = 'serif'
+    
+    fig_embedding = plt.figure(figsize=(10, 6 * 3))
+    phate_op = phate.PHATE(random_state=0,
+                                 n_jobs=1,
+                                 n_components=2,
+                                 verbose=False)
+    for split in ['train', 'val', 'test']:
+        data_phate = phate_op.fit_transform(embeddings[split])
+        ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
+        scprep.plot.scatter2d(data_phate,
+                              c=embedding_labels[split],
+                              legend=dataset.cell_types,
+                              ax=ax,
+                              title=split,
+                              xticks=False,
+                              yticks=False,
+                              label_prefix='PHATE',
+                              fontsize=10,
+                              s=3)
+    plt.tight_layout()
+    plt.savefig(save_path_fig_embeddings)
+    plt.close(fig_embedding)
+
 
     # Visualize input vs. reconstructed
+    fig_reconstructed = plt.figure(figsize=(10, 10 * 3))
+    sample_n = 5
+    fig_reconstructed.suptitle('Input vs. Reconstructed', fontsize=10)
+    for split in ['train', 'val', 'test']:
+        for i in range(sample_n):
+            # Original Input 
+            ax = fig_reconstructed.add_subplot(3, 10, ['train', 'val', 'test'].index(split) * 10 + i * 2 + 1)
+            sample_idx = np.random.randint(low=0, high=len(reconstructed[split]))
+            ax.imshow(og_inputs[split][sample_idx].transpose(1, 2, 0)) # (H, W, in_chan)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            if i == 0:
+                ax.set_ylabel(split, fontsize=10)
+            
+            # Reconstructed
+            ax = fig_reconstructed.add_subplot(3, 10, ['train', 'val', 'test'].index(split) * 10 + i * 2 + 2)
+            ax.imshow(reconstructed[split][sample_idx].transpose(1, 2, 0)) # (H, W, in_chan)
+            ax.set_xticks([])
+            ax.set_yticks([])
+    plt.tight_layout()
+    plt.savefig(save_path_fig_reconstructed)
+    plt.close(fig_reconstructed)
 
-
-    #...
+    
     return
 
 
