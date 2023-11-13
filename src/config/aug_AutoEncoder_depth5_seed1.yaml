@@ -8,6 +8,7 @@ learning_rate: 1e-3
 temp: 1.0
 base_temp: 1.0
 n_views: 2
+contrast_mode: 'one'
 aug_methods: 'rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch'
 max_epochs: 200
 batch_size: 64
