@@ -339,11 +339,11 @@ def test(config: AttributeHashmap):
     plt.rcParams['font.family'] = 'serif'
     
     fig_embedding = plt.figure(figsize=(10, 6 * 3))
-    phate_op = phate.PHATE(random_state=0,
+    for split in ['train', 'val', 'test']:
+        phate_op = phate.PHATE(random_state=0,
                                  n_jobs=1,
                                  n_components=2,
                                  verbose=False)
-    for split in ['train', 'val', 'test']:
         data_phate = phate_op.fit_transform(embeddings[split])
         ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
         scprep.plot.scatter2d(data_phate,
@@ -355,32 +355,37 @@ def test(config: AttributeHashmap):
                               yticks=False,
                               label_prefix='PHATE',
                               fontsize=10,
-                              s=3)
+                              s=5)
     plt.tight_layout()
     plt.savefig(save_path_fig_embeddings)
     plt.close(fig_embedding)
 
 
     # Visualize input vs. reconstructed
-    fig_reconstructed = plt.figure(figsize=(10, 10 * 3))
     sample_n = 5
+    fig_reconstructed = plt.figure(figsize=(2 * sample_n * 2, 2 * 3))  # (W, H)
     fig_reconstructed.suptitle('Input vs. Reconstructed', fontsize=10)
     for split in ['train', 'val', 'test']:
         for i in range(sample_n):
             # Original Input 
-            ax = fig_reconstructed.add_subplot(3, 10, ['train', 'val', 'test'].index(split) * 10 + i * 2 + 1)
+            ax = fig_reconstructed.add_subplot(3, sample_n * 2, 
+                                               ['train', 'val', 'test'].index(split) * sample_n * 2 + i * 2 + 1)
             sample_idx = np.random.randint(low=0, high=len(reconstructed[split]))
             ax.imshow(og_inputs[split][sample_idx].transpose(1, 2, 0)) # (H, W, in_chan)
             ax.set_xticks([])
             ax.set_yticks([])
             if i == 0:
                 ax.set_ylabel(split, fontsize=10)
+            ax.set_title('Input')
             
             # Reconstructed
-            ax = fig_reconstructed.add_subplot(3, 10, ['train', 'val', 'test'].index(split) * 10 + i * 2 + 2)
+            ax = fig_reconstructed.add_subplot(3, sample_n * 2, 
+                                               ['train', 'val', 'test'].index(split) * sample_n * 2 + i * 2 + 2)
             ax.imshow(reconstructed[split][sample_idx].transpose(1, 2, 0)) # (H, W, in_chan)
             ax.set_xticks([])
             ax.set_yticks([])
+            ax.set_title('Reconstructed')
+
     plt.tight_layout()
     plt.savefig(save_path_fig_reconstructed)
     plt.close(fig_reconstructed)
