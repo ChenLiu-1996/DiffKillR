@@ -301,7 +301,7 @@ def test(config: AttributeHashmap):
 
     with torch.no_grad():
         for split, split_set in zip(['train', 'val', 'test'], [train_set, val_set, test_set]):
-            for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(test_set)):
+            for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(split_set)):
                 images = images.float().to(device)
                 recon_images, latent_features = model(images)
                 latent_features = torch.flatten(latent_features, start_dim=1)
@@ -345,6 +345,7 @@ def test(config: AttributeHashmap):
                                  n_components=2,
                                  verbose=False)
         data_phate = phate_op.fit_transform(embeddings[split])
+        print('Visualizing ', split, ' : ',  data_phate.shape)
         ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
         scprep.plot.scatter2d(data_phate,
                               c=embedding_labels[split],
@@ -401,12 +402,14 @@ if __name__ == '__main__':
     parser.add_argument('--config',
                         help='Path to config yaml file.',
                         required=True)
+    parser.add_argument('--num_workers', help='Number of workers, e.g. use number of cores', default=4)
     args = vars(parser.parse_args())
 
     args = AttributeHashmap(args)
     config = AttributeHashmap(yaml.safe_load(open(args.config)))
     config.config_file_name = args.config
     config.gpu_id = args.gpu_id
+    config.num_workers = args.num_workers
     config = parse_settings(config, log_settings=args.mode == 'train')
 
     assert args.mode in ['train', 'test']
