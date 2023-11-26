@@ -113,7 +113,9 @@ class AugmentedDataset(Dataset):
     def sample_celltype(self, split: str, celltype: str, cnt: int = 1) -> Tuple[np.array, np.array]:
         '''
             Sample image, label with a specific celltype from the dataset.
-    
+            Returns:
+                images: [cnt, in_chan, W, H]
+                labels: [cnt, W, H]
         '''
         if celltype not in self.cell_types:
             raise ValueError('Celltype %s not found in the dataset.' % celltype)
@@ -130,17 +132,14 @@ class AugmentedDataset(Dataset):
 
         for image_path in sampled_img_paths:
             label_path = image_path.replace('image', 'label')
-            image = load_image(path=image_path, target_dim=self.target_dim)
-            label = np.array(cv2.imread(label_path, cv2.IMREAD_UNCHANGED))
+            image = load_image(path=image_path, target_dim=self.target_dim) # [3, 96, 96]
+            label = np.array(cv2.imread(label_path, cv2.IMREAD_UNCHANGED)) #[96, 96]
 
-            images.append(image)
-            labels.append(label)
+            images.append(image[np.newaxis, ...]) 
+            labels.append(label[np.newaxis, ...])
+            
         images = np.concatenate(images, axis=0)
         labels = np.concatenate(labels, axis=0)
-
-        if cnt == 1:
-            images = images[np.newaxis, ...]
-            labels = labels[np.newaxis, ...]
 
         return images, labels
     

@@ -33,7 +33,7 @@ def construct_batch_images_with_n_views(images, img_paths, dataset, n_views, dev
             aug_images, _ = dataset.sample_celltype(split='train',
                                                                 celltype=cell_type, 
                                                                 cnt=n_views-1)
-            aug_images = torch.Tensor(aug_images).to(device)
+            aug_images = torch.Tensor(aug_images).to(device) # (cnt, in_chan, H, W)
 
             image = torch.unsqueeze(image, dim=0) # (1, in_chan, H, W)
             if batch_images is not None:
@@ -93,11 +93,12 @@ def train(config: AttributeHashmap):
     best_val_loss = np.inf
 
     for epoch_idx in tqdm(range(config.max_epochs)):
-        train_loss, train_contrastive_loss, train_recon_loss = 0, 0, 0
+        train_loss, train_latent_loss, train_recon_loss = 0, 0, 0
         model.train()
         for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(train_set)):
             images = images.float().to(device) # (bsz, in_chan, H, W)
             canonical_images = canonical_images.float().to(device)
+            bsz = images.shape[0]
 
             '''
                 Reconstruction loss.
@@ -117,7 +118,7 @@ def train(config: AttributeHashmap):
                                                                                     config.n_views, 
                                                                                     device)
                 _, latent_features = model(batch_images) # (bsz * n_views, latent_dim)
-                latent_features = latent_features.contiguous().view(bsz, n_views, -1) # (bsz, n_views, latent_dim)
+                latent_features = latent_features.contiguous().view(bsz, config.n_views, -1) # (bsz, n_views, latent_dim)
                 cell_type_labels = torch.tensor(cell_type_labels).to(device) # (bsz)
 
                 latent_loss = supercontrast_loss(features=latent_features, 
@@ -142,18 +143,22 @@ def train(config: AttributeHashmap):
                         pos_images = torch.cat([pos_images, aug_images], dim=0)
                     else:
                         pos_images = aug_images
-                
                 _, pos_features = model(pos_images) # (bsz * num_pos, latent_dim)
+
                 # Negative. 
                 num_neg = config.num_neg
                 neg_features = None # (bsz*num_neg, latent_dim)
-                all_features = torch.cat([latent_features, pos_features], dim=1) # (bsz * (1+num_pos), latent_dim)
-                all_cell_type_labels = cell_type_labels.extend(pos_cell_type_labels) # (bsz * (1+num_pos))
+                all_features = torch.cat([latent_features, pos_features], dim=0) # (bsz * (1+num_pos), latent_dim)
+
+                all_cell_type_labels = cell_type_labels.copy()
+                all_cell_type_labels.extend(pos_cell_type_labels) # (bsz * (1+num_pos))
+
                 for img_path in img_paths:
                     cell_type = dataset.get_celltype(img_path=img_path)
 
                     negative_pool = np.argwhere(
-                        np.array(all_cell_type_labels) != dataset.cell_type_to_idx[cell_type]).flatten()
+                        (np.array(all_cell_type_labels) != dataset.cell_type_to_idx[cell_type]) * 1).flatten()
+                    
                     neg_idxs = np.random.choice(negative_pool, size=num_neg, replace=False)
 
                     if neg_features is not None:
@@ -161,9 +166,8 @@ def train(config: AttributeHashmap):
                     else:
                         neg_features = all_features[neg_idxs]
                 
-                pos_features = pos_features.contiguous().view(bsz, n_views, -1) # (bsz, num_pos, latent_dim)
+                pos_features = pos_features.contiguous().view(bsz, num_pos, -1) # (bsz, num_pos, latent_dim)
                 neg_features = neg_features.contiguous().view(bsz, num_neg, -1) # (bsz, num_neg, latent_dim)
-                cell_type_labels = torch.tensor(cell_type_labels).to(device) # (bsz)
 
                 latent_loss = triplet_loss(anchor=latent_features,
                                            positive=pos_features,
@@ -171,14 +175,13 @@ def train(config: AttributeHashmap):
             else:
                 raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
 
-
             
             loss = latent_loss + recon_loss
             train_loss += loss.item()
             train_latent_loss += latent_loss.item()
             train_recon_loss += recon_loss.item()
             print('\rIter %d, loss: %.3f, contrastive: %.3f, recon: %.3f\n' % (
-                iter, loss.item(), latent_loss.item(), recon_loss.item()
+                iter_idx, loss.item(), latent_loss.item(), recon_loss.item()
             ))
 
             # Simulate `config.batch_size` by batched optimizer update.
@@ -192,8 +195,8 @@ def train(config: AttributeHashmap):
 
         lr_scheduler.step()
 
-        log('Train [%s/%s] loss: %.3f, contrastive: %.3f, recon: %.3f'
-            % (epoch_idx + 1, config.max_epochs, train_loss, train_contrastive_loss,
+        log('Train [%s/%s] loss: %.3f, latent: %.3f, recon: %.3f'
+            % (epoch_idx + 1, config.max_epochs, train_loss, train_latent_loss,
                train_recon_loss),
             filepath=config.log_dir,
             to_console=False)
@@ -469,6 +472,7 @@ def test(config: AttributeHashmap):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
     parser.add_argument('--mode', help='`train` or `test`?', required=True)
+    parser.add_argument('--latent-loss', help='`supercontrast` or `triplet`?', required=True)
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
     parser.add_argument('--config',
                         help='Path to config yaml file.',
@@ -481,6 +485,7 @@ if __name__ == '__main__':
     config.config_file_name = args.config
     config.gpu_id = args.gpu_id
     config.num_workers = args.num_workers
+    config.latent_loss = args.latent_loss
     config = parse_settings(config, log_settings=args.mode == 'train')
 
     assert args.mode in ['train', 'test']
