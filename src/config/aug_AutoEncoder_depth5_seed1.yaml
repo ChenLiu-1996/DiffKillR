@@ -5,6 +5,9 @@ model_save_path: '$ROOT/checkpoints/aug_AutoEncoder_depth5_seed1.pty'
 output_save_path: '$ROOT/results/aug_AutoEncoder_depth5_seed1/'
 log_folder: '$ROOT/logs'
 learning_rate: 1e-3
+num_pos: 1
+num_neg: 1
+margin: 0.2
 temp: 1.0
 base_temp: 1.0
 n_views: 2
