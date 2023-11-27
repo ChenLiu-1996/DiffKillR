@@ -5,7 +5,7 @@ import torch.nn.functional as F
 class TripletLoss(nn.Module):
     """Triplet loss function.
     It also supports multi-positive, multi-negative triplets."""
-    def __init__(self, distance_measure='cosine', margin=0.2, num_pos=1, num_neg=1, pnorm=2):
+    def __init__(self, distance_measure='cosine', margin=1.0, num_pos=1, num_neg=1, pnorm=2):
         super(TripletLoss, self).__init__()
         self.margin = margin
         self.num_pos = num_pos
@@ -31,7 +31,16 @@ class TripletLoss(nn.Module):
         bsz = anchor.shape[0]
         if len(anchor.shape) > 2:
             anchor = anchor.view(anchor.shape[0], -1) # (bsz, latent_dim)
-        # Noramlize 
+        if len(positive.shape) > 3:
+            positive = positive.view(positive.shape[0], positive.shape[1], -1)
+        if len(negative.shape) > 3:
+            negative = negative.view(negative.shape[0], negative.shape[1], -1)
+
+        # Normalize the feature vectors
+        if self.distance_measure == 'cosine':
+            anchor = F.normalize(anchor, p=2, dim=1)
+            positive = F.normalize(positive, p=2, dim=2)
+            negative = F.normalize(negative, p=2, dim=2)
         
         # Tile anchor to shape (bsz * num_pos, latent_dim)
         anchor = anchor.repeat(self.num_pos, 1) # (bsz * num_pos, latent_dim)
@@ -41,8 +50,14 @@ class TripletLoss(nn.Module):
         negative = torch.cat(torch.unbind(negative, dim=1), dim=0)
         
         # Pairwise distances
-        d_ap = F.pairwise_distance(anchor, positive, p=self.pnorm) # (bsz * num_pos)
-        d_an = F.pairwise_distance(anchor, negative, p=self.pnorm) # (bsz * num_neg)
+        if self.distance_measure == 'cosine':
+            d_ap = 1 - F.cosine_similarity(anchor, positive, dim=1)
+            d_an = 1 - F.cosine_similarity(anchor, negative, dim=1)
+        elif self.distance_measure == 'norm':
+            d_ap = F.pairwise_distance(anchor, positive, p=self.pnorm) # (bsz * num_pos)
+            d_an = F.pairwise_distance(anchor, negative, p=self.pnorm) # (bsz * num_neg)
+        else:
+            raise ValueError('Invalid distance measure: %s' % self.distance_measure)
 
         # Compute loss
         losses = F.relu(d_ap - d_an + self.margin) # (bsz * num_pos)

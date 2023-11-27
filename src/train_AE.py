@@ -142,7 +142,8 @@ def train(config: AttributeHashmap):
                                         base_temperature=config.base_temp,
                                         contrast_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
-        triplet_loss = TripletLoss(margin=config.margin,
+        triplet_loss = TripletLoss(distance_measure='cosine'
+                                   margin=config.margin,
                                    num_pos=config.num_pos,
                                    num_neg=config.num_neg)
     mse_loss = torch.nn.MSELoss()
@@ -332,7 +333,8 @@ def test(config: AttributeHashmap):
                                         base_temperature=config.base_temp,
                                         contrast_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
-        triplet_loss = TripletLoss(margin=config.margin,
+        triplet_loss = TripletLoss(distance_measure='cosine'
+                                   margin=config.margin,
                                    num_pos=config.num_pos,
                                    num_neg=config.num_neg)
     else:
