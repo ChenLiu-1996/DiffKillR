@@ -5,14 +5,16 @@ import torch.nn.functional as F
 class TripletLoss(nn.Module):
     """Triplet loss function.
     It also supports multi-positive, multi-negative triplets."""
-    def __init__(self, margin=0.2, num_pos=1, num_neg=1, pnorm=2):
+    def __init__(self, distance_measure='cosine', margin=0.2, num_pos=1, num_neg=1, pnorm=2):
         super(TripletLoss, self).__init__()
         self.margin = margin
         self.num_pos = num_pos
         self.num_neg = num_neg
         self.pnorm = pnorm
+        self.distance_measure = distance_measure
 
         assert num_neg == num_pos, 'num_neg must equal num_pos for current implementation'
+        assert distance_measure in ('cosine', 'norm')
 
     def forward(self, anchor, positive, negative):
         """
@@ -29,7 +31,8 @@ class TripletLoss(nn.Module):
         bsz = anchor.shape[0]
         if len(anchor.shape) > 2:
             anchor = anchor.view(anchor.shape[0], -1) # (bsz, latent_dim)
-
+        # Noramlize 
+        
         # Tile anchor to shape (bsz * num_pos, latent_dim)
         anchor = anchor.repeat(self.num_pos, 1) # (bsz * num_pos, latent_dim)
 
