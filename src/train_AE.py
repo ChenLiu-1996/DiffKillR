@@ -207,9 +207,9 @@ def train(config: AttributeHashmap):
             train_loss += loss.item()
             train_latent_loss += latent_loss.item()
             train_recon_loss += recon_loss.item()
-            print('\rIter %d, loss: %.3f, contrastive: %.3f, recon: %.3f\n' % (
-                iter_idx, loss.item(), latent_loss.item(), recon_loss.item()
-            ))
+            # print('\rIter %d, loss: %.3f, contrastive: %.3f, recon: %.3f\n' % (
+            #     iter_idx, loss.item(), latent_loss.item(), recon_loss.item()
+            # ))
 
             # Simulate `config.batch_size` by batched optimizer update.
             optimizer.zero_grad()
@@ -503,12 +503,11 @@ def test(config: AttributeHashmap):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
     parser.add_argument('--mode', help='`train` or `test`?', required=True)
-    parser.add_argument('--latent-loss', help='`supercontrast` or `triplet`?', required=True)
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
     parser.add_argument('--config',
                         help='Path to config yaml file.',
                         required=True)
-    parser.add_argument('--num_workers', help='Number of workers, e.g. use number of cores', default=4)
+    parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
     args = vars(parser.parse_args())
 
     args = AttributeHashmap(args)
@@ -516,7 +515,6 @@ if __name__ == '__main__':
     config.config_file_name = args.config
     config.gpu_id = args.gpu_id
     config.num_workers = args.num_workers
-    config.latent_loss = args.latent_loss
     config = parse_settings(config, log_settings=args.mode == 'train')
 
     assert args.mode in ['train', 'test']

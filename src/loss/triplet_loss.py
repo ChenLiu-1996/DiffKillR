@@ -21,6 +21,7 @@ class TripletLoss(nn.Module):
             positive: positive embeddings, tensor of shape [bsz, num_pos, ...]
             negative: negative embeddings, tensor of shape [bsz, num_neg, ...]
             NOTE: positive[b, i, ...] is the i-th positive embedding of the b-th anchor
+            # TODO: normalize + consine similarity + margin -> 1.0
         Returns:
             triplet_loss: scalar loss
         """
