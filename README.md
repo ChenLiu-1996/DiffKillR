@@ -17,6 +17,8 @@ conda create --name cellseg pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12
 conda activate cellseg
 conda install -c anaconda scikit-image scikit-learn pillow matplotlib seaborn tqdm
 python -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.12
+python -m pip install -U phate
+conda install -c conda-forge libstdcxx-ng=12
 
 # Export CuDNN
 echo 'CUDNN_PATH=$(dirname $(python -c "import nvidia.cudnn;print(nvidia.cudnn.__file__)"))' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh

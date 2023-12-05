@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 import matplotlib as mpl
 import seaborn as sns
 import warnings
+from sklearn.metrics import pairwise_distances
 
 import_dir = '/'.join(os.path.realpath(__file__).split('/')[:-2])
 sys.path.insert(0, import_dir + '/')
@@ -19,7 +20,7 @@ from utils.attribute_hashmap import AttributeHashmap
 from utils.parse import parse_settings
 from utils.prepare_dataset import prepare_dataset
 from utils.seed import seed_everything
-
+from datasets.augmented import load_image
 
 
 def find_cell_centroids(model: torch.nn.Module,
@@ -43,21 +44,27 @@ def find_cell_centroids(model: torch.nn.Module,
             cell_type_labels.append(cell_type)
 
     latents = latents.reshape(latents.shape[0], -1)
+    # Project onto the unit hypersphere.
+    latents /= np.linalg.norm(latents, axis=-1, keepdims=True)
     cell_type_labels = np.array(cell_type_labels)
 
     cell_type_centroids = {}
     for cell_type in np.unique(cell_type_labels):
         cell_type_centroids[cell_type] = latents[cell_type_labels == cell_type, ...].mean(axis=0)
 
-    # from sklearn.metrics import pairwise_distances
-
     # pdist = pairwise_distances(latents[cell_type_labels == cell_type, ...])
     # pdist_arr = pdist[np.triu_indices(pdist.shape[0], k=1)]
+
+    # pdist_all = pairwise_distances(latents)
+    # pdist_arr_all = pdist_all[np.triu_indices(pdist.shape[0], k=1)]
+
+    # centroid_dist = np.linalg.norm(cell_type_centroids['EndothelialCell']-cell_type_centroids['EpithelialCell'])
 
     # import pdb
     # pdb.set_trace()
 
     return cell_type_centroids
+    # return latents, cell_type_labels
 
 
 def detect_cells(model: torch.nn.Module,
@@ -71,18 +78,18 @@ def detect_cells(model: torch.nn.Module,
     Classify the embedding into either one of the cell types or the background.
     '''
 
-    dist_thr = 30.0
+    dist_thr = 1.0
     cell_type_mask = np.zeros(image.shape[1:])
 
     for x_tl in tqdm(range(image.shape[1] - patch_size)):
         for y_tl in range(image.shape[2] - patch_size):
-            if x_tl > 2:
-                break
             patch = image[:, x_tl : x_tl + patch_size, y_tl : y_tl + patch_size]
             patch = torch.from_numpy(patch[None, ...]).float()
             curr_latent, _ = model(patch)
             curr_latent = curr_latent.detach().cpu().numpy()
             curr_latent = curr_latent.reshape(curr_latent.shape[0], -1)
+             # Project onto the unit hypersphere.
+            curr_latent /= np.linalg.norm(curr_latent, axis=-1, keepdims=True)
 
             dist_nearest, cell_type_nearest = np.inf, None
             dist_map = {}
@@ -97,29 +104,8 @@ def detect_cells(model: torch.nn.Module,
                 cell_type_mask[x_tl + patch_size//2,
                                y_tl + patch_size//2] = cell_type_map[cell_type_nearest] + 1
 
-            # import pdb
-            # pdb.set_trace()
     return cell_type_mask
 
-def load_image(path: str, target_dim: Tuple[int] = None) -> np.array:
-    ''' Load image as numpy array from a path string.'''
-    if target_dim is not None:
-        image = np.array(
-            cv2.resize(
-                cv2.cvtColor(cv2.imread(path, cv2.IMREAD_COLOR),
-                             code=cv2.COLOR_BGR2RGB), target_dim))
-    else:
-        image = np.array(
-            cv2.cvtColor(cv2.imread(path, cv2.IMREAD_COLOR),
-                         code=cv2.COLOR_BGR2RGB))
-
-    # Normalize image.
-    image = (image / 255 * 2) - 1
-
-    # Channel last to channel first to comply with Torch.
-    image = np.moveaxis(image, -1, 0)
-
-    return image
 
 
 def color_instances(label: np.array, palette: str = 'bright', n_colors: int = None) -> np.array:
@@ -190,8 +176,6 @@ if __name__ == '__main__':
     ax.imshow(np.uint8(255.0 * (np.moveaxis(image, 0, -1) + 1) / 2))
     ax.set_axis_off()
     ax = fig.add_subplot(1, 2, 2)
-    cell_type_mask_colored = np.uint8(255 * color_instances(label=cell_type_mask))
-    mappable = ax.imshow(cell_type_mask, cmap='tab20b')
 
     # Colorbar.
     idx_to_cell_type = {0: 'Background'}
@@ -199,11 +183,15 @@ if __name__ == '__main__':
         idx_to_cell_type[dataset.cell_type_to_idx[cell_type] + 1] = cell_type
     fmt = mpl.ticker.FuncFormatter(lambda x, pos: idx_to_cell_type[np.uint8(np.round(x))])
     ticks = list(idx_to_cell_type.keys())
+
+    cell_type_mask_colored = np.uint8(255 * color_instances(label=cell_type_mask))
+    cmap = mpl.colors.ListedColormap([mpl.colormaps['tab20b'](i) for i in np.linspace(0.0, 1.0, len(ticks))])
+    mappable = ax.imshow(cell_type_mask, cmap=cmap)
     plt.colorbar(mappable, ax=ax, format=fmt, ticks=ticks, location='right', shrink=0.4)
 
     ax.set_axis_off()
     fig.tight_layout()
-    fig.savefig('detect_cells.png')
+    fig.savefig('detect_cells_latent_loss:%s.png' % config.latent_loss)
 
     import pdb
     pdb.set_trace()
