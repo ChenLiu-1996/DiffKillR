@@ -18,11 +18,11 @@ from loss.triplet_loss import TripletLoss
 
 def construct_triplet_batch(img_paths,
                             latent_features,
-                            num_pos, 
-                            num_neg, 
-                            model, 
-                            dataset, 
-                            split, 
+                            num_pos,
+                            num_neg,
+                            model,
+                            dataset,
+                            split,
                             device):
     '''
         Returns:
@@ -33,7 +33,7 @@ def construct_triplet_batch(img_paths,
     pos_images = None
     cell_type_labels = [] # (bsz)
     pos_cell_type_labels = [] # (bsz * num_pos)
-    
+
     # Positive.
     for img_path in img_paths:
         cell_type = dataset.get_celltype(img_path=img_path)
@@ -41,7 +41,7 @@ def construct_triplet_batch(img_paths,
         pos_cell_type_labels.extend([dataset.cell_type_to_idx[cell_type]] * num_pos)
 
         aug_images, _ = dataset.sample_celltype(split=split,
-                                                celltype=cell_type, 
+                                                celltype=cell_type,
                                                 cnt=num_pos)
         aug_images = torch.Tensor(aug_images).to(device)
 
@@ -51,7 +51,7 @@ def construct_triplet_batch(img_paths,
             pos_images = aug_images
     _, pos_features = model(pos_images) # (bsz * num_pos, latent_dim)
 
-    # Negative. 
+    # Negative.
     num_neg = config.num_neg
     neg_features = None # (bsz*num_neg, latent_dim)
     all_features = torch.cat([latent_features, pos_features], dim=0) # (bsz * (1+num_pos), latent_dim)
@@ -64,7 +64,7 @@ def construct_triplet_batch(img_paths,
 
         negative_pool = np.argwhere(
             (np.array(all_cell_type_labels) != dataset.cell_type_to_idx[cell_type]) * 1).flatten()
-        
+
         neg_idxs = np.random.choice(negative_pool, size=num_neg, replace=False)
 
         if neg_features is not None:
@@ -73,13 +73,13 @@ def construct_triplet_batch(img_paths,
             neg_features = all_features[neg_idxs]
 
     return pos_features, neg_features
-    
+
 
 
 def construct_batch_images_with_n_views(images, img_paths, dataset, n_views, split, device):
     '''
         Returns:
-        batch_images: [bsz * n_views, ...], 
+        batch_images: [bsz * n_views, ...],
         cell_type_labels: [bsz * n_views]
     '''
     # Construct batch_images [bsz * n_views, in_chan, H, W].
@@ -91,21 +91,21 @@ def construct_batch_images_with_n_views(images, img_paths, dataset, n_views, spl
         cell_type_labels.append(dataset.cell_type_to_idx[cell_type])
         if n_views > 1:
             aug_images, _ = dataset.sample_celltype(split=split,
-                                                    celltype=cell_type, 
+                                                    celltype=cell_type,
                                                     cnt=n_views-1)
             aug_images = torch.Tensor(aug_images).to(device) # (cnt, in_chan, H, W)
 
             image = torch.unsqueeze(image, dim=0) # (1, in_chan, H, W)
             if batch_images is not None:
-                batch_images = torch.cat([batch_images, image, aug_images], dim=0)     
+                batch_images = torch.cat([batch_images, image, aug_images], dim=0)
             else:
                 batch_images = torch.cat([image, aug_images], dim=0)
         else:
             if batch_images is not None:
-                batch_images = torch.cat([batch_images, image], dim=0)     
+                batch_images = torch.cat([batch_images, image], dim=0)
             else:
                 batch_images = torch.cat([image], dim=0)
-    
+
     batch_images = batch_images.float().to(device) #[bsz * n_views, in_chan, H, W].
 
     return batch_images, cell_type_labels
@@ -138,11 +138,11 @@ def train(config: AttributeHashmap):
         eta_min=0)
 
     if config.latent_loss == 'supercontrast':
-        supercontrast_loss = SupConLoss(temperature=config.temp, 
+        supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
                                         contrast_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
-        triplet_loss = TripletLoss(distance_measure='cosine'
+        triplet_loss = TripletLoss(distance_measure='cosine',
                                    margin=config.margin,
                                    num_pos=config.num_pos,
                                    num_neg=config.num_neg)
@@ -173,26 +173,26 @@ def train(config: AttributeHashmap):
             '''
             latent_loss = None
             if config.latent_loss == 'supercontrast':
-                batch_images, cell_type_labels = construct_batch_images_with_n_views(images, 
-                                                                                    img_paths, 
-                                                                                    dataset, 
-                                                                                    config.n_views, 
+                batch_images, cell_type_labels = construct_batch_images_with_n_views(images,
+                                                                                    img_paths,
+                                                                                    dataset,
+                                                                                    config.n_views,
                                                                                     'train',
                                                                                     device)
                 _, latent_features = model(batch_images) # (bsz * n_views, latent_dim)
                 latent_features = latent_features.contiguous().view(bsz, config.n_views, -1) # (bsz, n_views, latent_dim)
                 cell_type_labels = torch.tensor(cell_type_labels).to(device) # (bsz)
 
-                latent_loss = supercontrast_loss(features=latent_features, 
+                latent_loss = supercontrast_loss(features=latent_features,
                                                     labels=cell_type_labels)
             elif config.latent_loss == 'triplet':
-                pos_features, neg_features = construct_triplet_batch(img_paths, 
-                                                                    latent_features, 
+                pos_features, neg_features = construct_triplet_batch(img_paths,
+                                                                    latent_features,
                                                                     config.num_pos,
-                                                                    config.num_neg, 
-                                                                    model, 
-                                                                    dataset, 
-                                                                    'train', 
+                                                                    config.num_neg,
+                                                                    model,
+                                                                    dataset,
+                                                                    'train',
                                                                     device=device)
                 pos_features = pos_features.contiguous().view(bsz, config.num_pos, -1) # (bsz, num_pos, latent_dim)
                 neg_features = neg_features.contiguous().view(bsz, config.num_neg, -1) # (bsz, num_neg, latent_dim)
@@ -203,7 +203,7 @@ def train(config: AttributeHashmap):
             else:
                 raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
 
-            
+
             loss = latent_loss + recon_loss
             train_loss += loss.item()
             train_latent_loss += latent_loss.item()
@@ -245,26 +245,26 @@ def train(config: AttributeHashmap):
 
                 latent_loss = None
                 if config.latent_loss == 'supercontrast':
-                    batch_images, cell_type_labels = construct_batch_images_with_n_views(images, 
-                                                                                        img_paths, 
-                                                                                        dataset, 
-                                                                                        config.n_views, 
+                    batch_images, cell_type_labels = construct_batch_images_with_n_views(images,
+                                                                                        img_paths,
+                                                                                        dataset,
+                                                                                        config.n_views,
                                                                                         'val', # NOTE: use val
                                                                                         device)
                     _, latent_features = model(batch_images) # (bsz * n_views, latent_dim)
                     latent_features = latent_features.contiguous().view(bsz, config.n_views, -1) # (bsz, n_views, latent_dim)
                     cell_type_labels = torch.tensor(cell_type_labels).to(device) # (bsz)
 
-                    latent_loss = supercontrast_loss(features=latent_features, 
+                    latent_loss = supercontrast_loss(features=latent_features,
                                                         labels=cell_type_labels)
                 elif config.latent_loss == 'triplet':
-                    pos_features, neg_features = construct_triplet_batch(img_paths, 
-                                                                        latent_features, 
+                    pos_features, neg_features = construct_triplet_batch(img_paths,
+                                                                        latent_features,
                                                                         config.num_pos,
-                                                                        config.num_neg, 
-                                                                        model, 
-                                                                        dataset, 
-                                                                        'val', 
+                                                                        config.num_neg,
+                                                                        model,
+                                                                        dataset,
+                                                                        'val',
                                                                         device=device)
                     pos_features = pos_features.contiguous().view(bsz, config.num_pos, -1) # (bsz, num_pos, latent_dim)
                     neg_features = neg_features.contiguous().view(bsz, config.num_neg, -1) # (bsz, num_neg, latent_dim)
@@ -284,7 +284,7 @@ def train(config: AttributeHashmap):
         val_recon_loss /= (iter_idx + 1)
 
         log('Validation [%s/%s] loss: %.3f, latent: %.3f, recon: %.3f\n'
-            % (epoch_idx + 1, config.max_epochs, val_loss, val_latent_loss, 
+            % (epoch_idx + 1, config.max_epochs, val_loss, val_latent_loss,
                val_recon_loss),
             filepath=config.log_dir,
             to_console=False)
@@ -295,7 +295,7 @@ def train(config: AttributeHashmap):
             log('%s: Model weights successfully saved.' % config.model,
                 filepath=config.log_dir,
                 to_console=False)
-        
+
         if early_stopper.step(val_loss):
             log('Early stopping criterion met. Ending training.',
                 filepath=config.log_dir,
@@ -329,17 +329,17 @@ def test(config: AttributeHashmap):
     os.makedirs(os.path.dirname(save_path_fig_embeddings), exist_ok=True)
 
     if config.latent_loss == 'supercontrast':
-        supercontrast_loss = SupConLoss(temperature=config.temp, 
+        supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
                                         contrast_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
-        triplet_loss = TripletLoss(distance_measure='cosine'
+        triplet_loss = TripletLoss(distance_measure='cosine',
                                    margin=config.margin,
                                    num_pos=config.num_pos,
                                    num_neg=config.num_neg)
     else:
         raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
-    
+
     mse_loss = torch.nn.MSELoss()
 
     # Test.
@@ -356,26 +356,26 @@ def test(config: AttributeHashmap):
 
             latent_loss = None
             if config.latent_loss == 'supercontrast':
-                batch_images, cell_type_labels = construct_batch_images_with_n_views(images, 
-                                                                                    img_paths, 
-                                                                                    dataset, 
-                                                                                    config.n_views, 
+                batch_images, cell_type_labels = construct_batch_images_with_n_views(images,
+                                                                                    img_paths,
+                                                                                    dataset,
+                                                                                    config.n_views,
                                                                                     'test', # NOTE: use test
                                                                                     device)
                 _, latent_features = model(batch_images) # (bsz * n_views, latent_dim)
                 latent_features = latent_features.contiguous().view(bsz, config.n_views, -1) # (bsz, n_views, latent_dim)
                 cell_type_labels = torch.tensor(cell_type_labels).to(device) # (bsz)
 
-                latent_loss = supercontrast_loss(features=latent_features, 
+                latent_loss = supercontrast_loss(features=latent_features,
                                                     labels=cell_type_labels)
             elif config.latent_loss == 'triplet':
-                pos_features, neg_features = construct_triplet_batch(img_paths, 
-                                                                    latent_features, 
+                pos_features, neg_features = construct_triplet_batch(img_paths,
+                                                                    latent_features,
                                                                     config.num_pos,
-                                                                    config.num_neg, 
-                                                                    model, 
-                                                                    dataset, 
-                                                                    'test', 
+                                                                    config.num_neg,
+                                                                    model,
+                                                                    dataset,
+                                                                    'test',
                                                                     device=device)
                 pos_features = pos_features.contiguous().view(bsz, config.num_pos, -1) # (bsz, num_pos, latent_dim)
                 neg_features = neg_features.contiguous().view(bsz, config.num_neg, -1) # (bsz, num_neg, latent_dim)
@@ -398,12 +398,13 @@ def test(config: AttributeHashmap):
         % (test_loss, test_latent_loss, test_recon_loss),
         filepath=config.log_dir,
         to_console=False)
-    
+
 
     # Visualize latent embeddings.
     embeddings = {split: None for split in ['train', 'val', 'test']}
     embedding_labels = {split: [] for split in ['train', 'val', 'test']}
     og_inputs = {split: None for split in ['train', 'val', 'test']}
+    canonical = {split: None for split in ['train', 'val', 'test']}
     reconstructed = {split: None for split in ['train', 'val', 'test']}
 
     with torch.no_grad():
@@ -430,21 +431,26 @@ def test(config: AttributeHashmap):
                     og_inputs[split] = images
                 else:
                     og_inputs[split] = torch.cat([og_inputs[split], images], dim=0)
+                if canonical[split] is None:
+                    canonical[split] = canonical_images
+                else:
+                    canonical[split] = torch.cat([canonical[split], canonical_images], dim=0)
                 embedding_labels[split].extend([dataset.get_celltype(img_path=img_path) for img_path in img_paths])
-            
+
             embeddings[split] = embeddings[split].numpy()
             reconstructed[split] = reconstructed[split].numpy()
             og_inputs[split] = og_inputs[split].numpy()
+            canonical[split] = canonical[split].numpy()
             embedding_labels[split] = np.array(embedding_labels[split])
             assert len(embeddings[split]) == len(reconstructed[split]) == len(embedding_labels[split])
-    
+
     # Plot latent embeddings
     import phate
     import scprep
     import matplotlib.pyplot as plt
-    
+
     plt.rcParams['font.family'] = 'serif'
-    
+
     fig_embedding = plt.figure(figsize=(10, 6 * 3))
     for split in ['train', 'val', 'test']:
         phate_op = phate.PHATE(random_state=0,
@@ -469,27 +475,44 @@ def test(config: AttributeHashmap):
     plt.close(fig_embedding)
 
 
-    # Visualize input vs. reconstructed
+    # Visualize reconstruction
     sample_n = 5
-    fig_reconstructed = plt.figure(figsize=(2 * sample_n * 2, 2 * 3))  # (W, H)
-    fig_reconstructed.suptitle('Input vs. Reconstructed', fontsize=10)
+    fig_reconstructed = plt.figure(figsize=(2 * sample_n * 3, 2 * 3))  # (W, H)
+    fig_reconstructed.suptitle('Reconstruction of canonical view', fontsize=10)
     for split in ['train', 'val', 'test']:
         for i in range(sample_n):
-            # Original Input 
-            ax = fig_reconstructed.add_subplot(3, sample_n * 2, 
-                                               ['train', 'val', 'test'].index(split) * sample_n * 2 + i * 2 + 1)
+            # Original Input
+            ax = fig_reconstructed.add_subplot(3, sample_n * 3,
+                                               ['train', 'val', 'test'].index(split) * sample_n * 3 + i * 3 + 1)
             sample_idx = np.random.randint(low=0, high=len(reconstructed[split]))
-            ax.imshow(og_inputs[split][sample_idx].transpose(1, 2, 0)) # (H, W, in_chan)
+            img_display = og_inputs[split][sample_idx].transpose(1, 2, 0)  # (H, W, in_chan)
+            img_display = np.clip((img_display + 1) / 2, 0, 1)
+            ax.imshow(img_display)
             ax.set_xticks([])
             ax.set_yticks([])
             if i == 0:
                 ax.set_ylabel(split, fontsize=10)
             ax.set_title('Input')
-            
+
+            # Canonical
+            ax = fig_reconstructed.add_subplot(3, sample_n * 3,
+                                               ['train', 'val', 'test'].index(split) * sample_n * 3 + i * 3 + 2)
+            sample_idx = np.random.randint(low=0, high=len(reconstructed[split]))
+            img_display = canonical[split][sample_idx].transpose(1, 2, 0)  # (H, W, in_chan)
+            img_display = np.clip((img_display + 1) / 2, 0, 1)
+            ax.imshow(img_display)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            if i == 0:
+                ax.set_ylabel(split, fontsize=10)
+            ax.set_title('Canonical')
+
             # Reconstructed
-            ax = fig_reconstructed.add_subplot(3, sample_n * 2, 
-                                               ['train', 'val', 'test'].index(split) * sample_n * 2 + i * 2 + 2)
-            ax.imshow(reconstructed[split][sample_idx].transpose(1, 2, 0)) # (H, W, in_chan)
+            ax = fig_reconstructed.add_subplot(3, sample_n * 3,
+                                               ['train', 'val', 'test'].index(split) * sample_n * 3 + i * 3 + 3)
+            img_display = reconstructed[split][sample_idx].transpose(1, 2, 0)  # (H, W, in_chan)
+            img_display = np.clip((img_display + 1) / 2, 0, 1)
+            ax.imshow(img_display)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_title('Reconstructed')
@@ -498,7 +521,7 @@ def test(config: AttributeHashmap):
     plt.savefig(save_path_fig_reconstructed)
     plt.close(fig_reconstructed)
 
-    
+
     return
 
 
