@@ -123,9 +123,9 @@ def patchify_and_save(image, label_map, class_centroid_map, patches_folder,
 
 
 if __name__ == '__main__':
-    patch_size = 224
+    patch_size = 96
     image_path = '../../raw_data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00.tif'
-    
+
     annotation_file = '../../raw_data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00.tif_Annotations.json'
     patches_folder = '../../data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_patch_%dx%d/' % (
         patch_size, patch_size)
@@ -142,6 +142,7 @@ if __name__ == '__main__':
 
     # Check the maximum size of the annotations.
     dx_max, dy_max = 0, 0
+    count, dx_mean, dy_mean = 0, 0, 0
     for cell_type, cell_verts in class_verts_map.items():
         for cell in cell_verts:
             x_max = np.max(cell[:, 0])
@@ -156,7 +157,14 @@ if __name__ == '__main__':
             dx_max = max(dx_max, dx)
             dy_max = max(dy_max, dy)
 
+            count += 1
+            dx_mean += dx
+            dy_mean += dy
+
+    dx_mean = dx_mean / count
+    dy_mean = dy_mean / count
     print('Max dx: %d, Max dy: %d' % (dx_max, dy_max))
+    print('Mean dx: %d, Mean dy: %d' % (dx_mean, dy_mean))
 
     # Produce label from annotation.
     label_map, class_centroid_map = annotation_to_label(class_verts_map, image)

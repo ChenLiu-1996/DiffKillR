@@ -25,16 +25,6 @@ class_value_map = {
 }
 
 
-def load_and_get_flip_variants(image_path: str, label_path: str):
-    '''
-    Load the image and label from path,
-    and return the 4 flip variants.
-    '''
-    image, label = load_image_and_label(image_path, label_path)
-    image_label_flip_variants = get_flip_variants(image, label)
-    return image_label_flip_variants
-
-
 def load_image_and_label(image_path: str, label_path: str):
     '''
     Load the image and label from path.
@@ -55,23 +45,6 @@ def load_image_and_label(image_path: str, label_path: str):
     return image, label
 
 
-def get_flip_variants(image: np.array, label: np.array):
-    '''
-    Return the 4 flip variants of an image and its label.
-    '''
-    image_f1 = image
-    label_f1 = label
-    image_f2 = cv2.flip(image, 0)  # vertical flipping
-    label_f2 = cv2.flip(label, 0)
-    image_f3 = cv2.flip(image, 1)  # horizontal flipping
-    label_f3 = cv2.flip(label, 1)
-    image_f4 = cv2.flip(image, -1)  # vertical & horizontal flipping
-    label_f4 = cv2.flip(label, -1)
-    return [(image_f1, label_f1), (image_f2, label_f2),
-            (image_f3, label_f3), (image_f4, label_f4)]
-
-
-
 def augment_and_save(augmentation_tuple_list: List[tuple],
                      augmented_patch_size: int,
                      augmented_folder: str,
@@ -82,11 +55,8 @@ def augment_and_save(augmentation_tuple_list: List[tuple],
     for prefix, _, image_path, label_path, multiplier in tqdm(
             augmentation_tuple_list):
 
-        image_label_flip_variants = load_and_get_flip_variants(
-            image_path, label_path)
-
         # Save the unaugmented version.
-        image_orig, label_orig = image_label_flip_variants[0]
+        image_orig, label_orig = load_image_and_label(image_path, label_path)
         image_orig, label_orig = center_crop(image=image_orig,
                                              label=label_orig,
                                              output_size=augmented_patch_size)
@@ -100,36 +70,37 @@ def augment_and_save(augmentation_tuple_list: List[tuple],
         cv2.imwrite(label_orig_path, label_orig)
 
         aug_counter = 0
-        for image_, label_ in image_label_flip_variants:
-            for _ in range(multiplier):
-                aug_counter += 1
+        for _ in range(multiplier):
+            image_, label_ = load_image_and_label(image_path, label_path)
 
-                patch_size_ = image_.shape[0]
-                assert patch_size_ > augmented_patch_size
+            aug_counter += 1
 
-                # Perform the augmentation.
-                image_aug, label_aug = globals()['augment_' + augmentation_method](
-                    image=image_,
-                    label=label_,
-                    output_size=augmented_patch_size,
-                    random_seed=aug_counter,
-                )[:2]
+            patch_size_ = image_.shape[0]
+            assert patch_size_ > augmented_patch_size
 
-                assert image_aug.shape[0] == augmented_patch_size
-                assert image_aug.shape[1] == augmented_patch_size
-                assert label_aug.shape[0] == augmented_patch_size
-                assert label_aug.shape[1] == augmented_patch_size
+            # Perform the augmentation.
+            image_aug, label_aug = globals()['augment_' + augmentation_method](
+                image=image_,
+                label=label_,
+                output_size=augmented_patch_size,
+                random_seed=aug_counter,
+            )[:2]
 
-                image_aug_path = '%s/%s/image/%s_aug%s.png' % (
-                    augmented_folder, augmentation_method, prefix, str(aug_counter).zfill(5))
-                label_aug_path = '%s/%s/label/%s_aug%s.png' % (
-                    augmented_folder, augmentation_method, prefix, str(aug_counter).zfill(5))
+            assert image_aug.shape[0] == augmented_patch_size
+            assert image_aug.shape[1] == augmented_patch_size
+            assert label_aug.shape[0] == augmented_patch_size
+            assert label_aug.shape[1] == augmented_patch_size
 
-                os.makedirs(os.path.dirname(image_aug_path), exist_ok=True)
-                os.makedirs(os.path.dirname(label_aug_path), exist_ok=True)
+            image_aug_path = '%s/%s/image/%s_aug%s.png' % (
+                augmented_folder, augmentation_method, prefix, str(aug_counter).zfill(5))
+            label_aug_path = '%s/%s/label/%s_aug%s.png' % (
+                augmented_folder, augmentation_method, prefix, str(aug_counter).zfill(5))
 
-                cv2.imwrite(image_aug_path, cv2.cvtColor(image_aug, cv2.COLOR_RGB2BGR))
-                cv2.imwrite(label_aug_path, label_aug)
+            os.makedirs(os.path.dirname(image_aug_path), exist_ok=True)
+            os.makedirs(os.path.dirname(label_aug_path), exist_ok=True)
+
+            cv2.imwrite(image_aug_path, cv2.cvtColor(image_aug, cv2.COLOR_RGB2BGR))
+            cv2.imwrite(label_aug_path, label_aug)
 
     return
 
@@ -138,13 +109,13 @@ def main():
     '''
     Main function.
     '''
-    patch_size = 224
+    patch_size = 96
     patches_folder = '../../data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_patch_%dx%d/' % (
         patch_size, patch_size)
     image_path_list = sorted(glob(patches_folder + 'image/*.png'))
     label_path_list = sorted(glob(patches_folder + 'label/*.png'))
 
-    augmented_patch_size = 96
+    augmented_patch_size = 32
     augmented_folder = '../../data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_augmented_patch_%dx%d' % (
         augmented_patch_size, augmented_patch_size)
 
@@ -172,9 +143,7 @@ def main():
         class_value_map.keys())
     class_multiplier_map = {}
     for cell_type in class_value_map.keys():
-        # 4 for 4 flipping variants.
-        class_multiplier_map[cell_type] = max(1, round(target_count_per_type /
-                                                       class_count_map[cell_type] / 4))
+        class_multiplier_map[cell_type] = max(1, round(target_count_per_type / class_count_map[cell_type]))
 
     # Use a single data structure to hold all information for augmentation.
     augmentation_tuple_list = []
@@ -191,7 +160,7 @@ def main():
                                 'volume_preserving_stretch',
                                 'partial_stretch']:
         augment_and_save(augmentation_tuple_list, augmented_patch_size, augmented_folder, augmentation_method)
-    
+
     print('Done.')
     print('Augmentation tuple list:')
     print(len(augmentation_tuple_list), augmentation_tuple_list[:10])

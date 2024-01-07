@@ -6,7 +6,7 @@ from typing import Tuple
 def augment_partial_stretch(image: np.array,
                             label: np.array = None,
                             output_size: int = 64,
-                            max_stretch_factor: float = 1.1,
+                            max_stretch_factor: float = 1.5,
                             can_squeeze: bool = False,
                             random_seed: int = None):
     '''
@@ -64,14 +64,14 @@ def augment_partial_stretch(image: np.array,
 
     # Make a cut along the w-axis, splitting the h-axis.
     if label is not None:
-        foreground_h = np.argwhere(label > 0)[:, 0]
+        foreground_h = np.argwhere(label_rotFwd > 0)[:, 0]
         left_most_h = min(foreground_h)
         right_most_h = max(foreground_h)
     else:
-        foreground_h = np.argwhere(image > 0)[:, 0]
+        foreground_h = np.argwhere(image_rotFwd > 0)[:, 0]
         left_most_h = min(foreground_h)
         right_most_h = max(foreground_h)
-    cut_percentile = np.random.uniform(75, 90)
+    cut_percentile = np.random.uniform(50, 75)
     cut_h = int(np.percentile([left_most_h, right_most_h], cut_percentile))
 
     image_part_to_stretch = image_rotFwd[cut_h:, ...]

@@ -6,7 +6,7 @@ from typing import Tuple
 def augment_uniform_stretch(image: np.array,
                             label: np.array = None,
                             output_size: int = 64,
-                            max_stretch_factor: float = 1.1,
+                            max_stretch_factor: float = 1.5,
                             can_squeeze: bool = False,
                             random_seed: int = None):
     '''
@@ -93,7 +93,7 @@ def augment_uniform_stretch(image: np.array,
 def augment_directional_stretch(image: np.array,
                                 label: np.array = None,
                                 output_size: int = 64,
-                                max_stretch_factor: float = 1.1,
+                                max_stretch_factor: float = 1.5,
                                 can_squeeze: bool = False,
                                 random_seed: int = None):
     '''
@@ -209,7 +209,7 @@ def augment_directional_stretch(image: np.array,
 def augment_volume_preserving_stretch(image: np.array,
                                       label: np.array = None,
                                       output_size: int = 64,
-                                      max_stretch_factor: float = 1.1,
+                                      max_stretch_factor: float = 1.5,
                                       random_seed: int = None):
     '''
     Perform volume preserving stretch.

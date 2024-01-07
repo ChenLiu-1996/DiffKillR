@@ -19,6 +19,8 @@ conda install -c anaconda scikit-image scikit-learn pillow matplotlib seaborn tq
 python -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.12
 python -m pip install -U phate
 conda install -c conda-forge libstdcxx-ng=12
+python -m pip install antspyx
+
 
 # Export CuDNN
 echo 'CUDNN_PATH=$(dirname $(python -c "import nvidia.cudnn;print(nvidia.cudnn.__file__)"))' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh

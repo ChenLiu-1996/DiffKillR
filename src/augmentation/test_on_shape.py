@@ -1,18 +1,13 @@
-import os
-import sys
 import numpy as np
 import argparse
 from matplotlib import pyplot as plt
 from typing import Tuple
 from scipy.ndimage import center_of_mass
 
-import_dir = '/'.join(os.path.realpath(__file__).split('/')[:-2])
-sys.path.insert(0, import_dir)
-
-from test_augmentation.generate_shapes import generate_shape
-from augmentation.aug_rotation import augment_rotation
-from augmentation.aug_stretch import augment_uniform_stretch, augment_directional_stretch, augment_volume_preserving_stretch
-from augmentation.aug_partial_stretch import augment_partial_stretch
+from generate_shapes import generate_shape
+from aug_rotation import augment_rotation
+from aug_stretch import augment_uniform_stretch, augment_directional_stretch, augment_volume_preserving_stretch
+from aug_partial_stretch import augment_partial_stretch
 
 
 def test_on_shape(shape: str = 'square'):
