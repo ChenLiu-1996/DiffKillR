@@ -75,13 +75,22 @@ def construct_triplet_batch(img_paths,
     return pos_features, neg_features
 
 
-
-def construct_batch_images_with_n_views(images, img_paths, dataset, n_views, split, device):
+def construct_batch_images_with_n_views(
+        images,
+        img_paths,
+        dataset,
+        n_views,
+        sampling_method,
+        split,
+        device):
     '''
         Returns:
         batch_images: [bsz * n_views, ...],
         cell_type_labels: [bsz * n_views]
     '''
+    if sampling_method not in ['supercontrast', 'SimCLR']:
+        raise ValueError('`sampling_method`: %s not supported.' % sampling_method)
+    
     # Construct batch_images [bsz * n_views, in_chan, H, W].
     batch_images = None
     cell_type_labels = []
@@ -90,9 +99,16 @@ def construct_batch_images_with_n_views(images, img_paths, dataset, n_views, spl
         cell_type = dataset.get_celltype(img_path=img_path)
         cell_type_labels.append(dataset.cell_type_to_idx[cell_type])
         if n_views > 1:
-            aug_images, _ = dataset.sample_celltype(split=split,
-                                                    celltype=cell_type,
-                                                    cnt=n_views-1)
+            if sampling_method == 'supercontrast':
+                aug_images, _ = dataset.sample_celltype(split=split,
+                                                        celltype=cell_type,
+                                                        cnt=n_views-1)
+            elif sampling_method == 'SimCLR':
+                patch_id = dataset.get_patch_id(img_path=img_path)
+                aug_images, _ = dataset.sample_views(split=split,
+                                                     patch_id=patch_id,
+                                                     cnt=n_views-1)
+                
             aug_images = torch.Tensor(aug_images).to(device) # (cnt, in_chan, H, W)
 
             image = torch.unsqueeze(image, dim=0) # (1, in_chan, H, W)
@@ -172,19 +188,26 @@ def train(config: AttributeHashmap):
                 Latent embedding loss.
             '''
             latent_loss = None
-            if config.latent_loss == 'supercontrast':
+            if config.latent_loss == 'supercontrast' or config.latent_loss == 'SimCLR':
+                sampling_method = config.latent_loss
                 batch_images, cell_type_labels = construct_batch_images_with_n_views(images,
                                                                                     img_paths,
                                                                                     dataset,
                                                                                     config.n_views,
+                                                                                    sampling_method,
                                                                                     'train',
                                                                                     device)
                 _, latent_features = model(batch_images) # (bsz * n_views, latent_dim)
                 latent_features = latent_features.contiguous().view(bsz, config.n_views, -1) # (bsz, n_views, latent_dim)
                 cell_type_labels = torch.tensor(cell_type_labels).to(device) # (bsz)
 
-                latent_loss = supercontrast_loss(features=latent_features,
-                                                    labels=cell_type_labels)
+                if sampling_method == 'supercontrast':
+                    latent_loss = supercontrast_loss(features=latent_features,
+                                                        labels=cell_type_labels)
+                else:
+                    # Both `labels` and `mask` are None, perform SimCLR unsupervised loss:
+                    latent_loss = supercontrast_loss(features=latent_features)
+
             elif config.latent_loss == 'triplet':
                 pos_features, neg_features = construct_triplet_batch(img_paths,
                                                                     latent_features,
@@ -244,19 +267,25 @@ def train(config: AttributeHashmap):
                 recon_loss = mse_loss(recon_images, canonical_images)
 
                 latent_loss = None
-                if config.latent_loss == 'supercontrast':
+                if config.latent_loss == 'supercontrast' or config.latent_loss == 'SimCLR':
+                    sampling_method = config.latent_loss
                     batch_images, cell_type_labels = construct_batch_images_with_n_views(images,
                                                                                         img_paths,
                                                                                         dataset,
                                                                                         config.n_views,
+                                                                                        sampling_method,
                                                                                         'val', # NOTE: use val
                                                                                         device)
                     _, latent_features = model(batch_images) # (bsz * n_views, latent_dim)
                     latent_features = latent_features.contiguous().view(bsz, config.n_views, -1) # (bsz, n_views, latent_dim)
                     cell_type_labels = torch.tensor(cell_type_labels).to(device) # (bsz)
 
-                    latent_loss = supercontrast_loss(features=latent_features,
-                                                        labels=cell_type_labels)
+                    if sampling_method == 'supercontrast':
+                        latent_loss = supercontrast_loss(features=latent_features,
+                                                            labels=cell_type_labels)
+                    else:
+                        # Both `labels` and `mask` are None, perform SimCLR unsupervised loss:
+                        latent_loss = supercontrast_loss(features=latent_features)
                 elif config.latent_loss == 'triplet':
                     pos_features, neg_features = construct_triplet_batch(img_paths,
                                                                         latent_features,
@@ -355,19 +384,25 @@ def test(config: AttributeHashmap):
             recon_loss = mse_loss(recon_images, canonical_images)
 
             latent_loss = None
-            if config.latent_loss == 'supercontrast':
+            if config.latent_loss == 'supercontrast' or config.latent_loss == 'SimCLR':
+                sampling_method = config.latent_loss
                 batch_images, cell_type_labels = construct_batch_images_with_n_views(images,
                                                                                     img_paths,
                                                                                     dataset,
                                                                                     config.n_views,
+                                                                                    sampling_method,
                                                                                     'test', # NOTE: use test
                                                                                     device)
                 _, latent_features = model(batch_images) # (bsz * n_views, latent_dim)
                 latent_features = latent_features.contiguous().view(bsz, config.n_views, -1) # (bsz, n_views, latent_dim)
                 cell_type_labels = torch.tensor(cell_type_labels).to(device) # (bsz)
 
-                latent_loss = supercontrast_loss(features=latent_features,
-                                                    labels=cell_type_labels)
+                if sampling_method == 'supercontrast':
+                    latent_loss = supercontrast_loss(features=latent_features,
+                                                        labels=cell_type_labels)
+                else:
+                    # Both `labels` and `mask` are None, perform SimCLR unsupervised loss:
+                    latent_loss = supercontrast_loss(features=latent_features)
             elif config.latent_loss == 'triplet':
                 pos_features, neg_features = construct_triplet_batch(img_paths,
                                                                     latent_features,

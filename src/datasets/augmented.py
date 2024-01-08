@@ -65,8 +65,10 @@ class AugmentedDataset(Dataset):
 
         assert len(self.all_image_paths) == len(self.all_label_paths)
 
+        # Will be set in prepare_dataset.py when train/val/test split is done.
         self.img_path_to_split = None
         self.img_path_by_celltype_and_split = None
+        self.img_path_by_patch_id_and_split = None
 
     def __len__(self) -> int:
         return len(self.all_image_paths)
@@ -95,7 +97,7 @@ class AugmentedDataset(Dataset):
             e.g. EndothelialCell_H7589_W9064_original.png, is the canonical pose of 
             EndothelialCell_H7589_W9064_*.png
         '''
-        patch_id = "_".join(img_path.split('/')[-1].split('_')[:3])
+        patch_id = self.get_patch_id(img_path=img_path)
         canonical_pose_img_path = self.patch_id_to_canonical_pose_path[patch_id]
         canonical_pose_label_path = canonical_pose_img_path.replace('image', 'label')
 
@@ -110,9 +112,48 @@ class AugmentedDataset(Dataset):
         '''
         celltype = img_path.split('/')[-1].split('_')[0]
         return celltype
+    
+    def get_patch_id(self, img_path) -> str:
+        '''
+            Return the patch_id of an image.
+        '''
+        patch_id = "_".join(img_path.split('/')[-1].split('_')[:3])
+        return patch_id
 
     def num_classes(self) -> int:
         return len(self.label_paths_by_celltype.keys())
+
+    def sample_views(self, split: str, patch_id: str, cnt: int = 1) -> Tuple[np.array, np.array]:
+        '''
+            Sample view(s) of the same patch id from the dataset.
+            Similar to SimCLR sampling.
+            Returns:
+                images: [cnt, in_chan, W, H]
+                labels: [cnt, W, H]
+        '''
+        images = []
+        labels = []
+        
+        candiates = self.img_path_by_patch_id_and_split[patch_id][split]
+        if cnt > len(candiates):
+            raise ValueError('Not enough images for \
+                             patch_id %s in split %s for %d views.' % (patch_id, split, cnt))
+        idxs = np.random.randint(low=0, high=len(candiates), size=cnt)
+        sampled_img_paths = [candiates[idx] for idx in idxs]
+
+        for image_path in sampled_img_paths:
+            label_path = image_path.replace('image', 'label')
+            image = load_image(path=image_path, target_dim=self.target_dim)
+            label = np.array(cv2.imread(label_path, cv2.IMREAD_UNCHANGED))
+
+            images.append(image[np.newaxis, ...])
+            labels.append(label[np.newaxis, ...])
+        
+        images = np.concatenate(images, axis=0)
+        labels = np.concatenate(labels, axis=0)
+
+        return images, labels
+       
     
     def sample_celltype(self, split: str, celltype: str, cnt: int = 1) -> Tuple[np.array, np.array]:
         '''
@@ -158,14 +199,25 @@ class AugmentedDataset(Dataset):
         self.img_path_by_celltype_and_split = {
             celltype: {} for celltype in self.cell_types
         }
+        self.img_path_by_patch_id_and_split = {
+            patch_id: {} for patch_id in self.patch_id_to_canonical_pose_path.keys()
+        }
+
         for img_path, split in self.img_path_to_split.items():
             celltype = self.get_celltype(img_path=img_path)
             if split not in self.img_path_by_celltype_and_split[celltype].keys():
                 self.img_path_by_celltype_and_split[celltype][split] = [img_path]
             else:
                 self.img_path_by_celltype_and_split[celltype][split].append(img_path)
+            
+            patch_id = self.get_patch_id(img_path=img_path) # e.g. 'EndotheliaCell_H7589_W9064'
+            if split not in self.img_path_by_patch_id_and_split[patch_id].keys():
+                self.img_path_by_patch_id_and_split[patch_id][split] = [img_path]
+            else:
+                self.img_path_by_patch_id_and_split[patch_id][split].append(img_path)
 
-        print('Finished setting img_path_to_split dict and img_path_by_celltype_and_split.\n')        
+        print('Finished setting img_path_to_split dict; \
+              img_path_by_celltype_and_split; img_path_by_patch_id_and_split.\n')        
 
 
 def load_image(path: str, target_dim: Tuple[int] = None) -> np.array:
