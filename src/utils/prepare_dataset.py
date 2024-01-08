@@ -41,11 +41,11 @@ def prepare_dataset(config: AttributeHashmap):
     # NOTE:Make sure no leakage between train/val/test sets when sampling augmentation.
     # A hacky way, but works for now.
     img_path_to_split = {}
-    for _, (_, _, _, _, img_path) in enumerate(train_set):
+    for _, (_, _, _, _, img_path, _) in enumerate(train_set):
         img_path_to_split[img_path] = 'train'
-    for _, (_, _, _, _, img_path) in enumerate(val_set):
+    for _, (_, _, _, _, img_path, _) in enumerate(val_set):
         img_path_to_split[img_path] = 'val'
-    for _, (_, _, _, _, img_path) in enumerate(test_set):
+    for _, (_, _, _, _, img_path, _) in enumerate(test_set):
         img_path_to_split[img_path] = 'test'
     dataset._set_img_path_to_split(img_path_to_split=img_path_to_split)
 
