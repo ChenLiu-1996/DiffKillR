@@ -156,7 +156,7 @@ def train(config: AttributeHashmap):
     for epoch_idx in tqdm(range(config.max_epochs)):
         train_loss, train_latent_loss, train_recon_loss = 0, 0, 0
         model.train()
-        for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(train_set)):
+        for iter_idx, (images, _, canonical_images, _, img_paths, _) in enumerate(tqdm(train_set)):
             images = images.float().to(device) # (bsz, in_chan, H, W)
             canonical_images = canonical_images.float().to(device)
             bsz = images.shape[0]
@@ -233,7 +233,7 @@ def train(config: AttributeHashmap):
         model.eval()
         with torch.no_grad():
             val_loss, val_latent_loss, val_recon_loss = 0, 0, 0
-            for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(val_set)):
+            for iter_idx, (images, _, canonical_images, _, img_paths, _) in enumerate(tqdm(val_set)):
                 # NOTE: batch size is len(val_set) here.
                 # May need to change this if val_set is too large.
                 images = images.float().to(device)
@@ -346,7 +346,7 @@ def test(config: AttributeHashmap):
     model.eval()
     with torch.no_grad():
         test_loss, test_latent_loss, test_recon_loss = 0, 0, 0
-        for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(test_set)):
+        for iter_idx, (images, _, canonical_images, _, img_paths, _) in enumerate(tqdm(test_set)):
             images = images.float().to(device)
             canonical_images = canonical_images.float().to(device)
             bsz = images.shape[0]
@@ -406,10 +406,12 @@ def test(config: AttributeHashmap):
     og_inputs = {split: None for split in ['train', 'val', 'test']}
     canonical = {split: None for split in ['train', 'val', 'test']}
     reconstructed = {split: None for split in ['train', 'val', 'test']}
+    img_paths = {split: [] for split in ['train', 'val', 'test']}
+    canonical_img_paths = {split: [] for split in ['train', 'val', 'test']}
 
     with torch.no_grad():
         for split, split_set in zip(['train', 'val', 'test'], [train_set, val_set, test_set]):
-            for iter_idx, (images, _, canonical_images, _, img_paths) in enumerate(tqdm(split_set)):
+            for iter_idx, (images, _, canonical_images, _, img_paths, canonical_img_paths) in enumerate(tqdm(split_set)):
                 images = images.float().to(device)
                 recon_images, latent_features = model(images)
                 latent_features = torch.flatten(latent_features, start_dim=1)
@@ -436,6 +438,9 @@ def test(config: AttributeHashmap):
                 else:
                     canonical[split] = torch.cat([canonical[split], canonical_images], dim=0)
                 embedding_labels[split].extend([dataset.get_celltype(img_path=img_path) for img_path in img_paths])
+
+                img_paths[split].extend(img_paths)
+                canonical_img_paths[split].extend(canonical_img_paths)
 
             embeddings[split] = embeddings[split].numpy()
             reconstructed[split] = reconstructed[split].numpy()
@@ -485,6 +490,7 @@ def test(config: AttributeHashmap):
             ax = fig_reconstructed.add_subplot(3, sample_n * 3,
                                                ['train', 'val', 'test'].index(split) * sample_n * 3 + i * 3 + 1)
             sample_idx = np.random.randint(low=0, high=len(reconstructed[split]))
+            og_img_patch_name = img_paths[split][sample_idx].split('/')[-1]
             img_display = og_inputs[split][sample_idx].transpose(1, 2, 0)  # (H, W, in_chan)
             img_display = np.clip((img_display + 1) / 2, 0, 1)
             ax.imshow(img_display)
@@ -492,12 +498,13 @@ def test(config: AttributeHashmap):
             ax.set_yticks([])
             if i == 0:
                 ax.set_ylabel(split, fontsize=10)
-            ax.set_title('Input')
+            ax.set_title(og_img_patch_name)
 
             # Canonical
             ax = fig_reconstructed.add_subplot(3, sample_n * 3,
                                                ['train', 'val', 'test'].index(split) * sample_n * 3 + i * 3 + 2)
-            sample_idx = np.random.randint(low=0, high=len(reconstructed[split]))
+            #sample_idx = np.random.randint(low=0, high=len(reconstructed[split])) # !BUG: use the same idx as og
+            canonical_img_patch_name = canonical_img_paths[split][sample_idx].split('/')[-1]
             img_display = canonical[split][sample_idx].transpose(1, 2, 0)  # (H, W, in_chan)
             img_display = np.clip((img_display + 1) / 2, 0, 1)
             ax.imshow(img_display)
@@ -505,7 +512,7 @@ def test(config: AttributeHashmap):
             ax.set_yticks([])
             if i == 0:
                 ax.set_ylabel(split, fontsize=10)
-            ax.set_title('Canonical')
+            ax.set_title(canonical_img_patch_name)
 
             # Reconstructed
             ax = fig_reconstructed.add_subplot(3, sample_n * 3,

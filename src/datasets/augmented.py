@@ -15,8 +15,8 @@ class AugmentedDataset(Dataset):
     def __init__(self,
                  augmentation_methods: List[str],
                  cell_types: List[str] = ['EpithelialCell', 'EndothelialCell', 'Myocyte', 'Fibroblast'],
-                 base_path: str = '../data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_augmented_patch_96x96/',
-                 target_dim: Tuple[int] = (96, 96)):
+                 base_path: str = '../data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_augmented_patch_32x32/',
+                 target_dim: Tuple[int] = (32, 32)):
 
         super().__init__()
 
@@ -80,9 +80,13 @@ class AugmentedDataset(Dataset):
 
         image = load_image(path=image_path, target_dim=self.target_dim)
         label = np.array(cv2.imread(label_path, cv2.IMREAD_UNCHANGED))
-        canonical_pose_image, canonical_pose_label = self._canonical_pose(img_path=image_path)
+        canonical_pose_image, canonical_pose_label, canonical_pose_img_path = self._canonical_pose(
+            img_path=image_path)
 
-        return image, label, canonical_pose_image, canonical_pose_label, image_path
+        #return image, label, canonical_pose_image, canonical_pose_label, image_path
+        return (image, label, 
+                canonical_pose_image, canonical_pose_label, 
+                image_path, canonical_pose_img_path)
     
     def _canonical_pose(self, img_path) -> np.array:
         '''
@@ -98,7 +102,7 @@ class AugmentedDataset(Dataset):
         canonical_pose_img = load_image(path=canonical_pose_img_path, target_dim=self.target_dim)
         canonical_pose_label = np.array(cv2.imread(canonical_pose_label_path, cv2.IMREAD_UNCHANGED))
 
-        return canonical_pose_img, canonical_pose_label
+        return canonical_pose_img, canonical_pose_label, canonical_pose_img_path
     
     def get_celltype(self, img_path) -> str:
         '''
