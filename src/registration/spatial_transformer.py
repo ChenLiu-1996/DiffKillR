@@ -83,9 +83,6 @@ if __name__ == '__main__':
                               flow=torch.from_numpy(mapping.backward.transpose(2, 0, 1)[None, ...]))
     warped_st = np.uint8(warped_st[0, ...]).transpose(1, 2, 0)
 
-    import pdb
-    pdb.set_trace()
-
     # Plotting.
     plt.rcParams['font.family'] = 'serif'
     fig = plt.figure(figsize=(18, 4))
