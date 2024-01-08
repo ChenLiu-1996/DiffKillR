@@ -153,7 +153,7 @@ def train(config: AttributeHashmap):
         max_epochs=config.max_epochs,
         eta_min=0)
 
-    if config.latent_loss == 'supercontrast':
+    if config.latent_loss in ['supercontrast', 'SimCLR']:
         supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
                                         contrast_mode=config.contrast_mode)
@@ -357,7 +357,7 @@ def test(config: AttributeHashmap):
     save_path_fig_reconstructed = '%s/results/reconstructed.png' % config.output_save_path
     os.makedirs(os.path.dirname(save_path_fig_embeddings), exist_ok=True)
 
-    if config.latent_loss == 'supercontrast':
+    if config.latent_loss in ['supercontrast', 'SimCLR']:
         supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
                                         contrast_mode=config.contrast_mode)
