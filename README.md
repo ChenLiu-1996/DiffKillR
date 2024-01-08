@@ -20,6 +20,7 @@ python -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.12
 python -m pip install -U phate
 conda install -c conda-forge libstdcxx-ng=12
 python -m pip install antspyx
+python -m pip install dipy
 
 
 # Export CuDNN
