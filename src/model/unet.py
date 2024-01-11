@@ -4,7 +4,7 @@ import torch
 from torch import nn
 
 
-class AutoEncoder(BaseNetwork):
+class UNet(BaseNetwork):
 
     def __init__(self,
                  device: torch.device = torch.device('cpu'),
@@ -15,7 +15,7 @@ class AutoEncoder(BaseNetwork):
                  out_channels: int = 3,
                  non_linearity: str = 'relu'):
         '''
-        An AutoEncoder model.
+        An UNet model.
 
         Parameters
         ----------
@@ -64,13 +64,13 @@ class AutoEncoder(BaseNetwork):
         for d in range(self.depth):
             self.down_list.append(conv_block(n_f * 2 ** d))
             self.down_conn_list.append(nn.Conv2d(n_f * 2 ** d, n_f * 2 ** (d + 1), 1, 1))
-            self.up_conn_list.append(nn.Conv2d(n_f * 2 ** (d + 1), n_f * 2 ** d, 1, 1))
+            self.up_conn_list.append(torch.nn.Conv2d(n_f * 3 * 2 ** d, n_f * 2 ** d, 1, 1))
             self.up_list.append(upconv_block(n_f * 2 ** d))
 
         self.up_list = self.up_list[::-1]
         self.up_conn_list = self.up_conn_list[::-1]
 
-        self.bottleneck = ResConvBlock(n_f * 2 ** self.depth)
+        self.bottleneck = conv_block(n_f * 2 ** self.depth)
         self.out_layer = nn.Conv2d(n_f, out_channels, 1)
 
 
@@ -81,8 +81,10 @@ class AutoEncoder(BaseNetwork):
 
         x = self.non_linearity(self.conv1x1(x))
 
+        residual_list = []
         for d in range(self.depth):
             x = self.down_list[d](x)
+            residual_list.append(x.clone())
             x = self.non_linearity(self.down_conn_list[d](x))
             x = nn.functional.interpolate(x,
                                           scale_factor=0.5,
@@ -90,16 +92,16 @@ class AutoEncoder(BaseNetwork):
                                           align_corners=False)
 
         x = self.bottleneck(x)
-        latent = torch.clone(x)
 
         for d in range(self.depth):
-            x = nn.functional.interpolate(x,
-                                          scale_factor=2,
-                                          mode='bilinear',
-                                          align_corners=False)
+            x = torch.nn.functional.interpolate(x,
+                                                scale_factor=2,
+                                                mode='bilinear',
+                                                align_corners=False)
+            x = torch.cat([x, residual_list.pop(-1)], dim=1)
             x = self.non_linearity(self.up_conn_list[d](x))
             x = self.up_list[d](x)
 
         output = self.out_layer(x)
 
-        return output, latent
+        return output
