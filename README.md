@@ -33,5 +33,5 @@ python -m pip install opencv-python
 
 ## Train Augmentation-agonostic network
 ```
-python train_AE.py --mode test --config {config} --num-workers 4
+python train_AE.py --mode train --config {config} --num-workers 4
 ```
