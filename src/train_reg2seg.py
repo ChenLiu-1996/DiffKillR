@@ -15,6 +15,7 @@ from utils.log_util import log
 from utils.parse import parse_settings
 from utils.seed import seed_everything
 from utils.early_stop import EarlyStopping
+from utils.metrics import dice_coeff
 
 
 def numpy_variables(*tensors: torch.Tensor) -> Tuple[np.array]:
@@ -24,44 +25,45 @@ def numpy_variables(*tensors: torch.Tensor) -> Tuple[np.array]:
     return [_tensor.cpu().detach().numpy().transpose(1, 2, 0) for _tensor in tensors]
 
 
-def plot_side_by_side(save_path, im_I, im_C, im_I2C_C2I, im_I2C, lb_I, lb_C, lb_C2I):
+def plot_side_by_side(save_path, im_U, im_A, im_U2A_A2U, im_U2A, ma_U, ma_A, ma_A2U):
     fig_sbs = plt.figure(figsize=(20, 8))
 
     ax = fig_sbs.add_subplot(2, 4, 1)
-    ax.imshow(np.clip((im_I + 1) / 2, 0, 1))
-    ax.set_title('Image (I)')
+    ax.imshow(np.clip((im_U + 1) / 2, 0, 1))
+    ax.set_title('Unannotated Image (U)')
     ax.set_axis_off()
 
     ax = fig_sbs.add_subplot(2, 4, 2)
-    ax.imshow(np.clip((im_C + 1) / 2, 0, 1))
-    ax.set_title('Canonical Image (C)')
+    ax.imshow(np.clip((im_A + 1) / 2, 0, 1))
+    ax.set_title('Annotated Image (A)')
     ax.set_axis_off()
 
     ax = fig_sbs.add_subplot(2, 4, 5)
-    ax.imshow(np.clip((im_I2C_C2I + 1) / 2, 0, 1))
-    ax.set_title('Cycled Image (I->C->I)')
+    ax.imshow(np.clip((im_U2A_A2U + 1) / 2, 0, 1))
+    ax.set_title('Cycled Image (U->A->U)')
     ax.set_axis_off()
 
     ax = fig_sbs.add_subplot(2, 4, 6)
-    ax.imshow(np.clip((im_I2C + 1) / 2, 0, 1))
-    ax.set_title('Warped Image (I->C)')
+    ax.imshow(np.clip((im_U2A + 1) / 2, 0, 1))
+    ax.set_title('Warped Image (U->A)')
     ax.set_axis_off()
 
     ax = fig_sbs.add_subplot(2, 4, 3)
-    ax.imshow(np.clip(lb_I, 0, 1), cmap='gray')
-    ax.set_title('Label (I)')
+    ax.imshow(np.clip(ma_U, 0, 1), cmap='gray')
+    ax.set_title('Unannotated Mask (U)')
     ax.set_axis_off()
 
     ax = fig_sbs.add_subplot(2, 4, 4)
-    ax.imshow(np.clip(lb_C, 0, 1), cmap='gray')
-    ax.set_title('Canonical Label (C)')
+    ax.imshow(np.clip(ma_A, 0, 1), cmap='gray')
+    ax.set_title('Annotated Mask (A)')
     ax.set_axis_off()
 
     ax = fig_sbs.add_subplot(2, 4, 7)
-    ax.imshow(np.clip(lb_C2I, 0, 1), cmap='gray')
-    ax.set_title('Projected Label (C->I)')
+    ax.imshow(np.clip(ma_A2U, 0, 1), cmap='gray')
+    ax.set_title('Projected Mask (A->U)')
     ax.set_axis_off()
 
+    fig_sbs.suptitle('Dice (Mask[U], Mask[A2U]) = %.3f' % dice_coeff(ma_U, ma_A2U))
     fig_sbs.tight_layout()
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig_sbs.savefig(save_path)
@@ -73,8 +75,7 @@ def plot_side_by_side(save_path, im_I, im_C, im_I2C_C2I, im_I2C, lb_I, lb_C, lb_
 def train(config: AttributeHashmap):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    _, train_set, val_set, _ = \
-        prepare_dataset(config=config)
+    _, train_set, val_set, _ = prepare_dataset(config=config)
 
     # Build the model
     try:
@@ -98,45 +99,53 @@ def train(config: AttributeHashmap):
                                   percentage=False)
 
     best_val_loss = np.inf
-
+    train_dice, train_image_count = 0, 0
     for epoch_idx in tqdm(range(config.max_epochs)):
         train_loss, train_loss_forward, train_loss_cyclic = 0, 0, 0
 
         warp_predictor.train()
-        for iter_idx, (images, labels, canonical_images, canonical_labels, img_paths) in enumerate(tqdm(train_set)):
+        for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks, _, _) in enumerate(tqdm(train_set)):
             shall_plot = iter_idx % 20 == 0
 
-            if len(labels.shape) == 3:
-                labels = labels[:, None, ...]
-            if len(canonical_labels.shape) == 3:
-                canonical_labels = canonical_labels[:, None, ...]
+            if len(unannotated_masks.shape) == 3:
+                unannotated_masks = unannotated_masks[:, None, ...]
+            if len(annotated_masks.shape) == 3:
+                annotated_masks = annotated_masks[:, None, ...]
 
-            images = images.float().to(device) # (bsz, in_chan, H, W)
-            canonical_images = canonical_images.float().to(device)
-            labels = labels.float().to(device)
-            canonical_labels = canonical_labels.float().to(device)
+            unannotated_images = unannotated_images.float().to(device) # (bsz, in_chan, H, W)
+            annotated_images = annotated_images.float().to(device)
+            unannotated_masks = unannotated_masks.float().to(device)
+            annotated_masks = annotated_masks.float().to(device)
+            # Only care about the binary mask.
+            annotated_masks = annotated_masks > 0.5
+            unannotated_masks = unannotated_masks > 0.5
 
             # Predict the warping field.
-            warp_predicted = warp_predictor(torch.cat([canonical_images, images], dim=1))
+            warp_predicted = warp_predictor(torch.cat([annotated_images, unannotated_images], dim=1))
             warp_field_forward = warp_predicted[:, :2, ...]
             warp_field_reverse = warp_predicted[:, 2:, ...]
 
             # Apply the warping field.
-            images_I2C = warper(images, flow=warp_field_forward)
-            images_I2C_C2I = warper(images_I2C, flow=warp_field_reverse)
-            labels_C2I = warper(canonical_labels, flow=warp_field_reverse)
+            images_U2A = warper(unannotated_images, flow=warp_field_forward)
+            images_U2A_A2U = warper(images_U2A, flow=warp_field_reverse)
+            masks_A2U = warper(annotated_masks, flow=warp_field_reverse)
+
+            # Compute Dice Coeff.
+            for i in range(len(masks_A2U)):
+                train_dice += dice_coeff(masks_A2U[i, ...] > 0.5, unannotated_masks[i, ...] > 0)
+                train_image_count += 1
 
             if shall_plot:
                 save_path_fig_sbs = '%s/train/figure_log_epoch%s_sample%s.png' % (
                     config.save_folder, str(epoch_idx).zfill(5), str(iter_idx).zfill(5))
                 plot_side_by_side(save_path_fig_sbs, *numpy_variables(
-                    images[0], canonical_images[0],
-                    images_I2C_C2I[0], images_I2C[0],
-                    labels[0], canonical_labels[0],
-                    labels_C2I[0]))
+                    unannotated_images[0], annotated_images[0],
+                    images_U2A_A2U[0], images_U2A[0],
+                    unannotated_masks[0], annotated_masks[0],
+                    masks_A2U[0]))
 
-            loss_forward = mse_loss(canonical_images, images_I2C)
-            loss_cyclic = mse_loss(images, images_I2C_C2I)
+            loss_forward = mse_loss(annotated_images, images_U2A)
+            loss_cyclic = mse_loss(unannotated_images, images_U2A_A2U)
 
             loss = loss_forward + loss_cyclic
             train_loss += loss.item()
@@ -150,12 +159,13 @@ def train(config: AttributeHashmap):
         train_loss /= (iter_idx + 1)
         train_loss_forward /= (iter_idx + 1)
         train_loss_cyclic /= (iter_idx + 1)
+        train_dice /= train_image_count
 
         lr_scheduler.step()
 
-        log('Train [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f'
+        log('Train [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f, Dice coeff: %.3f.'
             % (epoch_idx + 1, config.max_epochs, train_loss, train_loss_forward,
-               train_loss_cyclic),
+               train_loss_cyclic, train_dice),
             filepath=config.log_dir,
             to_console=False)
 
@@ -163,43 +173,52 @@ def train(config: AttributeHashmap):
         warp_predictor.eval()
         with torch.no_grad():
             val_loss, val_loss_forward, val_loss_cyclic = 0, 0, 0
-            for iter_idx, (images, labels, canonical_images, canonical_labels, img_paths) in enumerate(tqdm(val_set)):
+            val_dice, val_image_count = 0, 0
+            for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks, _, _) in enumerate(tqdm(val_set)):
                 shall_plot = iter_idx % 20 == 0
 
                 # NOTE: batch size is len(val_set) here.
                 # May need to change this if val_set is too large.
 
-                if len(labels.shape) == 3:
-                    labels = labels[:, None, ...]
-                if len(canonical_labels.shape) == 3:
-                    canonical_labels = canonical_labels[:, None, ...]
+                if len(unannotated_masks.shape) == 3:
+                    unannotated_masks = unannotated_masks[:, None, ...]
+                if len(annotated_masks.shape) == 3:
+                    annotated_masks = annotated_masks[:, None, ...]
 
-                images = images.float().to(device) # (bsz, in_chan, H, W)
-                canonical_images = canonical_images.float().to(device)
-                labels = labels.float().to(device)
-                canonical_labels = canonical_labels.float().to(device)
+                unannotated_images = unannotated_images.float().to(device) # (bsz, in_chan, H, W)
+                annotated_images = annotated_images.float().to(device)
+                unannotated_masks = unannotated_masks.float().to(device)
+                annotated_masks = annotated_masks.float().to(device)
+                # Only care about the binary mask.
+                annotated_masks = annotated_masks > 0.5
+                unannotated_masks = unannotated_masks > 0.5
 
                 # Predict the warping field.
-                warp_predicted = warp_predictor(torch.cat([canonical_images, images], dim=1))
+                warp_predicted = warp_predictor(torch.cat([annotated_images, unannotated_images], dim=1))
                 warp_field_forward = warp_predicted[:, :2, ...]
                 warp_field_reverse = warp_predicted[:, 2:, ...]
 
                 # Apply the warping field.
-                images_I2C = warper(images, flow=warp_field_forward)
-                images_I2C_C2I = warper(images_I2C, flow=warp_field_reverse)
-                labels_C2I = warper(canonical_labels, flow=warp_field_reverse)
+                images_U2A = warper(unannotated_images, flow=warp_field_forward)
+                images_U2A_A2U = warper(images_U2A, flow=warp_field_reverse)
+                masks_A2U = warper(annotated_masks, flow=warp_field_reverse)
+
+                # Compute Dice Coeff.
+                for i in range(len(masks_A2U)):
+                    val_dice += dice_coeff(masks_A2U[i, ...] > 0.5, unannotated_masks[i, ...] > 0)
+                    val_image_count += 1
 
                 if shall_plot:
                     save_path_fig_sbs = '%s/val/figure_log_epoch%s_sample%s.png' % (
                         config.save_folder, str(epoch_idx).zfill(5), str(iter_idx).zfill(5))
                     plot_side_by_side(save_path_fig_sbs, *numpy_variables(
-                        images[0], canonical_images[0],
-                        images_I2C_C2I[0], images_I2C[0],
-                        labels[0], canonical_labels[0],
-                        labels_C2I[0]))
+                        unannotated_images[0], annotated_images[0],
+                        images_U2A_A2U[0], images_U2A[0],
+                        unannotated_masks[0], annotated_masks[0],
+                        masks_A2U[0]))
 
-                loss_forward = mse_loss(canonical_images, images_I2C)
-                loss_cyclic = mse_loss(images, images_I2C_C2I)
+                loss_forward = mse_loss(annotated_images, images_U2A)
+                loss_cyclic = mse_loss(unannotated_images, images_U2A_A2U)
                 loss = loss_forward + loss_cyclic
 
                 val_loss += loss.item()
@@ -209,10 +228,11 @@ def train(config: AttributeHashmap):
         val_loss /= (iter_idx + 1)
         val_loss_forward /= (iter_idx + 1)
         val_loss_cyclic /= (iter_idx + 1)
+        val_dice /= val_image_count
 
-        log('Validation [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f\n'
+        log('Validation [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f\n, Dice coeff: %.3f.'
             % (epoch_idx + 1, config.max_epochs, val_loss, val_loss_forward,
-               val_loss_cyclic),
+               val_loss_cyclic, val_dice),
             filepath=config.log_dir,
             to_console=False)
 

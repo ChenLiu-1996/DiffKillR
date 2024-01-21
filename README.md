@@ -7,6 +7,18 @@
 
 ## Preparation
 
+### External Dataset
+
+#### TissueNet
+```
+cd external_data/TissueNet
+# Download from https://datasets.deepcell.org/data
+unzip tissuenet_v1.1.zip
+
+python preprocess_tissuenet.py
+```
+
+
 ### Environment
 We developed the codebase in a miniconda environment.
 Tested on Python 3.9.13 + PyTorch 1.12.1.
