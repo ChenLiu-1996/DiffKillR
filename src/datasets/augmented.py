@@ -42,6 +42,7 @@ class AugmentedDataset(Dataset):
         # Note: make sure only 1 copy of patch_id_original.png exists in dataset
         # Otherwise, can't perform super contrastive learning.            
         self.patch_id_to_canonical_pose_path = {}
+        self.patch_id_to_patch_id_idx = {}
 
         for folder in self.augmentation_folders:
             img_paths = sorted(glob('%s/image/*.png' % (folder)))
@@ -59,6 +60,10 @@ class AugmentedDataset(Dataset):
                 else:
                     self.image_paths_by_celltype[celltype].append(img_path)
                     self.label_paths_by_celltype[celltype].append(label_path)
+        
+        patch_id_list = list(self.patch_id_to_canonical_pose_path.keys())
+        for i in range(len(patch_id_list)):
+            self.patch_id_to_patch_id_idx[patch_id_list[i]] = i
 
         self.all_image_paths = list(itertools.chain.from_iterable(self.image_paths_by_celltype.values()))
         self.all_label_paths = list(itertools.chain.from_iterable(self.label_paths_by_celltype.values()))
@@ -119,6 +124,14 @@ class AugmentedDataset(Dataset):
         '''
         patch_id = "_".join(img_path.split('/')[-1].split('_')[:3])
         return patch_id
+    
+    def get_patch_id_idx(self, img_path) -> int:
+        patch_id = self.get_patch_id(img_path)
+        return self.patch_id_to_patch_id_idx[patch_id]
+    
+    def get_celltype_id(self, cell_type) -> int:
+        cell_list = list(self.label_paths_by_celltype.keys())
+        return cell_list.index(cell_type)
 
     def num_classes(self) -> int:
         return len(self.label_paths_by_celltype.keys())

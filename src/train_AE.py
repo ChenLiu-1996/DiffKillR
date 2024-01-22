@@ -438,7 +438,8 @@ def test(config: AttributeHashmap):
     # Visualize latent embeddings.
     embeddings = {split: None for split in ['train', 'val', 'test']}
     embedding_labels = {split: [] for split in ['train', 'val', 'test']}
-    input_img_paths = {split: None for split in ['train', 'val', 'test']}
+    embedding_labels_int = {split: [] for split in ['train', 'val', 'test']}
+    embedding_patch_id_int = {split: [] for split in ['train', 'val', 'test']}
     og_inputs = {split: None for split in ['train', 'val', 'test']}
     canonical = {split: None for split in ['train', 'val', 'test']}
     reconstructed = {split: None for split in ['train', 'val', 'test']}
@@ -472,20 +473,21 @@ def test(config: AttributeHashmap):
                 else:
                     canonical[split] = torch.cat([canonical[split], canonical_images], dim=0)
                 embedding_labels[split].extend([dataset.get_celltype(img_path=img_path) for img_path in img_paths])
-                input_img_paths[split].extend(img_paths)
+                embedding_patch_id_int[split].extend([dataset.get_patch_id_idx(img_path=img_path) for img_path in img_paths])
 
 
             embeddings[split] = embeddings[split].numpy()
             reconstructed[split] = reconstructed[split].numpy()
             og_inputs[split] = og_inputs[split].numpy()
             canonical[split] = canonical[split].numpy()
+            embedding_labels_int[split] = np.array([dataset.get_celltype_id(ct) for ct in embedding_labels[split]])
             embedding_labels[split] = np.array(embedding_labels[split])
+            embedding_patch_id_int[split] = np.array(embedding_patch_id_int[split])
             assert len(embeddings[split]) == len(reconstructed[split]) == len(embedding_labels[split])
-            assert len(embedding_labels[split]) == len(input_img_paths[split])
+            assert len(embedding_labels[split]) == len(embedding_labels_int[split])
 
     # Quantify latent embedding quality.
-    # TODO: maybe clustering label should be instance label instead of class label?
-    clustering_acc = {}
+    ins_clustering_acc, class_clustering_acc = {}, {}
     ins_topk_acc, ins_mAP = {}, {}
     class_topk_acc, class_mAP = {}, {}
 
@@ -496,33 +498,41 @@ def test(config: AttributeHashmap):
             distance_measure = 'cosine'
         elif config.latent_loss == 'SimCLR':
             distance_measure = 'cosine'
-        
+
         class_adj = np.zeros((len(embedding_labels[split]), len(embedding_labels[split])))
         instance_adj = np.zeros((len(embedding_labels[split]), len(embedding_labels[split])))
+        log(f'Constructing class ({class_adj.shape}) and \
+            instance adjacency ({instance_adj.shape}) matrices...', to_console=True)
         for i in range(len(embedding_labels[split])):
             for j in range(len(embedding_labels[split])):
-                if embedding_labels[split][i] == embedding_labels[split][j]:
+                if embedding_labels_int[split][i] == embedding_labels_int[split][j]:
                     class_adj[i, j] = 1
                 
                 # same patch id means same instance
-                if dataset.get_patch_id(img_path=input_img_paths[split][i]) == \
-                    dataset.get_patch_id(img_path=input_img_paths[split][j]):
-                        instance_adj[i, j] = 1
+                if embedding_patch_id_int[split][i] == embedding_patch_id_int[split][j]:
+                    instance_adj[i, j] = 1
         log(f'Done constructing class ({class_adj.shape}) and \
             instance adjacency ({instance_adj.shape}) matrices.', to_console=True)
 
-        clustering_acc[split] = clustering_accuracy(embeddings[split],
-                                                    embeddings['train'],
-                                                    embedding_labels[split],
-                                                    distance_measure=distance_measure,
-                                                    voting_k=1)
+        ins_clustering_acc[split] = clustering_accuracy(embeddings[split],
+                                                        embeddings['train'],
+                                                        embedding_patch_id_int[split],
+                                                        embedding_patch_id_int['train'],
+                                                        distance_measure=distance_measure,
+                                                        voting_k=1)
+        class_clustering_acc[split] = clustering_accuracy(embeddings[split],
+                                                        embeddings['train'],
+                                                        embedding_labels_int[split],
+                                                        embedding_labels_int['train'],
+                                                        distance_measure=distance_measure,
+                                                        voting_k=1)
         ins_topk_acc[split] = topk_accuracy(embeddings[split],
                                             instance_adj,
                                             distance_measure=distance_measure,
                                             k=None)
         ins_mAP[split] = embedding_mAP(embeddings[split],
                                        instance_adj,
-                                       distance_measure=distance_measure)
+                                       distance_op=distance_measure)
 
         class_topk_acc[split] = topk_accuracy(embeddings[split],
                                               class_adj,
@@ -530,9 +540,9 @@ def test(config: AttributeHashmap):
                                               k=None)
         class_mAP[split] = embedding_mAP(embeddings[split],
                                          class_adj,
-                                         distance_measure=distance_measure)
-        
-        log(f'Clustering accuracy: {clustering_acc[split]:.3f}', to_console=True)
+                                         distance_op=distance_measure)
+        log(f'Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
+        log(f'Clustering accuracy: {class_clustering_acc[split]:.3f}', to_console=True)
         log(f'Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
         log(f'Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
         log(f'Class top-k accuracy: {class_topk_acc[split]:.3f}', to_console=True)
@@ -551,14 +561,16 @@ def test(config: AttributeHashmap):
         phate_op = phate.PHATE(random_state=0,
                                  n_jobs=1,
                                  n_components=2,
+                                 knn_dist='cosine',
                                  verbose=False)
         data_phate = phate_op.fit_transform(embeddings[split])
         print('Visualizing ', split, ' : ',  data_phate.shape)
         ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
-        title = f"{split}: Clustering acc: {clustering_acc[split]:.3f}, \
-            Instance top-k acc: {ins_topk_acc[split]:.3f}, \
-            Instance mAP: {ins_mAP[split]:.3f}, \
-            Class top-k acc: {class_topk_acc[split]:.3f}, \
+        title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
+            Class clustering acc: {class_clustering_acc[split]:.3f},\n \
+            Instance top-k acc: {ins_topk_acc[split]:.3f},\n \
+            Instance mAP: {ins_mAP[split]:.3f},\n \
+            Class top-k acc: {class_topk_acc[split]:.3f},\n \
             Class mAP: {class_mAP[split]:.3f}"
         
         scprep.plot.scatter2d(data_phate,
@@ -629,6 +641,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
     parser.add_argument('--mode', help='`train` or `test`?', required=True)
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
+    parser.add_argument('--run_count', help='Provide this during testing!', default=1)
     parser.add_argument('--config',
                         help='Path to config yaml file.',
                         required=True)
@@ -640,7 +653,7 @@ if __name__ == '__main__':
     config.config_file_name = args.config
     config.gpu_id = args.gpu_id
     config.num_workers = args.num_workers
-    config = parse_settings(config, log_settings=args.mode == 'train')
+    config = parse_settings(config, log_settings=args.mode == 'train', run_count=args.run_count)
 
     assert args.mode in ['train', 'test']
 
