@@ -9,7 +9,7 @@ def clustering_accuracy(embeddings: np.ndarray,
                         voting_k:int = 1) -> float:
     '''
     Compute clustering accuracy for a given set of embeddings, references and labels.
-    
+
     Args:
         embeddings: [N1, D] array of embeddings.
         reference_embeddings: [N2, D] array of reference embeddings.
@@ -21,17 +21,17 @@ def clustering_accuracy(embeddings: np.ndarray,
         'Embeddings and labels must have the same number of nodes.'
     assert distance_measure in ['cosine', 'norm'], \
         'Invalid distance measure: %s' % distance_measure
-    
+
     N1, N2 = embeddings.shape[0], reference_embeddings.shape[0]
     if voting_k > N2:
         voting_k = N2
-    
+
     # Compute pairwise distances, shape [N1, N2]
     if distance_measure == 'cosine':
         distances = 1 - sklearn.metrics.pairwise.cosine_similarity(embeddings, reference_embeddings)
     elif distance_measure == 'norm':
         distances = sklearn.metrics.pairwise.euclidean_distances(embeddings, reference_embeddings)
-    
+
     # Get the votingk node indices for each node
     voting_nodes = np.argsort(distances, axis=1)[:, :voting_k] # [N1, voting_k]
 
@@ -47,15 +47,15 @@ def clustering_accuracy(embeddings: np.ndarray,
     return acc
 
 
-def topk_accuracy(embeddings: np.ndarray, 
-                  adj_mat: np.dnarray,
-                  distance_measure='cosine', 
+def topk_accuracy(embeddings: np.ndarray,
+                  adj_mat: np.ndarray,
+                  distance_measure='cosine',
                   k = None) -> float:
     '''
     Compute top-k accuracy for a given set of embeddings and adjacency matrix.
     It computes the top-k accuracy for each node, and then average over all nodes.
     "How many of the top-k nearest neighbors are my actual connected neighors?"
-    
+
     Args:
         embeddings: [N, D] array of embeddings.
         adj_mat: [N, N] binary array of adjacency matrix.
@@ -66,19 +66,19 @@ def topk_accuracy(embeddings: np.ndarray,
         'Embeddings and adjacency matrix must have the same number of nodes.'
     assert distance_measure in ['cosine', 'norm'], \
         'Invalid distance measure: %s' % distance_measure
-    
+
     N = embeddings.shape[0]
     if k is None:
         k = np.sum(adj_mat, axis=1).astype(int).reshape(-1)
     else:
         k = np.array([k] * N).astype(int).reshape(-1)
-    
+
     # Compute pairwise distances
     if distance_measure == 'cosine':
         distances = 1 - sklearn.metrics.pairwise.cosine_similarity(embeddings, embeddings)
     elif distance_measure == 'norm':
         distances = sklearn.metrics.pairwise.euclidean_distances(embeddings, embeddings)
-    
+
     # Get the topk-th smallest distance for each node
     topkth_distances = np.sort(distances, axis=1)[:, k] # [N, 1]
 
@@ -92,14 +92,14 @@ def topk_accuracy(embeddings: np.ndarray,
     return acc
 
 
-def embedding_mAP(embeddings: np.ndarray, 
+def embedding_mAP(embeddings: np.ndarray,
                   graph_adjacency: np.ndarray,
                   distance_op: str = 'norm') -> float:
     '''
     embeddings: ndarray (N, embedding_dim)
     graph_adjacency: ndarray (N, N)
     distance_op: str, 'norm'|'dot'|'cosine'
-    
+
     AP_(xi, xj) := \frac{the number of neighbors of xi, \
     enclosed by smallest ball that contains xj centered at xi}{the points enclosed by the ball centered at xi}
 
@@ -124,7 +124,7 @@ def embedding_mAP(embeddings: np.ndarray,
                                         (np.linalg.norm(embeddings[i]) * np.linalg.norm(embeddings[j]))
             else:
                 raise Exception('distance_op must be either norm or dot')
-    
+
     # compute the AP
     AP = np.zeros(N)
     for i in range(N):
@@ -134,16 +134,16 @@ def embedding_mAP(embeddings: np.ndarray,
         distances = distance_matrix[i, neighbors] # (n_neighbors, )
         for j in range(len(neighbors)):
             # compute the number of points enclosed by the ball_j centered at i
-            all_enclosed = np.argwhere(distance_matrix[i] <= distances[j]).flatten() 
+            all_enclosed = np.argwhere(distance_matrix[i] <= distances[j]).flatten()
             # compute the number of neighbors of enclosed by the ball_j centered at i
             n_enclosed_j = len(np.intersect1d(all_enclosed, neighbors))
             # compute the AP
             if n_enclosed_j > 0:
                 AP[i] += n_enclosed_j / all_enclosed.shape[0]
-        
+
         if len(neighbors) > 0:
             AP[i] /= len(neighbors)
-    
+
     mAP = np.mean(AP)
 
     return mAP

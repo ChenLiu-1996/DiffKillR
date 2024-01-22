@@ -348,7 +348,7 @@ def test(config: AttributeHashmap):
     test_loss_cyclic /= (iter_idx + 1)
 
     log('Test loss: %.3f, forward: %.3f, cyclic: %.3f, Dice coeff (ref): %.3f \u00B1 %.3f, Dice coeff (seg): %.3f \u00B1 %.3f.'
-        % (config.max_epochs, test_loss, test_loss_forward, test_loss_cyclic,
+        % (test_loss, test_loss_forward, test_loss_cyclic,
            np.mean(test_dice_ref_list), np.std(test_dice_ref_list),
            np.mean(test_dice_seg_list), np.std(test_dice_seg_list)),
         filepath=config.log_dir,

@@ -34,10 +34,9 @@ def patchify_and_save(tissue_types_list,
 
     #NOTE: Purpose 1. Annotate some cells of 1 image, and infer on the remaining cells in the same image.
     #                 Analyze the effect of % annotated cells on seg result.
-    output_folder = patches_folder + 'same_image_generalization/'
 
     # Get the image with the most number of cells for each tissue type.
-    for tissue_type in tissue_types_list:
+    for tissue_type in tqdm(tissue_types_list):
         mask_path_with_most_cell, max_cell_count = None, 0
         for mask_path in mask_list_by_tissue[tissue_type]:
             mask = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
@@ -76,7 +75,7 @@ def patchify_and_save(tissue_types_list,
 
             # Save the images.
             for id_list, split_str in zip([train_ids, val_ids, test_ids], ['train', 'val', 'test']):
-                for idx in tqdm(id_list):
+                for idx in id_list:
                     centroid = np.argwhere(mask_with_most_cell == idx).sum(0) / (mask_with_most_cell == idx).sum()
                     centroid = [int(item) for item in centroid]
                     h_begin = max(centroid[0] - patch_size // 2, 0)
@@ -94,23 +93,20 @@ def patchify_and_save(tissue_types_list,
                         patch_image = np.pad(patch_image,
                                             pad_width=((0, h_diff), (0, w_diff), (0, 0)),
                                             mode='constant')
-                        patch_label = np.pad(patch_label,
+                        patch_mask = np.pad(patch_mask,
                                             pad_width=((0, h_diff), (0, w_diff)),
                                             mode='constant')
 
+                    patch_image_path = patches_folder + 'same_image_generalization/ratio_%s/%s/%s/images/%s_cell_%s.png' % (
+                        ratio, tissue_type, split_str, os.path.basename(mask_path_with_most_cell).replace('.png', ''), str(idx).zfill(5))
+                    os.makedirs(os.path.dirname(patch_image_path), exist_ok=True)
                     patch_image = cv2.cvtColor(patch_image, cv2.COLOR_RGB2BGR)
-                    import pdb
-                    pdb.set_trace()
-                    cv2.imwrite(output_folder + '%s/%s/images/%s_cell_%s.png' % (
-                        tissue_type, split_str, os.path.basename(mask_path_with_most_cell).replace('.png', ''), str(idx).zfill(5)),
-                                patch_image)
+                    cv2.imwrite(patch_image_path, patch_image)
 
-                    cv2.imwrite(output_folder + '%s/%s/masks/%s_cell_%s.png' % (
-                        tissue_type, split_str, os.path.basename(mask_path_with_most_cell).replace('.png', ''), str(idx).zfill(5)),
-                                patch_mask)
-
-        # Save
-
+                    patch_mask_path = patches_folder + 'same_image_generalization/ratio_%s/%s/%s/masks/%s_cell_%s.png' % (
+                        ratio, tissue_type, split_str, os.path.basename(mask_path_with_most_cell).replace('.png', ''), str(idx).zfill(5))
+                    os.makedirs(os.path.dirname(patch_mask_path), exist_ok=True)
+                    cv2.imwrite(patch_mask_path, patch_mask.astype(np.uint8) * 255)
 
     # #NOTE: Purpose 2. Annotate some cells of 1 image, and infer on another image of same tissue.
     # #                 Analyze the effect of % annotated cells.
