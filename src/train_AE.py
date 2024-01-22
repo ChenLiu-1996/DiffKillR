@@ -9,7 +9,7 @@ from model.autoencoder import AutoEncoder
 from utils.attribute_hashmap import AttributeHashmap
 from utils.prepare_dataset import prepare_dataset
 from utils.log_util import log
-from utils.metrics import psnr, ssim
+from utils.metrics import clustering_accuracy, topk_accuracy, embedding_mAP
 from utils.parse import parse_settings
 from utils.seed import seed_everything
 from utils.early_stop import EarlyStopping
@@ -438,6 +438,7 @@ def test(config: AttributeHashmap):
     # Visualize latent embeddings.
     embeddings = {split: None for split in ['train', 'val', 'test']}
     embedding_labels = {split: [] for split in ['train', 'val', 'test']}
+    input_img_paths = {split: None for split in ['train', 'val', 'test']}
     og_inputs = {split: None for split in ['train', 'val', 'test']}
     canonical = {split: None for split in ['train', 'val', 'test']}
     reconstructed = {split: None for split in ['train', 'val', 'test']}
@@ -471,6 +472,7 @@ def test(config: AttributeHashmap):
                 else:
                     canonical[split] = torch.cat([canonical[split], canonical_images], dim=0)
                 embedding_labels[split].extend([dataset.get_celltype(img_path=img_path) for img_path in img_paths])
+                input_img_paths[split].extend(img_paths)
 
 
             embeddings[split] = embeddings[split].numpy()
@@ -479,9 +481,63 @@ def test(config: AttributeHashmap):
             canonical[split] = canonical[split].numpy()
             embedding_labels[split] = np.array(embedding_labels[split])
             assert len(embeddings[split]) == len(reconstructed[split]) == len(embedding_labels[split])
+            assert len(embedding_labels[split]) == len(input_img_paths[split])
 
     # Quantify latent embedding quality.
-    
+    # TODO: maybe clustering label should be instance label instead of class label?
+    clustering_acc = {}
+    ins_topk_acc, ins_mAP = {}, {}
+    class_topk_acc, class_mAP = {}, {}
+
+    for split in ['train', 'val', 'test']:
+        if config.latent_loss == 'triplet':
+            distance_measure = 'cosine'
+        elif config.latent_loss == 'supercontrast':
+            distance_measure = 'cosine'
+        elif config.latent_loss == 'SimCLR':
+            distance_measure = 'cosine'
+        
+        class_adj = np.zeros((len(embedding_labels[split]), len(embedding_labels[split])))
+        instance_adj = np.zeros((len(embedding_labels[split]), len(embedding_labels[split])))
+        for i in range(len(embedding_labels[split])):
+            for j in range(len(embedding_labels[split])):
+                if embedding_labels[split][i] == embedding_labels[split][j]:
+                    class_adj[i, j] = 1
+                
+                # same patch id means same instance
+                if dataset.get_patch_id(img_path=input_img_paths[split][i]) == \
+                    dataset.get_patch_id(img_path=input_img_paths[split][j]):
+                        instance_adj[i, j] = 1
+        log(f'Done constructing class ({class_adj.shape}) and \
+            instance adjacency ({instance_adj.shape}) matrices.', to_console=True)
+
+        clustering_acc[split] = clustering_accuracy(embeddings[split],
+                                                    embeddings['train'],
+                                                    embedding_labels[split],
+                                                    distance_measure=distance_measure,
+                                                    voting_k=1)
+        ins_topk_acc[split] = topk_accuracy(embeddings[split],
+                                            instance_adj,
+                                            distance_measure=distance_measure,
+                                            k=None)
+        ins_mAP[split] = embedding_mAP(embeddings[split],
+                                       instance_adj,
+                                       distance_measure=distance_measure)
+
+        class_topk_acc[split] = topk_accuracy(embeddings[split],
+                                              class_adj,
+                                              distance_measure=distance_measure,
+                                              k=None)
+        class_mAP[split] = embedding_mAP(embeddings[split],
+                                         class_adj,
+                                         distance_measure=distance_measure)
+        
+        log(f'Clustering accuracy: {clustering_acc[split]:.3f}', to_console=True)
+        log(f'Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
+        log(f'Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
+        log(f'Class top-k accuracy: {class_topk_acc[split]:.3f}', to_console=True)
+        log(f'Class mAP: {class_mAP[split]:.3f}', to_console=True)
+
 
     # Plot latent embeddings
     import phate
@@ -490,7 +546,7 @@ def test(config: AttributeHashmap):
 
     plt.rcParams['font.family'] = 'serif'
 
-    fig_embedding = plt.figure(figsize=(10, 6 * 3))
+    fig_embedding = plt.figure(figsize=(10, 8 * 3))
     for split in ['train', 'val', 'test']:
         phate_op = phate.PHATE(random_state=0,
                                  n_jobs=1,
@@ -499,11 +555,17 @@ def test(config: AttributeHashmap):
         data_phate = phate_op.fit_transform(embeddings[split])
         print('Visualizing ', split, ' : ',  data_phate.shape)
         ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
+        title = f"{split}: Clustering acc: {clustering_acc[split]:.3f}, \
+            Instance top-k acc: {ins_topk_acc[split]:.3f}, \
+            Instance mAP: {ins_mAP[split]:.3f}, \
+            Class top-k acc: {class_topk_acc[split]:.3f}, \
+            Class mAP: {class_mAP[split]:.3f}"
+        
         scprep.plot.scatter2d(data_phate,
                               c=embedding_labels[split],
                               legend=dataset.cell_types,
                               ax=ax,
-                              title=split,
+                              title=title,
                               xticks=False,
                               yticks=False,
                               label_prefix='PHATE',
