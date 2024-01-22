@@ -30,14 +30,14 @@ def prepare_dataset(config: AttributeHashmap):
                            shuffle=True,
                            num_workers=config.num_workers)
     val_loader = DataLoader(dataset=val_set,
-                         batch_size=len(val_set),
+                         batch_size=config.batch_size,
                          shuffle=False,
                          num_workers=config.num_workers)
     test_loader = DataLoader(dataset=test_set,
-                          batch_size=len(test_set),
+                          batch_size=config.batch_size,
                           shuffle=False,
                           num_workers=config.num_workers)
-    
+
     # NOTE:Make sure no leakage between train/val/test sets when sampling augmentation.
     # A hacky way, but works for now.
     img_path_to_split = {}
