@@ -93,7 +93,7 @@ def train(config: AttributeHashmap):
     warper = warper.to(device)
 
     optimizer = torch.optim.AdamW(warp_predictor.parameters(), lr=config.learning_rate)
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=5)
 
     mse_loss = torch.nn.MSELoss()
     early_stopper = EarlyStopping(mode='min',
@@ -264,6 +264,7 @@ def train(config: AttributeHashmap):
     return
 
 
+@torch.no_grad()
 def test(config: AttributeHashmap):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
@@ -277,7 +278,7 @@ def test(config: AttributeHashmap):
     except:
         raise ValueError('`config.model`: %s not supported.' % config.model)
 
-    warp_predictor.load_weights(config.model_save_path)
+    warp_predictor.load_weights(config.model_save_path, device=device)
     warp_predictor = warp_predictor.to(device)
 
     warper = Warper(size=config.target_dim)
@@ -288,7 +289,7 @@ def test(config: AttributeHashmap):
     test_loss, test_loss_forward, test_loss_cyclic = 0, 0, 0
     test_dice_ref_list, test_dice_seg_list = [], []
 
-    warp_predictor.train()
+    warp_predictor.eval()
     plot_freq = int(len(test_set) // config.n_plot_per_epoch)
     for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks, _, _) in enumerate(tqdm(test_set)):
         shall_plot = iter_idx % plot_freq == plot_freq - 1
@@ -358,7 +359,8 @@ def test(config: AttributeHashmap):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
-    parser.add_argument('--mode', help='`train` or `test`?', required=True)
+    parser.add_argument('--mode', help='`train` or `test`?', default='train')
+    parser.add_argument('--run_count', help='Provide this during testing!', default=None)
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
     parser.add_argument('--config',
                         help='Path to config yaml file.',
@@ -371,7 +373,7 @@ if __name__ == '__main__':
     config.config_file_name = args.config
     config.gpu_id = args.gpu_id
     config.num_workers = args.num_workers
-    config = parse_settings(config, log_settings=args.mode == 'train')
+    config = parse_settings(config, log_settings=args.mode == 'train', run_count=args.run_count)
 
     assert args.mode in ['train', 'test']
 

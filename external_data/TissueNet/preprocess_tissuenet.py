@@ -72,8 +72,8 @@ def preprocess_tissuenet(npz_folder: str = './') -> None:
             rgb_image = np.uint8(rgb_image)
             rgb_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
 
-            nuclei = np.int16(label[..., 1])
-            cytoplasm = np.int16(label[..., 0])
+            nuclei = label[..., 1].astype(np.uint16)  # has to be `uint16` instead of `int16` for proper saving!
+            cytoplasm = label[..., 0].astype(np.uint16)
             # Use `n_colors` to maximize consistency of coloring for display purposes.
             # Though it barely helped...
             n_colors = len(np.unique(label))
