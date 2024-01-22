@@ -480,6 +480,9 @@ def test(config: AttributeHashmap):
             embedding_labels[split] = np.array(embedding_labels[split])
             assert len(embeddings[split]) == len(reconstructed[split]) == len(embedding_labels[split])
 
+    # Quantify latent embedding quality.
+    
+
     # Plot latent embeddings
     import phate
     import scprep

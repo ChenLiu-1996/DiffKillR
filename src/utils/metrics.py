@@ -1,5 +1,152 @@
 import numpy as np
+import sklearn
 from skimage.metrics import structural_similarity
+
+def clustering_accuracy(embeddings: np.ndarray,
+                        reference_embeddings: np.ndarray,
+                        labels: np.ndarray,
+                        distance_measure = 'cosine',
+                        voting_k:int = 1) -> float:
+    '''
+    Compute clustering accuracy for a given set of embeddings, references and labels.
+    
+    Args:
+        embeddings: [N1, D] array of embeddings.
+        reference_embeddings: [N2, D] array of reference embeddings.
+        labels: [N1,] array of labels.
+        distance_measure: str, either 'cosine' or 'norm'.
+        voting_k: int, how many nearest neighbors to vote for the label.
+    '''
+    assert embeddings.shape[0] == labels.shape[0], \
+        'Embeddings and labels must have the same number of nodes.'
+    assert distance_measure in ['cosine', 'norm'], \
+        'Invalid distance measure: %s' % distance_measure
+    
+    N1, N2 = embeddings.shape[0], reference_embeddings.shape[0]
+    if voting_k > N2:
+        voting_k = N2
+    
+    # Compute pairwise distances, shape [N1, N2]
+    if distance_measure == 'cosine':
+        distances = 1 - sklearn.metrics.pairwise.cosine_similarity(embeddings, reference_embeddings)
+    elif distance_measure == 'norm':
+        distances = sklearn.metrics.pairwise.euclidean_distances(embeddings, reference_embeddings)
+    
+    # Get the votingk node indices for each node
+    voting_nodes = np.argsort(distances, axis=1)[:, :voting_k] # [N1, voting_k]
+
+    # Get the votingk labels for each node
+    voting_labels = labels[voting_nodes].astype(int) # [N1, voting_k]
+
+    # Get the most frequent label for each node
+    predicted_labels = np.array([np.argmax(np.bincount(voting_labels[i])) for i in range(N)]) # [N1,]
+
+    # Compute accuracy
+    acc = (predicted_labels == labels).mean()
+
+    return acc
+
+
+def topk_accuracy(embeddings: np.ndarray, 
+                  adj_mat: np.dnarray,
+                  distance_measure='cosine', 
+                  k = None) -> float:
+    '''
+    Compute top-k accuracy for a given set of embeddings and adjacency matrix.
+    It computes the top-k accuracy for each node, and then average over all nodes.
+    "How many of the top-k nearest neighbors are my actual connected neighors?"
+    
+    Args:
+        embeddings: [N, D] array of embeddings.
+        adj_mat: [N, N] binary array of adjacency matrix.
+        distance_measure: str, either 'cosine' or 'norm'.
+        k: int or None. If None, k = np.sum(adj_mat, axis=1) for each node
+    '''
+    assert embeddings.shape[0] == adj_mat.shape[0], \
+        'Embeddings and adjacency matrix must have the same number of nodes.'
+    assert distance_measure in ['cosine', 'norm'], \
+        'Invalid distance measure: %s' % distance_measure
+    
+    N = embeddings.shape[0]
+    if k is None:
+        k = np.sum(adj_mat, axis=1).astype(int).reshape(-1)
+    else:
+        k = np.array([k] * N).astype(int).reshape(-1)
+    
+    # Compute pairwise distances
+    if distance_measure == 'cosine':
+        distances = 1 - sklearn.metrics.pairwise.cosine_similarity(embeddings, embeddings)
+    elif distance_measure == 'norm':
+        distances = sklearn.metrics.pairwise.euclidean_distances(embeddings, embeddings)
+    
+    # Get the topk-th smallest distance for each node
+    topkth_distances = np.sort(distances, axis=1)[:, k] # [N, 1]
+
+    # Get the indices of distances that are smaller than topkth_distances
+    within_topk_nodes = (distances <= topkth_distances).astype(int) # [N, N]
+
+    correct_nodes = np.multiply(within_topk_nodes, adj_mat).sum(axis=1) # [N, 1]
+
+    acc = (correct_nodes / N).mean()
+
+    return acc
+
+
+def embedding_mAP(embeddings: np.ndarray, 
+                  graph_adjacency: np.ndarray,
+                  distance_op: str = 'norm') -> float:
+    '''
+    embeddings: ndarray (N, embedding_dim)
+    graph_adjacency: ndarray (N, N)
+    distance_op: str, 'norm'|'dot'|'cosine'
+    
+    AP_(xi, xj) := \frac{the number of neighbors of xi, \
+    enclosed by smallest ball that contains xj centered at xi}{the points enclosed by the ball centered at xi}
+
+    graph_adjacency[i, j] = 1 if i and j are neighbors, 0 otherwise
+
+    Returns:
+        mAP: float
+    '''
+    N = embeddings.shape[0]
+    assert N == graph_adjacency.shape[0] == graph_adjacency.shape[1]
+
+    # compute the distance matrix
+    distance_matrix = np.zeros((N, N))
+    for i in range(N):
+        for j in range(N):
+            if distance_op == 'norm':
+                distance_matrix[i, j] = np.linalg.norm(embeddings[i] - embeddings[j])
+            elif distance_op == 'dot':
+                distance_matrix[i, j] = np.dot(embeddings[i], embeddings[j])
+            elif distance_op == 'cosine':
+                distance_matrix[i, j] = np.dot(embeddings[i], embeddings[j]) / \
+                                        (np.linalg.norm(embeddings[i]) * np.linalg.norm(embeddings[j]))
+            else:
+                raise Exception('distance_op must be either norm or dot')
+    
+    # compute the AP
+    AP = np.zeros(N)
+    for i in range(N):
+        # find the neighbors of i
+        neighbors = np.argwhere(graph_adjacency[i] == 1).flatten()
+        # compute the distance between i and its neighbors
+        distances = distance_matrix[i, neighbors] # (n_neighbors, )
+        for j in range(len(neighbors)):
+            # compute the number of points enclosed by the ball_j centered at i
+            all_enclosed = np.argwhere(distance_matrix[i] <= distances[j]).flatten() 
+            # compute the number of neighbors of enclosed by the ball_j centered at i
+            n_enclosed_j = len(np.intersect1d(all_enclosed, neighbors))
+            # compute the AP
+            if n_enclosed_j > 0:
+                AP[i] += n_enclosed_j / all_enclosed.shape[0]
+        
+        if len(neighbors) > 0:
+            AP[i] /= len(neighbors)
+    
+    mAP = np.mean(AP)
+
+    return mAP
 
 
 def psnr(image1, image2, max_value=2):
