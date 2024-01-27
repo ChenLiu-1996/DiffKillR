@@ -265,7 +265,7 @@ def train(config: AttributeHashmap):
 
 
 @torch.no_grad()
-def test(config: AttributeHashmap):
+def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     _, _, _, test_set = prepare_dataset(config=config)
@@ -290,7 +290,11 @@ def test(config: AttributeHashmap):
     test_dice_ref_list, test_dice_seg_list = [], []
 
     warp_predictor.eval()
-    plot_freq = int(len(test_set) // config.n_plot_per_epoch)
+    if n_plot_per_epoch is not None:
+        plot_freq = int(len(test_set) // n_plot_per_epoch)
+    else:
+        plot_freq = 1
+
     for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks, _, _) in enumerate(tqdm(test_set)):
         shall_plot = iter_idx % plot_freq == plot_freq - 1
 
@@ -360,7 +364,7 @@ def test(config: AttributeHashmap):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
     parser.add_argument('--mode', help='`train` or `test`?', default='train')
-    parser.add_argument('--run_count', help='Provide this during testing!', default=None)
+    parser.add_argument('--run_count', help='Provide this during testing!', default=None, type=int)
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
     parser.add_argument('--config',
                         help='Path to config yaml file.',
