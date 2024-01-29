@@ -354,6 +354,7 @@ def test(config: AttributeHashmap):
         to_console=True)
 
     save_path_fig_embeddings = '%s/results/embeddings.png' % config.output_save_path
+    save_path_fig_embeddings_inst = '%s/results/embeddings_inst.png' % config.output_save_path
     save_path_fig_reconstructed = '%s/results/reconstructed.png' % config.output_save_path
     os.makedirs(os.path.dirname(save_path_fig_embeddings), exist_ok=True)
 
@@ -567,11 +568,7 @@ def test(config: AttributeHashmap):
         print('Visualizing ', split, ' : ',  data_phate.shape)
         ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
         title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
-            Class clustering acc: {class_clustering_acc[split]:.3f},\n \
-            Instance top-k acc: {ins_topk_acc[split]:.3f},\n \
-            Class top-k acc: {class_topk_acc[split]:.3f},\n \
-            Instance mAP: {ins_mAP[split]:.3f},\n \
-            Class mAP: {class_mAP[split]:.3f}"
+            Class clustering acc: {class_clustering_acc[split]:.3f}"
         
         scprep.plot.scatter2d(data_phate,
                               c=embedding_labels[split],
@@ -585,6 +582,33 @@ def test(config: AttributeHashmap):
                               s=5)
     plt.tight_layout()
     plt.savefig(save_path_fig_embeddings)
+    plt.close(fig_embedding)
+
+    fig_embedding = plt.figure(figsize=(10, 8 * 3))
+    for split in ['train', 'val', 'test']:
+        phate_op = phate.PHATE(random_state=0,
+                                 n_jobs=1,
+                                 n_components=2,
+                                 knn_dist='cosine',
+                                 verbose=False)
+        data_phate = phate_op.fit_transform(embeddings[split])
+        print('Visualizing ', split, ' : ',  data_phate.shape)
+        ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
+        title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
+            Class clustering acc: {class_clustering_acc[split]:.3f}"
+        
+        scprep.plot.scatter2d(data_phate,
+                              c=embedding_patch_id_int[split],
+                              legend=dataset.cell_types,
+                              ax=ax,
+                              title=title,
+                              xticks=False,
+                              yticks=False,
+                              label_prefix='PHATE',
+                              fontsize=10,
+                              s=5)
+    plt.tight_layout()
+    plt.savefig(save_path_fig_embeddings_inst)
     plt.close(fig_embedding)
 
 
