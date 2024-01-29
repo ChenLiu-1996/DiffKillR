@@ -86,10 +86,11 @@ def topk_accuracy(embeddings: np.ndarray,
     print('topk_nodes: ', topk_nodes.shape)
 
     # Get the top-k labels for each node
-    topk_labels = np.zeros(N)
-    for i in range(N):
-        topk_labels[i] = adj_mat[i, topk_nodes[i]].astype(int) # [N, k]
-    print('topklabels: ', topk_labels, topk_labels.shape)
+    topk_labels = []
+    for i in range(k):
+        topk_labels.append(adj_mat[np.arange(N), topk_nodes[np.arange(N), i]]) # [N,]
+    topk_labels = np.hstack(topk_labels) # [N, k]
+    print('topklabels: ', topk_labels.shape)
 
     if k > 1:
         acc = np.mean(np.sum(topk_labels, axis=1) / k)
