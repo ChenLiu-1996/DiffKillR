@@ -56,11 +56,11 @@ def clustering_accuracy(embeddings: np.ndarray,
 def topk_accuracy(embeddings: np.ndarray,
                   adj_mat: np.ndarray,
                   distance_measure='cosine',
-                  k = None) -> float:
+                  k: int = 5) -> float:
     '''
     Compute top-k accuracy for a given set of embeddings and adjacency matrix.
     It computes the top-k accuracy for each node, and then average over all nodes.
-    "How many of the top-k nearest neighbors are my actual connected neighors?"
+    "What's percentage of the top-k nearest neighbors are my actual connected neighors?"
 
     Args:
         embeddings: [N, D] array of embeddings.
@@ -74,10 +74,6 @@ def topk_accuracy(embeddings: np.ndarray,
         'Invalid distance measure: %s' % distance_measure
 
     N = embeddings.shape[0]
-    if k is None:
-        k = np.sum(adj_mat, axis=1).astype(int).reshape(-1)
-    else:
-        k = np.array([k] * N).astype(int).reshape(-1)
 
     # Compute pairwise distances
     if distance_measure == 'cosine':
@@ -85,15 +81,17 @@ def topk_accuracy(embeddings: np.ndarray,
     elif distance_measure == 'norm':
         distances = euclidean_distances(embeddings, embeddings)
 
-    # Get the topk-th smallest distance for each node
-    topkth_distances = np.sort(distances, axis=1)[:, k] # [N, 1]
+    # # Get the topk-th smallest distance for each node
+    # topkth_distances = np.sort(distances, axis=1)[:, k] # [N, 1]
 
-    # Get the indices of distances that are smaller than topkth_distances
-    within_topk_nodes = (distances <= topkth_distances).astype(int) # [N, N]
+    # # Get the indices of distances that are smaller than topkth_distances
+    # within_topk_nodes = (distances <= topkth_distances).astype(int) # [N, N]
+    within_topk_nodes = np.argsort(distances, axis=1)[:, :k] # [N, k]
 
-    correct_nodes = np.multiply(within_topk_nodes, adj_mat).sum(axis=1) # [N, 1]
+    for i in range(within_topk_nodes.shape[0]):
+        correct_nodes = np.intersect1d(within_topk_nodes[i, :], adj_mat[i, :]) # [N, 1]
 
-    acc = (correct_nodes / N).mean()
+    acc = (correct_nodes / k).mean()
 
     return acc
 

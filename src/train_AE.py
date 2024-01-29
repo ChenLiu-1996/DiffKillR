@@ -529,7 +529,7 @@ def test(config: AttributeHashmap):
         ins_topk_acc[split] = topk_accuracy(embeddings[split],
                                             instance_adj,
                                             distance_measure=distance_measure,
-                                            k=None)
+                                            k=1)
         ins_mAP[split] = embedding_mAP(embeddings[split],
                                        instance_adj,
                                        distance_op=distance_measure)
@@ -537,15 +537,15 @@ def test(config: AttributeHashmap):
         class_topk_acc[split] = topk_accuracy(embeddings[split],
                                               class_adj,
                                               distance_measure=distance_measure,
-                                              k=None)
+                                              k=1)
         class_mAP[split] = embedding_mAP(embeddings[split],
                                          class_adj,
                                          distance_op=distance_measure)
         log(f'Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
-        log(f'Clustering accuracy: {class_clustering_acc[split]:.3f}', to_console=True)
+        log(f'Class clustering accuracy: {class_clustering_acc[split]:.3f}', to_console=True)
         log(f'Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
-        log(f'Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
         log(f'Class top-k accuracy: {class_topk_acc[split]:.3f}', to_console=True)
+        log(f'Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
         log(f'Class mAP: {class_mAP[split]:.3f}', to_console=True)
 
 
@@ -569,8 +569,8 @@ def test(config: AttributeHashmap):
         title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
             Class clustering acc: {class_clustering_acc[split]:.3f},\n \
             Instance top-k acc: {ins_topk_acc[split]:.3f},\n \
-            Instance mAP: {ins_mAP[split]:.3f},\n \
             Class top-k acc: {class_topk_acc[split]:.3f},\n \
+            Instance mAP: {ins_mAP[split]:.3f},\n \
             Class mAP: {class_mAP[split]:.3f}"
         
         scprep.plot.scatter2d(data_phate,
