@@ -81,18 +81,14 @@ def topk_accuracy(embeddings: np.ndarray,
     elif distance_measure == 'norm':
         distances = euclidean_distances(embeddings, embeddings)
 
-    # # Get the topk-th smallest distance for each node
-    # topkth_distances = np.sort(distances, axis=1)[:, k] # [N, 1]
+    # Get the top-k node indices for each node
+    topk_nodes = np.argsort(distances, axis=1)[:, :k] # [N, k]
 
-    # # Get the indices of distances that are smaller than topkth_distances
-    # within_topk_nodes = (distances <= topkth_distances).astype(int) # [N, N]
-    within_topk_nodes = np.argsort(distances, axis=1)[:, :k] # [N, k]
+    # Get the top-k labels for each node
+    topk_labels = adj_mat[topk_nodes].astype(int) # [N, k]
 
-    for i in range(within_topk_nodes.shape[0]):
-        correct_nodes = np.intersect1d(within_topk_nodes[i, :], adj_mat[i, :]) # [N, 1]
-
-    acc = (correct_nodes / k).mean()
-
+    acc = np.mean(np.sum(topk_labels, axis=1) / k)
+    
     return acc
 
 
