@@ -2,6 +2,8 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 from skimage.metrics import structural_similarity
 
+from sklearn.neighbors import NearestNeighbors
+
 def clustering_accuracy(embeddings: np.ndarray,
                         reference_embeddings: np.ndarray,
                         labels: np.ndarray,
@@ -29,23 +31,16 @@ def clustering_accuracy(embeddings: np.ndarray,
     N1, N2 = embeddings.shape[0], reference_embeddings.shape[0]
     if voting_k > N2:
         voting_k = N2
+    
+    knn_op = NearestNeighbors(n_neighbors=voting_k, metric=distance_measure)
+    knn_op.fit(reference_embeddings)
 
-    # Compute pairwise distances, shape [N1, N2]
-   
-    if distance_measure == 'cosine':
-        distances = 1 - cosine_similarity(embeddings, reference_embeddings)
-    elif distance_measure == 'norm':
-        distances = euclidean_distances(embeddings, reference_embeddings)
+    _, indices = knn_op.kneighbors(embeddings, return_distance=True) # [N1, k], [N1, k]
+    voting_labels = np.take_along_axis(reference_labels, indices, axis=1)
+    print('voting_labels.shape: ', voting_labels.shape)
 
-    # Get the votingk node indices for each node
-    voting_nodes = np.argsort(distances, axis=1)[:, :voting_k] # [N1, voting_k]
-
-    # Get the votingk labels for each node
-    voting_labels = reference_labels[voting_nodes].astype(int) # [N1, voting_k]
-    print('voting_labels: ', voting_labels.shape)
-
-    # Get the most frequent label for each node
-    predicted_labels = np.array([np.argmax(np.bincount(voting_labels[i])) for i in range(N1)]) # [N1,]
+    predicted_labels = np.mode(voting_labels, axis=1).flatten()
+    print('predicted_labels.shape: ', predicted_labels.shape)
 
     # Compute accuracy
     acc = np.mean((predicted_labels == labels) * 1.0)
