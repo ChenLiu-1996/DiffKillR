@@ -36,7 +36,7 @@ def clustering_accuracy(embeddings: np.ndarray,
     knn_op.fit(reference_embeddings)
 
     _, indices = knn_op.kneighbors(embeddings, return_distance=True) # [N1, k], [N1, k]
-    voting_labels = np.take_along_axis(reference_labels, indices, axis=1)
+    voting_labels = reference_labels[indices] # [N1, k]
     print('voting_labels.shape: ', voting_labels.shape)
 
     predicted_labels = np.mode(voting_labels, axis=1).flatten()
