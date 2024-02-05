@@ -26,9 +26,7 @@ import seaborn as sns
 def patchify_and_save(tissue_types_list,
                       mask_list_by_tissue,
                       patches_folder,
-                      patch_size,
-                      ratio_list: List[float] = [0.01, 0.1, 0.2, 0.5, 1.0],
-                      val_in_train_val: float = 0.2):
+                      patch_size):
 
     np.random.seed(1)
 
@@ -60,53 +58,39 @@ def patchify_and_save(tissue_types_list,
                (max(foreground[:, 1]) - min(foreground[:, 1]) < patch_size):
                 cell_id_list_final.append(cell_id)
 
-        for ratio in ratio_list:
-            if ratio == 1:
-                # We won't consider this case.
-                continue
+        # Save the images.
+        for idx in cell_id_list_final:
+            centroid = np.argwhere(mask_with_most_cell == idx).sum(0) / (mask_with_most_cell == idx).sum()
+            centroid = [int(item) for item in centroid]
+            h_begin = max(centroid[0] - patch_size // 2, 0)
+            w_begin = max(centroid[1] - patch_size // 2, 0)
+            h_end = min(h_begin + patch_size, image_with_most_cell.shape[0])
+            w_end = min(w_begin + patch_size, image_with_most_cell.shape[1])
 
-            # At least 2 for train+val.
-            train_val_ids = np.random.choice(cell_id_list_final, size=max(2, int(ratio * max_cell_count)), replace=False)
-            # At least 1 for val.
-            val_ids = np.random.choice(train_val_ids, size=max(1, int(val_in_train_val * len(train_val_ids))), replace=False)
-            train_ids = np.array(list(set(train_val_ids) - set(val_ids)))
-            # Remaining are for test.
-            test_ids = np.array(list(set(cell_id_list_final) - set(train_ids) - set(val_ids)))
+            patch_image = image_with_most_cell[h_begin:h_end, w_begin:w_end, :]
+            patch_mask = (mask_with_most_cell == idx)[h_begin:h_end, w_begin:w_end]
 
-            # Save the images.
-            for id_list, split_str in zip([train_ids, val_ids, test_ids], ['train', 'val', 'test']):
-                for idx in id_list:
-                    centroid = np.argwhere(mask_with_most_cell == idx).sum(0) / (mask_with_most_cell == idx).sum()
-                    centroid = [int(item) for item in centroid]
-                    h_begin = max(centroid[0] - patch_size // 2, 0)
-                    w_begin = max(centroid[1] - patch_size // 2, 0)
-                    h_end = min(h_begin + patch_size, image_with_most_cell.shape[0])
-                    w_end = min(w_begin + patch_size, image_with_most_cell.shape[1])
+            # Handle edge cases: literally on the edge.
+            if patch_image.shape != (patch_size, patch_size, 3):
+                h_diff = patch_size - patch_image.shape[0]
+                w_diff = patch_size - patch_image.shape[1]
+                patch_image = np.pad(patch_image,
+                                    pad_width=((0, h_diff), (0, w_diff), (0, 0)),
+                                    mode='constant')
+                patch_mask = np.pad(patch_mask,
+                                    pad_width=((0, h_diff), (0, w_diff)),
+                                    mode='constant')
 
-                    patch_image = image_with_most_cell[h_begin:h_end, w_begin:w_end, :]
-                    patch_mask = (mask_with_most_cell == idx)[h_begin:h_end, w_begin:w_end]
+            patch_image_path = patches_folder + 'same_image_generalization/%s/images/%s_cell_%s.png' % (
+                tissue_type, os.path.basename(mask_path_with_most_cell).replace('.png', ''), str(idx).zfill(5))
+            os.makedirs(os.path.dirname(patch_image_path), exist_ok=True)
+            patch_image = cv2.cvtColor(patch_image, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(patch_image_path, patch_image)
 
-                    # Handle edge cases: literally on the edge.
-                    if patch_image.shape != (patch_size, patch_size, 3):
-                        h_diff = patch_size - patch_image.shape[0]
-                        w_diff = patch_size - patch_image.shape[1]
-                        patch_image = np.pad(patch_image,
-                                            pad_width=((0, h_diff), (0, w_diff), (0, 0)),
-                                            mode='constant')
-                        patch_mask = np.pad(patch_mask,
-                                            pad_width=((0, h_diff), (0, w_diff)),
-                                            mode='constant')
-
-                    patch_image_path = patches_folder + 'same_image_generalization/ratio_%s/%s/%s/images/%s_cell_%s.png' % (
-                        ratio, tissue_type, split_str, os.path.basename(mask_path_with_most_cell).replace('.png', ''), str(idx).zfill(5))
-                    os.makedirs(os.path.dirname(patch_image_path), exist_ok=True)
-                    patch_image = cv2.cvtColor(patch_image, cv2.COLOR_RGB2BGR)
-                    cv2.imwrite(patch_image_path, patch_image)
-
-                    patch_mask_path = patches_folder + 'same_image_generalization/ratio_%s/%s/%s/masks/%s_cell_%s.png' % (
-                        ratio, tissue_type, split_str, os.path.basename(mask_path_with_most_cell).replace('.png', ''), str(idx).zfill(5))
-                    os.makedirs(os.path.dirname(patch_mask_path), exist_ok=True)
-                    cv2.imwrite(patch_mask_path, patch_mask.astype(np.uint8) * 255)
+            patch_mask_path = patches_folder + 'same_image_generalization/%s/masks/%s_cell_%s.png' % (
+                tissue_type, os.path.basename(mask_path_with_most_cell).replace('.png', ''), str(idx).zfill(5))
+            os.makedirs(os.path.dirname(patch_mask_path), exist_ok=True)
+            cv2.imwrite(patch_mask_path, patch_mask.astype(np.uint8) * 255)
 
     # #NOTE: Purpose 2. Annotate some cells of 1 image, and infer on another image of same tissue.
     # #                 Analyze the effect of % annotated cells.

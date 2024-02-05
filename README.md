@@ -47,3 +47,10 @@ python -m pip install opencv-python
 ```
 python train_AE.py --mode train --config {config} --num-workers 4
 ```
+
+
+
+```
+cd src/scripts/
+python match_cells.py --config ../../config/aug_AutoEncoder_depth5_seed1_simCLR.yaml
+```
