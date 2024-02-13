@@ -530,18 +530,18 @@ def test(config: AttributeHashmap):
         ins_topk_acc[split] = topk_accuracy(embeddings[split],
                                             instance_adj,
                                             distance_measure=distance_measure,
-                                            k=1)
-        ins_mAP[split] = embedding_mAP(embeddings[split],
-                                       instance_adj,
-                                       distance_op=distance_measure)
-
+                                            k=5)
         class_topk_acc[split] = topk_accuracy(embeddings[split],
                                               class_adj,
                                               distance_measure=distance_measure,
-                                              k=1)
+                                              k=5)
+        ins_mAP[split] = embedding_mAP(embeddings[split],
+                                       instance_adj,
+                                       distance_op=distance_measure)
         class_mAP[split] = embedding_mAP(embeddings[split],
                                          class_adj,
                                          distance_op=distance_measure)
+        
         log(f'Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
         log(f'Class clustering accuracy: {class_clustering_acc[split]:.3f}', to_console=True)
         log(f'Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
@@ -595,7 +595,11 @@ def test(config: AttributeHashmap):
         print('Visualizing ', split, ' : ',  data_phate.shape)
         ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
         title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
-            Class clustering acc: {class_clustering_acc[split]:.3f}"
+            Class clustering acc: {class_clustering_acc[split]:.3f},\n \
+            Instance top-k acc: {ins_topk_acc[split]:.3f},\n \
+            Class top-k acc: {class_topk_acc[split]:.3f},\n \
+            Instance mAP: {ins_mAP[split]:.3f},\n \
+            Class mAP: {class_mAP[split]:.3f}"
         
         scprep.plot.scatter2d(data_phate,
                               c=embedding_patch_id_int[split],

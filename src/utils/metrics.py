@@ -1,8 +1,9 @@
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 from skimage.metrics import structural_similarity
-
+import scipy.stats as stats
 from sklearn.neighbors import NearestNeighbors
+import scipy
 
 def clustering_accuracy(embeddings: np.ndarray,
                         reference_embeddings: np.ndarray,
@@ -39,11 +40,11 @@ def clustering_accuracy(embeddings: np.ndarray,
     voting_labels = reference_labels[indices] # [N1, k]
     print('voting_labels.shape: ', voting_labels.shape)
 
-    predicted_labels = np.mode(voting_labels, axis=1).flatten()
+    predicted_labels, _ = stats.mode(voting_labels, axis=1)
     print('predicted_labels.shape: ', predicted_labels.shape)
 
     # Compute accuracy
-    acc = np.mean((predicted_labels == labels) * 1.0)
+    acc = np.mean((np.squeeze(predicted_labels) == labels) * 1.0)
 
     return acc
 
@@ -82,12 +83,7 @@ def topk_accuracy(embeddings: np.ndarray,
         topk_nodes = topk_nodes[:, np.newaxis]
         
     # Get the top-k labels for each node
-    topk_labels = []
-    for i in range(k):
-        col = adj_mat[np.arange(N), topk_nodes[np.arange(N), i]]
-        col = col[:, np.newaxis]
-        topk_labels.append(col) # [N,]
-    topk_labels = np.hstack(topk_labels) # [N, k]
+    topk_labels = np.take_along_axis(adj_mat, topk_nodes, axis=1)
 
     if k > 1:
         acc = np.mean(np.sum(topk_labels, axis=1) / k)
@@ -117,34 +113,25 @@ def embedding_mAP(embeddings: np.ndarray,
     assert N == graph_adjacency.shape[0] == graph_adjacency.shape[1]
 
     # compute the distance matrix
-    distance_matrix = np.zeros((N, N))
-    for i in range(N):
-        for j in range(N):
-            if distance_op == 'norm':
-                distance_matrix[i, j] = np.linalg.norm(embeddings[i] - embeddings[j])
-            elif distance_op == 'dot':
-                distance_matrix[i, j] = np.dot(embeddings[i], embeddings[j])
-            elif distance_op == 'cosine':
-                distance_matrix[i, j] = np.dot(embeddings[i], embeddings[j]) / \
-                                        (np.linalg.norm(embeddings[i]) * np.linalg.norm(embeddings[j]))
-            else:
-                raise Exception('distance_op must be either norm or dot')
+    distance_matrix = scipy.spatial.distance.cdist(embeddings, embeddings, metric=distance_op)
 
     # compute the AP
     AP = np.zeros(N)
     for i in range(N):
         # find the neighbors of i
         neighbors = np.argwhere(graph_adjacency[i] == 1).flatten()
+        print('neighbors: ', neighbors.shape, neighbors[:5])
         # compute the distance between i and its neighbors
         distances = distance_matrix[i, neighbors] # (n_neighbors, )
+        print('distances: ', distances.shape, distances[:5])
         for j in range(len(neighbors)):
             # compute the number of points enclosed by the ball_j centered at i
             all_enclosed = np.argwhere(distance_matrix[i] <= distances[j]).flatten()
             # compute the number of neighbors of enclosed by the ball_j centered at i
             n_enclosed_j = len(np.intersect1d(all_enclosed, neighbors))
             # compute the AP
-            if n_enclosed_j > 0:
-                AP[i] += n_enclosed_j / all_enclosed.shape[0]
+            AP[i] += n_enclosed_j / all_enclosed.shape[0]
+
 
         if len(neighbors) > 0:
             AP[i] /= len(neighbors)
