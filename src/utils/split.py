@@ -21,14 +21,16 @@ def split_dataset(dataset: Dataset,
 
     n = len(dataset)
     if len(splits) == 2:
-        val_size = int(splits[1] * n)
+        assert n >= 2, 'Cannot split dataset with size %d!' % n
+        val_size = min(max(int(splits[1] * n), 1), n - 1)
         train_size = n - val_size
         train_set, val_set = random_split(
             dataset, [train_size, val_size], generator=torch.Generator().manual_seed(random_seed))
         return train_set, val_set
     else:
-        val_size = int(splits[1] * n)
-        test_size = int(splits[2] * n)
+        assert n >= 3, 'Cannot split dataset with size %d!' % n
+        test_size = min(max(int(splits[2] * n), 1), n - 2)
+        val_size = min(max(int(splits[1] * n), 1), n - test_size - 1)
         train_size = n - val_size - test_size
         train_set, val_set, test_set = random_split(
             dataset, [train_size, val_size, test_size], generator=torch.Generator().manual_seed(random_seed))
