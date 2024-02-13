@@ -19,6 +19,12 @@ python preprocess_tissuenet.py
 ```
 
 
+#### MoNuSeg
+```
+cd external_data/MoNuSeg
+```
+
+
 ### Environment
 We developed the codebase in a miniconda environment.
 Tested on Python 3.9.13 + PyTorch 1.12.1.
@@ -33,6 +39,9 @@ python -m pip install -U phate
 conda install -c conda-forge libstdcxx-ng=12
 python -m pip install antspyx
 python -m pip install dipy
+
+# MoNuSeg
+python -m pip install xmltodict
 
 
 # Export CuDNN
