@@ -49,7 +49,8 @@ def load_MoNuSeg_annotation(xml_path: str) -> list[np.ndarray]:
         for vertex in vertices:
             x = float(vertex.attrib['X']) # TODO: maybe round to int?
             y = float(vertex.attrib['Y'])
-            verts.append([x, y])
+            #verts.append([x, y])
+            verts.append([y, x]) # FIXME!: check if this is correct. seems to have fixed the issue.
         verts = np.array(verts) # shape (n, 2)
         verts_list.append(verts)
     
