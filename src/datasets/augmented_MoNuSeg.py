@@ -158,7 +158,7 @@ class AugmentedMoNuSegDataset(Dataset):
             label_path = image_path.replace('image', 'label')
 
             image = self.all_images[self.img_path_2_idx[image_path]]
-            label = self.all_labels[self.img_path_2_idx[label_path]]
+            label = self.all_labels[self.img_path_2_idx[image_path]]
             # image = load_image(path=image_path, target_dim=self.target_dim)
             # label = np.array(cv2.imread(label_path, cv2.IMREAD_UNCHANGED))
 

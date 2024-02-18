@@ -16,6 +16,8 @@ from utils.early_stop import EarlyStopping
 from loss.supervised_contrastive import SupConLoss
 from loss.triplet_loss import TripletLoss
 
+import wandb
+
 def construct_triplet_batch(img_paths,
                             latent_features,
                             num_pos,
@@ -121,7 +123,7 @@ def construct_batch_images_with_n_views(
 
 
 
-def train(config: AttributeHashmap):
+def train(config: AttributeHashmap, wandb_run=None):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     dataset, train_set, val_set, _ = \
@@ -164,10 +166,10 @@ def train(config: AttributeHashmap):
 
     best_val_loss = np.inf
 
-    for epoch_idx in tqdm(range(config.max_epochs)):
+    for epoch_idx in range(config.max_epochs):
         train_loss, train_latent_loss, train_recon_loss = 0, 0, 0
         model.train()
-        for iter_idx, (images, _, canonical_images, _, img_paths, _) in enumerate(tqdm(train_set)):
+        for iter_idx, (images, _, canonical_images, _, img_paths, _) in enumerate(train_set):
             images = images.float().to(device) # (bsz, in_chan, H, W)
             canonical_images = canonical_images.float().to(device)
             bsz = images.shape[0]
@@ -240,13 +242,17 @@ def train(config: AttributeHashmap):
             % (epoch_idx + 1, config.max_epochs, train_loss, train_latent_loss,
                train_recon_loss),
             filepath=config.log_dir,
-            to_console=False)
+            to_console=True)
+        if wandb_run is not None:
+            wandb.log({'train/loss': train_loss,
+                       'train/latent_loss': train_latent_loss,
+                       'train/recon_loss': train_recon_loss})
 
         # Validation.
         model.eval()
         with torch.no_grad():
             val_loss, val_latent_loss, val_recon_loss = 0, 0, 0
-            for iter_idx, (images, _, canonical_images, _, img_paths, _) in enumerate(tqdm(val_set)):
+            for iter_idx, (images, _, canonical_images, _, img_paths, _) in enumerate(val_set):
                 # NOTE: batch size is len(val_set) here.
                 # May need to change this if val_set is too large.
                 images = images.float().to(device)
@@ -292,30 +298,36 @@ def train(config: AttributeHashmap):
 
                 val_latent_loss += latent_loss.item()
                 val_recon_loss += recon_loss.item()
-                val_loss += val_latent_loss + val_recon_loss
 
-        val_loss /= (iter_idx + 1)
         val_latent_loss /= (iter_idx + 1)
         val_recon_loss /= (iter_idx + 1)
+        val_loss = val_latent_loss + val_recon_loss
 
         log('Validation [%s/%s] loss: %.3f, latent: %.3f, recon: %.3f\n'
             % (epoch_idx + 1, config.max_epochs, val_loss, val_latent_loss,
                val_recon_loss),
             filepath=config.log_dir,
-            to_console=False)
+            to_console=True)
+        if wandb_run is not None:
+            wandb.log({'val/loss': val_loss,
+                       'val/latent_loss': val_latent_loss,
+                       'val/recon_loss': val_recon_loss})
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             model.save_weights(config.model_save_path)
             log('%s: Model weights successfully saved.' % config.model,
                 filepath=config.log_dir,
-                to_console=False)
+                to_console=True)
 
         if early_stopper.step(val_loss):
             log('Early stopping criterion met. Ending training.',
                 filepath=config.log_dir,
                 to_console=True)
             break
+    
+    if wandb_run is not None:
+        wandb_run.finish()
 
     return
 
@@ -360,7 +372,7 @@ def test(config: AttributeHashmap):
     model.eval()
     with torch.no_grad():
         test_loss, test_latent_loss, test_recon_loss = 0, 0, 0
-        for iter_idx, (images, _, canonical_images, _, img_paths, _) in enumerate(tqdm(test_set)):
+        for iter_idx, (images, _, canonical_images, _, img_paths, _) in enumerate(test_set):
             images = images.float().to(device)
             canonical_images = canonical_images.float().to(device)
             bsz = images.shape[0]
@@ -424,7 +436,7 @@ def test(config: AttributeHashmap):
 
     with torch.no_grad():
         for split, split_set in zip(['train', 'val', 'test'], [train_set, val_set, test_set]):
-            for iter_idx, (images, _, canonical_images, _, img_paths, _) in enumerate(tqdm(split_set)):
+            for iter_idx, (images, _, canonical_images, _, img_paths, _) in enumerate(split_set):
                 images = images.float().to(device)
                 recon_images, latent_features = model(images)
                 latent_features = torch.flatten(latent_features, start_dim=1)
@@ -585,13 +597,14 @@ def test(config: AttributeHashmap):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
-    parser.add_argument('--mode', help='`train` or `test`?', required=True)
+    parser.add_argument('--mode', help='`train` or `test`?', default='train')
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
     parser.add_argument('--run_count', help='Provide this during testing!', default=1)
     parser.add_argument('--config',
                         help='Path to config yaml file.',
-                        required=True)
+                        default='config/MoNuSeg_simCLR.yaml')
     parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
+    parser.add_argument('--use-wandb', help='Use wandb for logging?', default=True, type=bool)
     args = vars(parser.parse_args())
 
     args = AttributeHashmap(args)
@@ -605,8 +618,19 @@ if __name__ == '__main__':
 
     seed_everything(config.random_seed)
 
+    wandb_run = None
+    if args.use_wandb:
+        wandb_run = wandb.init(
+            entity=config.wandb_entity,
+            project="cellseg",
+            name="monuseg-simclr",
+            config=config,
+            reinit=True,
+            settings=wandb.Settings(start_method="thread")
+        )
+
     if args.mode == 'train':
-        train(config=config)
+        train(config=config, wandb_run=wandb_run)
         test(config=config)
     elif args.mode == 'test':
-        test(config=config)
+        test(config=config, wandb_run=wandb_run)
