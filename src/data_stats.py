@@ -7,7 +7,7 @@ from glob import glob
 
 if __name__ == '__main__':
     augmented_patch_size = 32
-    augmented_folder = '../data/MoNuSeg2018TrainData_augmented_patch_%dx%d' % (
+    augmented_folder = '../data/0.100_MoNuSeg2018TrainData_augmented_patch_%dx%d' % (
     augmented_patch_size, augmented_patch_size)
     augmentation_methods = ['rotation',
                                 'uniform_stretch',

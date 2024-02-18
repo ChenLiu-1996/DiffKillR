@@ -9,6 +9,7 @@ from typing import List
 from glob import glob
 from tqdm import tqdm
 import sys
+import argparse
 
 import_dir = '/'.join(os.path.realpath(__file__).split('/')[:-2])
 sys.path.insert(0, import_dir + '/augmentation/')
@@ -102,16 +103,32 @@ def main():
     '''
     Main function.
     '''
-    patch_size = 96
-    augmented_patch_size = 32 # FIXME: 32? or 48? the mean/mode dx/dy is around 20 ish. std is 9.
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument('--patch_size', type=int, default=96)
+    argparser.add_argument('--augmented_patch_size', type=int, default=32)
+    argparser.add_argument('--percentage', type=float, default=0.1)
+    argparser.add_argument('--multiplier', type=int, default=2)
+
+    args = argparser.parse_args()
+    patch_size = args.patch_size
+    augmented_patch_size = args.augmented_patch_size
+    percentage = args.percentage
+    multiplier = args.multiplier
 
     patches_folder = '../../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size, 
                                                                        patch_size)
     image_path_list = sorted(glob(patches_folder + 'image/*.png'))
     label_path_list = sorted(glob(patches_folder + 'label/*.png'))
 
-    augmented_folder = '../../data/MoNuSeg2018TrainData_augmented_patch_%dx%d' % (
-        augmented_patch_size, augmented_patch_size)
+    # Subset of the data.
+    #percentage = 0.1 # 1% of the data.
+    total_cnt = int(len(image_path_list) * percentage)
+
+    print('Total number of patches:', len(image_path_list),\
+          'Percentage:', percentage, 'Total count:', total_cnt)
+
+    augmented_folder = '../../data/%.3f_MoNuSeg2018TrainData_augmented_patch_%dx%d' % (
+        percentage, augmented_patch_size, augmented_patch_size)
 
     prefix_list = []
 
@@ -131,25 +148,31 @@ def main():
 
     # Use a single data structure to hold all information for augmentation.
     augmentation_tuple_list = []
+
+    prefix_list = prefix_list[:int(total_cnt)]
+    image_path_list = image_path_list[:int(total_cnt)]
+    label_path_list = label_path_list[:int(total_cnt)]
+
     for prefix, image_path, label_path in \
         zip(prefix_list, image_path_list, label_path_list):
         augmentation_tuple_list.append(
             (prefix, image_path, label_path, multiplier))
-
-    for augmentation_method in ['rotation',
-                                'uniform_stretch',
-                                'directional_stretch',
-                                'volume_preserving_stretch',
-                                'partial_stretch']:
+    augmentation_methods = ['rotation',
+                            'uniform_stretch',
+                            'directional_stretch',
+                            'volume_preserving_stretch',
+                            'partial_stretch']
+    for augmentation_method in augmentation_methods:
         augment_and_save(augmentation_tuple_list, 
                          augmented_patch_size, 
                          augmented_folder, 
                          augmentation_method)
 
     print('Done.')
-    print('Augmentation tuple list:')
+    print('Augmentation tuple list[:10]:')
     print(len(augmentation_tuple_list), augmentation_tuple_list[:10])
-    print('Total number of patches:', len(augmentation_tuple_list) * multiplier)
+    print('Total number of patches:', \
+          len(augmentation_tuple_list) * multiplier * len(augmentation_methods))
 
 
 if __name__ == '__main__':
