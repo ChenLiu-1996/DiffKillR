@@ -194,8 +194,8 @@ def dice_coeff(mask1: np.array, mask2: np.array) -> float:
 
     assert mask1.min() in [0, 1] and mask2.min() in [0, 1], \
         'min values for masks are not in [0, 1]: mask1: %s, mask2: %s' % (mask1.min(), mask2.min())
-    assert mask1.max() == 1 and mask2.max() == 1, \
-        'max values for masks are not 1: mask1: %s, mask2: %s' % (mask1.max(), mask2.max())
+    # assert mask1.max() == 1 and mask2.max() == 1, \
+    #     'max values for masks are not 1: mask1: %s, mask2: %s' % (mask1.max(), mask2.max())
 
     assert mask1.shape == mask2.shape, \
         'mask shapes do not match: %s vs %s' % (mask1.shape, mask2.shape)

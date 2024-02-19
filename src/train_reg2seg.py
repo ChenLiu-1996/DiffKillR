@@ -75,7 +75,7 @@ def plot_side_by_side(save_path, im_U, im_A, im_U2A_A2U, im_U2A, ma_U, ma_A, ma_
 
 # FIXME!: I think we can even use another cycle loss: AM -> UM -> AM
 # FIXME!: Also, if the augmented mask is good, we can use it as a target for the forward cycle: UM -> AM. 
-def train(config: AttributeHashmap):
+def train(config: AttributeHashmap, wandb_run=None):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     _, train_set, val_set, _ = prepare_dataset(config=config)
@@ -133,7 +133,8 @@ def train(config: AttributeHashmap):
             images_U2A = warper(unannotated_images, flow=warp_field_forward)
             images_U2A_A2U = warper(images_U2A, flow=warp_field_reverse)
             masks_A2U = warper(annotated_masks, flow=warp_field_reverse)
-
+            #print(masks_A2U.shape, unannotated_masks.shape, annotated_masks.shape)
+            #print('check a few masks_A2U:', masks_A2U[0, ...], unannotated_masks[0, ...], annotated_masks[0, ...])
             # Compute Dice Coeff.
             for i in range(len(masks_A2U)):
                 train_dice_ref_list.append(
@@ -176,6 +177,14 @@ def train(config: AttributeHashmap):
                np.mean(train_dice_seg_list), np.std(train_dice_seg_list)),
             filepath=config.log_dir,
             to_console=False)
+        if wandb_run is not None:
+            wandb_run.log({'train/loss': train_loss,
+                           'train/loss_forward': train_loss_forward,
+                           'train/loss_cyclic': train_loss_cyclic,
+                           'train/dice_ref_mean': np.mean(train_dice_ref_list),
+                           'train/dice_ref_std': np.std(train_dice_ref_list),
+                           'train/dice_seg_mean': np.mean(train_dice_seg_list),
+                           'train/dice_seg_std': np.std(train_dice_seg_list)})
 
         # Validation.
         warp_predictor.eval()
@@ -248,6 +257,14 @@ def train(config: AttributeHashmap):
                np.mean(val_dice_seg_list), np.std(val_dice_seg_list)),
             filepath=config.log_dir,
             to_console=False)
+        if wandb_run is not None:
+            wandb_run.log({'val/loss': val_loss,
+                           'val/loss_forward': val_loss_forward,
+                           'val/loss_cyclic': val_loss_cyclic,
+                           'val/dice_ref_mean': np.mean(val_dice_ref_list),
+                           'val/dice_ref_std': np.std(val_dice_ref_list),
+                           'val/dice_seg_mean': np.mean(val_dice_seg_list),
+                           'val/dice_seg_std': np.std(val_dice_seg_list)})
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -261,6 +278,8 @@ def train(config: AttributeHashmap):
                 filepath=config.log_dir,
                 to_console=True)
             break
+    if wandb_run is not None:
+        wandb_run.finish()
 
     return
 
@@ -361,6 +380,7 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
 
     return
 
+@torch.no_grad()
 def infer(config):
     '''
         Given input pair of images, infer the warping field.
@@ -376,6 +396,31 @@ def infer(config):
 
         test_mask = warper(closest_mask, flow=warp_field_forward)
     '''
+    device = torch.device(
+        'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    _, _, _, test_set = prepare_dataset(config=config)
+
+    # Build the model
+    try:
+        warp_predictor = globals()[config.model](num_filters=config.num_filters,
+                                                 in_channels=6,
+                                                 out_channels=4)
+    except:
+        raise ValueError('`config.model`: %s not supported.' % config.model)
+
+    warp_predictor.load_weights(config.model_save_path, device=device)
+    warp_predictor = warp_predictor.to(device)
+
+    warper = Warper(size=config.target_dim)
+    warper = warper.to(device)
+
+    # Step 1: Load matched pairs.
+
+    # Step 2: Predict the warping field.
+
+    # Step 3: Evaluation
+
+    return
 
 
 if __name__ == '__main__':
@@ -387,6 +432,7 @@ if __name__ == '__main__':
                         help='Path to config yaml file.',
                         required=True)
     parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
+    parser.add_argument('--use-wandb', help='Use wandb for logging', default=True, type=bool)
     args = vars(parser.parse_args())
 
     args = AttributeHashmap(args)
@@ -400,8 +446,20 @@ if __name__ == '__main__':
 
     seed_everything(config.random_seed)
 
+    wandb_run = None
+    import wandb
+    if args.use_wandb and args.mode == 'train':
+        wandb_run = wandb.init(
+            entity=config.wandb_entity,
+            project="cellseg",
+            name="monuseg-reg2seg",
+            config=config,
+            reinit=True,
+            settings=wandb.Settings(start_method="thread")
+        )
+
     if args.mode == 'train':
-        train(config=config)
+        train(config=config, wandb_run=wandb_run)
         test(config=config)
     elif args.mode == 'test':
         test(config=config)

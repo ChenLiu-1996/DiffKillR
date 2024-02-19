@@ -2,8 +2,8 @@ dataset_name: 'augmented_MoNuSeg'
 target_dim: (32, 32)
 dataset_path: '$ROOT/data/0.010_MoNuSeg2018TrainData_augmented_patch_32x32/'
 test_img_folder: '$ROOT/data/MoNuSeg2018TestData_patch_32x32/image/'
-model_save_path: '$ROOT/checkpoints/0.010_aug_MoNuSeg_depth5_seed1_SimCLR.pty'
-output_save_path: '$ROOT/results/0.010_aug_MoNuSeg_depth5_seed1_SimCLR/'
+model_save_path: '$ROOT/checkpoints/0.010_aug_MoNuSeg_depth5_seed1_reg2seg.pty'
+output_save_path: '$ROOT/results/0.010_aug_MoNuSeg_depth5_seed1_reg2seg/'
 matched_pair_path: '$ROOT/results/0.010_aug_MoNuSeg_depth5_seed1_SimCLR/AIAE_inference_results.csv'
 log_folder: '$ROOT/logs'
 learning_rate: 1e-3
@@ -17,9 +17,10 @@ aug_methods: 'rotation,uniform_stretch,directional_stretch,volume_preserving_str
 max_epochs: 200
 patience: 50
 batch_size: 64
-model: 'AutoEncoder'
+model: 'UNet'
 num_filters: 32
 num_workers: 4
 random_seed: 1
 train_val_test_ratio: '6:2:2'
 wandb_entity: 'danqiliao'
+n_plot_per_epoch: 3
