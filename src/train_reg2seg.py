@@ -73,7 +73,8 @@ def plot_side_by_side(save_path, im_U, im_A, im_U2A_A2U, im_U2A, ma_U, ma_A, ma_
 
     return
 
-
+# FIXME!: I think we can even use another cycle loss: AM -> UM -> AM
+# FIXME!: Also, if the augmented mask is good, we can use it as a target for the forward cycle: UM -> AM. 
 def train(config: AttributeHashmap):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
@@ -359,6 +360,22 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
         to_console=False)
 
     return
+
+def infer(config):
+    '''
+        Given input pair of images, infer the warping field.
+        pair input is a cvs file with columns:
+            - test_image_path
+            - closest_image_path
+            - distance
+            - source (original or augmented)
+        e.g.:
+        warp_predictor = warp_predictor(torch.cat([closest_image, test_image], dim=1))
+        warp_field_forward = warp_predicted[:, :2, ...]
+        warp_field_reverse = warp_predicted[:, 2:, ...]
+
+        test_mask = warper(closest_mask, flow=warp_field_forward)
+    '''
 
 
 if __name__ == '__main__':

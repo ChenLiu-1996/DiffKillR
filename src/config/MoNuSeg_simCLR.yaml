@@ -1,6 +1,7 @@
 dataset_name: 'augmented_MoNuSeg'
 target_dim: (32, 32)
 dataset_path: '$ROOT/data/0.010_MoNuSeg2018TrainData_augmented_patch_32x32/'
+test_img_folder: '$ROOT/data/MoNuSeg2018TestData_patch_32x32/image/'
 model_save_path: '$ROOT/checkpoints/0.010_aug_MoNuSeg_depth5_seed1_SimCLR.pty'
 output_save_path: '$ROOT/results/0.010_aug_MoNuSeg_depth5_seed1_SimCLR/'
 log_folder: '$ROOT/logs'

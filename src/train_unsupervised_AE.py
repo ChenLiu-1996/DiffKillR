@@ -351,6 +351,7 @@ def test(config: AttributeHashmap):
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)
 
+    os.makedirs('%s/results' % config.output_save_path, exist_ok=True)
     save_path_fig_embeddings_inst = '%s/results/embeddings_inst.png' % config.output_save_path
     save_path_fig_reconstructed = '%s/results/reconstructed.png' % config.output_save_path
 
@@ -516,7 +517,7 @@ def test(config: AttributeHashmap):
     import scprep
     import matplotlib.pyplot as plt
 
-    plt.rcParams['font.family'] = 'roboto'
+    plt.rcParams['font.family'] = 'sans-serif'
 
     fig_embedding = plt.figure(figsize=(10, 8 * 3))
     for split in ['train', 'val', 'test']:
@@ -594,10 +595,139 @@ def test(config: AttributeHashmap):
 
     return
 
+def infer(config):
+    '''
+        Inference mode. Given test image patch folder, load the model and 
+        pair the test images with closest images in anchor bank.
+        The anchor patch bank: training images from the original or augmented images.
+        !TODO: we may only want to use the original images for the anchor bank,
+        !TODO: since the augmented images are not real instances. and the reg2seg 
+        !TODO: model is trained on the warping aug to original images.
+        Output: a csv file with the following columns:
+            - test_image_path
+            - closest_image_path
+            - distance
+            - source (original or augmented)
+    '''
+    from datasets.augmented_MoNuSeg import AugmentedMoNuSegDataset, load_image
+    from torch.utils.data import DataLoader
+    from glob import glob
+
+    # Step 1: Load the model & generate embeddings for images in anchor bank.
+    device = torch.device(
+        'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    # dataset, train_set, val_set, test_set = prepare_dataset(config=config)
+    aug_lists = config.aug_methods.split(',')
+    dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,
+                                         base_path=config.dataset_path,
+                                         target_dim=config.target_dim)
+    dataloader = DataLoader(dataset=dataset,
+                            batch_size=config.batch_size,
+                            shuffle=False,
+                            num_workers=config.num_workers)
+
+    # Build the model
+    try:
+        model = globals()[config.model](num_filters=config.num_filters,
+                                        in_channels=3,
+                                        out_channels=3)
+    except:
+        raise ValueError('`config.model`: %s not supported.' % config.model)
+
+    model = model.to(device)
+    model.load_weights(config.model_save_path, device=device)
+    log('%s: Model weights successfully loaded.' % config.model,
+        to_console=True)
+    
+    log('Generating embeddings for anchor bank. Total images: %d' % len(dataset), 
+        to_console=True)
+    anchor_bank = {
+        'embeddings': [],
+        'img_paths': [],
+        'sources': [],
+    }
+    model.eval()
+    with torch.no_grad():
+        for iter_idx, (images, _, _, _, img_paths, cannoical_img_path) in enumerate(dataloader):
+            images = images.float().to(device)
+            _, latent_features = model(images)
+            latent_features = torch.flatten(latent_features, start_dim=1)
+            print('latent_features.shape: ', latent_features.shape) # (bsz, latent_dim)
+
+            anchor_bank['embeddings'].extend([latent_features.cpu().numpy()]) # (bsz, latent_dim)
+            anchor_bank['img_paths'].extend(img_paths)
+            sources = ['original' if 'original' in img_path else 'augmented' for img_path in img_paths]
+            anchor_bank['sources'].extend(sources)
+        
+    anchor_bank['embeddings'] = np.concatenate(anchor_bank['embeddings'], axis=0) # (N, latent_dim)
+    assert anchor_bank['embeddings'].shape[0] == len(anchor_bank['img_paths']) == len(anchor_bank['sources'])
+    log(f'Anchor bank embeddings generated. shape:{anchor_bank["embeddings"].shape}', to_console=True)
+
+    # Step 2: Generate embeddings for test images.
+    test_img_folder = config.test_img_folder
+    test_img_files = sorted(glob(os.path.join(test_img_folder, '*.png')))
+    test_img_bank = {
+        'embeddings': [],
+    }
+    test_images = [torch.Tensor(load_image(img_path, config.target_dim)) for img_path in test_img_files]
+    print('Test images: ', test_images[:5])
+    test_images = torch.stack(test_images, dim=0)
+    print('Test images shape: ', test_images.shape) # (N, in_chan, H, W)
+    test_dataset = torch.utils.data.TensorDataset(test_images)
+    test_dataloader = DataLoader(dataset=test_dataset,
+                                 batch_size=config.batch_size,
+                                 shuffle=False, # No shuffle since we're using the indices
+                                 num_workers=config.num_workers)
+    with torch.no_grad():
+        for iter_idx, (images,) in enumerate(test_dataloader):
+            print('Processing batch %d/%d' % (iter_idx, len(test_dataloader)))
+            # print(len(images))
+            # print(images[0].shape)
+            # print('images.shape: ', images.shape)
+            images = images.float().to(device)
+            _, latent_features = model(images)
+            latent_features = torch.flatten(latent_features, start_dim=1)
+            test_img_bank['embeddings'].extend([latent_features.cpu().numpy()])
+    test_img_bank['embeddings'] = np.concatenate(test_img_bank['embeddings'], axis=0) # (N, latent_dim)
+    log(f"test_img_bank[embeddings].shape: {test_img_bank['embeddings'].shape}", to_console=True)
+    log('Done generating embeddings for test images.', to_console=True)
+
+    # Step 3: Pair the test images with closest images in anchor bank.
+    import sklearn.metrics
+
+    if config.latent_loss == 'triplet':
+        distance_measure = 'cosine'
+    elif config.latent_loss == 'SimCLR':
+        distance_measure = 'cosine'
+    else:
+        raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
+    
+    log('Computing pairwise distances...', to_console=True)
+    print('test_img_bank[embeddings].shape: ', test_img_bank['embeddings'].shape)
+    print('anchor_bank[embeddings].shape: ', anchor_bank['embeddings'].shape)
+    dist_matrix = sklearn.metrics.pairwise_distances(test_img_bank['embeddings'],
+                                        anchor_bank['embeddings'],
+                                        metric=distance_measure) # [N, M]
+    closest_anchor_idxs = list(np.argmin(dist_matrix, axis=1, keepdims=False)) # [N]
+    closest_img_paths = [anchor_bank['img_paths'][idx] for idx in closest_anchor_idxs] # [N]
+
+    # Step 4: Save the results to a csv file.
+    import pandas as pd
+    results_df = pd.DataFrame({
+        'test_image_path': test_img_files,
+        'closest_image_path': closest_img_paths,
+        'distance': np.min(dist_matrix, axis=1, keepdims=False),
+        'source': [anchor_bank['sources'][idx] for idx in closest_anchor_idxs],
+    })
+    results_df.to_csv(os.path.join(config.output_save_path, 'AIAE_inference_results.csv'), index=False)
+    print('Results saved to: ', os.path.join(config.output_save_path, 'AIAE_inference_results.csv'))
+
+    return
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
-    parser.add_argument('--mode', help='`train` or `test`?', default='train')
+    parser.add_argument('--mode', help='train|test|infer?', default='train')
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
     parser.add_argument('--run_count', help='Provide this during testing!', default=1)
     parser.add_argument('--config',
@@ -614,12 +744,12 @@ if __name__ == '__main__':
     config.num_workers = args.num_workers
     config = parse_settings(config, log_settings=args.mode == 'train', run_count=args.run_count)
 
-    assert args.mode in ['train', 'test']
+    assert args.mode in ['train', 'test', 'infer']
 
     seed_everything(config.random_seed)
 
     wandb_run = None
-    if args.use_wandb:
+    if args.use_wandb and args.mode == 'train':
         wandb_run = wandb.init(
             entity=config.wandb_entity,
             project="cellseg",
@@ -633,4 +763,6 @@ if __name__ == '__main__':
         train(config=config, wandb_run=wandb_run)
         test(config=config)
     elif args.mode == 'test':
-        test(config=config, wandb_run=wandb_run)
+        test(config=config)
+    elif args.mode == 'infer':
+        infer(config=config)
