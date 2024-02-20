@@ -207,3 +207,29 @@ def dice_coeff(mask1: np.array, mask2: np.array) -> float:
     dice = 2 * intersection / (denom + epsilon)
 
     return dice
+
+def IoU(mask1: np.array, mask2: np.array) -> float:
+    '''
+    Intersection over Union between 2 binary masks.
+    '''
+
+    if isinstance(mask1.min(), bool):
+        mask1 = np.uint8(mask1)
+    if isinstance(mask2.min(), bool):
+        mask2 = np.uint8(mask2)
+
+    assert mask1.min() in [0, 1] and mask2.min() in [0, 1], \
+        'min values for masks are not in [0, 1]: mask1: %s, mask2: %s' % (mask1.min(), mask2.min())
+    # assert mask1.max() == 1 and mask2.max() == 1, \
+    #     'max values for masks are not 1: mask1: %s, mask2: %s' % (mask1.max(), mask2.max())
+
+    assert mask1.shape == mask2.shape, \
+        'mask shapes do not match: %s vs %s' % (mask1.shape, mask2.shape)
+
+    intersection = np.logical_and(mask1, mask2).sum()
+    union = np.logical_or(mask1, mask2).sum()
+    epsilon = 1e-9
+
+    iou = intersection / (union + epsilon)
+
+    return iou

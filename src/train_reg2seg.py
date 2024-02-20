@@ -15,7 +15,7 @@ from utils.log_util import log
 from utils.parse import parse_settings
 from utils.seed import seed_everything
 from utils.early_stop import EarlyStopping
-from utils.metrics import dice_coeff
+from utils.metrics import dice_coeff, IoU
 
 
 def numpy_variables(*tensors: torch.Tensor) -> Tuple[np.array]:
@@ -396,6 +396,10 @@ def infer(config):
 
         test_mask = warper(closest_mask, flow=warp_field_forward)
     '''
+    # NOTE: maybe we can even train on fly, for each pair.
+    import pandas as pd
+    from datasets.augmented_MoNuSeg import load_image, load_mask
+
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     _, _, _, test_set = prepare_dataset(config=config)
@@ -415,17 +419,84 @@ def infer(config):
     warper = warper.to(device)
 
     # Step 1: Load matched pairs.
+    matched_df = pd.read_csv(config.matched_pair_path)
+    test_image_paths = matched_df['test_image_path'].tolist()
+    closest_image_paths = matched_df['closest_image_path'].tolist()
+    closest_label_paths = [x.replace('image', 'label') for x in closest_image_paths]
+    test_label_paths = [x.replace('image', 'label') for x in test_image_paths]
 
-    # Step 2: Predict the warping field.
 
-    # Step 3: Evaluation
+    # load the images.
+    test_images = [torch.Tensor(load_image(p, config.target_dim)) for p in test_image_paths]
+    closest_images = [torch.Tensor(load_image(p, config.target_dim)) for p in closest_image_paths]
+    closest_masks = [torch.Tensor(load_mask(p, config.target_dim)) for p in closest_label_paths]
+    test_masks = [np.expand_dims(load_mask(p, config.target_dim), 0) for p in test_label_paths]
+    test_images = torch.stack(test_images, dim=0).to(device) # (N, in_chan, H, W)
+    closest_images = torch.stack(closest_images, dim=0).to(device) # (N, in_chan, H, W)
+    closest_masks = torch.stack(closest_masks, dim=0).to(device) # (N, H, W)
+    # test_masks = torch.stack(test_masks, dim=0).numpy() # (N, H, W)
+
+    dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_masks)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=False)
+
+    # Step 2: Predict & Apply the warping field.
+    warp_predictor.eval()
+    pred_mask_list = []
+    print(f'Starting inference for {test_images.shape[0]} test images ...')
+    for iter_idx, (bclosest_images, btest_images, bclosest_masks) in enumerate(tqdm(dataloader)):
+        # [N, H, W] -> [N, 1, H, W]
+        if len(bclosest_masks.shape) == 3:
+            bclosest_masks = bclosest_masks[:, None, ...]
+
+        btest_images = btest_images.float().to(device)
+        bclosest_images = bclosest_images.float().to(device)
+        bclosest_masks = bclosest_masks.float().to(device)
+
+        # Predict the warping field.
+        warp_predicted = warp_predictor(torch.cat([bclosest_images, btest_images], dim=1))
+        warp_field_forward = warp_predicted[:, :2, ...]
+        warp_field_reverse = warp_predicted[:, 2:, ...]
+        #print(warp_field_forward.shape, warp_field_reverse.shape)
+
+        # Apply the warping field.
+        #images_U2A = warper(btest_images, flow=warp_field_forward)
+        pred_masks = warper(bclosest_masks, flow=warp_field_reverse)
+        bpred_mask_list = [m.cpu().detach().numpy() for m in pred_masks]
+        pred_mask_list.extend(bpred_mask_list)
+
+    assert len(pred_mask_list) == len(test_masks)
+    print('Completed inference.')
+    print('len(test_masks), len(pred_mask_list): ', len(test_masks), len(pred_mask_list))
+    
+    # Step 3: Evaluation. Compute Dice Coeff.
+    print(f'Computing Dice Coeff for {len(pred_mask_list)} total masks...')
+    dice_list = []
+    iou_list = []
+    for i in range(len(pred_mask_list)):
+        # print('test_masks[i].shape, pred_mask_list[i].shape: ', \
+        #       test_masks[i].shape, pred_mask_list[i].shape)
+        dice_list.append(
+            dice_coeff((test_masks[i] > 0.5).transpose(1, 2, 0),
+                       (pred_mask_list[i] > 0.5).transpose(1, 2, 0)))
+        iou_list.append(
+            IoU((test_masks[i] > 0.5).transpose(1, 2, 0),
+                       (pred_mask_list[i] > 0.5).transpose(1, 2, 0)))
+    
+    log('[Eval] Dice coeff (seg): %.3f \u00B1 %.3f.'
+        % (np.mean(dice_list), np.std(dice_list)),
+        filepath=config.log_dir,
+        to_console=True)
+    log('[Eval] IoU (seg): %.3f \u00B1 %.3f.'
+        % (np.mean(iou_list), np.std(iou_list)),
+        filepath=config.log_dir,
+        to_console=True)
 
     return
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
-    parser.add_argument('--mode', help='`train` or `test`?', default='train')
+    parser.add_argument('--mode', help='`train` or `test` or `infer` ?', default='train')
     parser.add_argument('--run_count', help='Provide this during testing!', default=None, type=int)
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
     parser.add_argument('--config',
@@ -442,7 +513,7 @@ if __name__ == '__main__':
     config.num_workers = args.num_workers
     config = parse_settings(config, log_settings=args.mode == 'train', run_count=args.run_count)
 
-    assert args.mode in ['train', 'test']
+    assert args.mode in ['train', 'test', 'infer']
 
     seed_everything(config.random_seed)
 
@@ -463,3 +534,5 @@ if __name__ == '__main__':
         test(config=config)
     elif args.mode == 'test':
         test(config=config)
+    elif args.mode == 'infer':
+        infer(config=config)

@@ -192,6 +192,15 @@ class AugmentedMoNuSegDataset(Dataset):
         print('Finished setting img_path_to_split dict and img_path_by_patch_id_and_split.\n')        
 
 
+def load_mask(path: str, target_dim: Tuple[int] = None) -> np.array:
+    ''' Load mask as numpy array from a path string.'''
+    mask = np.array(cv2.imread(path, cv2.IMREAD_UNCHANGED))
+
+    if target_dim is not None:
+        mask = np.array(cv2.resize(mask, target_dim))
+    
+    return mask # [W, H]
+
 
 def load_image(path: str, target_dim: Tuple[int] = None) -> np.array:
     ''' Load image as numpy array from a path string.'''
