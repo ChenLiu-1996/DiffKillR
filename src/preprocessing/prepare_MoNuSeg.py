@@ -38,11 +38,11 @@ def load_MoNuSeg_annotation(xml_path: str) -> list[np.ndarray]:
             continue
 
         vertices = region.findall('.//Vertex')
-        # Skip polygons with less than 3 vertices. 
+        # Skip polygons with less than 3 vertices.
         if len(vertices) < 3:
             cnt_invalid += 1
             continue
-        
+
         region_id = region.attrib['Id']
         region_id_list.append(int(region_id))
         verts = []
@@ -53,7 +53,7 @@ def load_MoNuSeg_annotation(xml_path: str) -> list[np.ndarray]:
             verts.append([y, x]) # FIXME!: check if this is correct. seems to have fixed the issue.
         verts = np.array(verts) # shape (n, 2)
         verts_list.append(verts)
-    
+
     print('Total polygons: %d, Invalid polygons: %d' % (len(regions), cnt_invalid))
 
     return (verts_list, region_id_list)
@@ -61,7 +61,7 @@ def load_MoNuSeg_annotation(xml_path: str) -> list[np.ndarray]:
 
 def annotation_to_label(verts_list: list[np.ndarray],
                         image: np.array,
-                        image_id: str, 
+                        image_id: str,
                         region_id_list: list[int]) -> Tuple[np.array, dict]:
     """
     Converts polygon annotations to a labeled image and calculates centroids of the polygons.
@@ -74,7 +74,7 @@ def annotation_to_label(verts_list: list[np.ndarray],
     - label: A binary image mask.
     - centroids: A list of centroids for each polygon/cell.
     """
-        
+
     label = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
     centroids = []
     for idx, cell in tqdm(enumerate(verts_list)):
@@ -82,7 +82,7 @@ def annotation_to_label(verts_list: list[np.ndarray],
 
         cell_mask = polygon2mask(label.shape, cell)
         label = np.maximum(label, cell_mask).astype(np.uint8)
-        
+
         # if image_id == 'TCGA-HE-7128-01Z-00-DX1':
         #     print('cell', cell)
         #     print('idx: ', idx, 'region_id: ', region_id_list[idx])
@@ -92,15 +92,15 @@ def annotation_to_label(verts_list: list[np.ndarray],
         centroid = skimage.measure.centroid(cell_mask)
         #centroid = np.argwhere(cell_mask > 0).sum(0) / (cell_mask > 0).sum()
         centroids.append((int(centroid[0]), int(centroid[1])))
-        
+
     return label, centroids
 
 
-def patchify_and_save(image, image_id, label, centroid_list, 
+def patchify_and_save(image, image_id, label, centroid_list,
                       patches_folder, patch_size):
     '''
     Divide the image and label into patches and save them.
-    
+
     image: original image.
     image_id: id of the image. This should be unique.
     label: binary image mask.
@@ -120,7 +120,7 @@ def patchify_and_save(image, image_id, label, centroid_list,
         os.makedirs(os.path.dirname(patch_image_path), exist_ok=True)
         os.makedirs(os.path.dirname(patch_label_path), exist_ok=True)
         os.makedirs(os.path.dirname(patch_colored_label_path), exist_ok=True)
- 
+
 
         h_begin = max(centroid[0] - patch_size // 2, 0)
         w_begin = max(centroid[1] - patch_size // 2, 0)
@@ -148,7 +148,7 @@ def patchify_and_save(image, image_id, label, centroid_list,
         patch_image = cv2.cvtColor(patch_image, cv2.COLOR_RGB2BGR)
         cv2.imwrite(patch_image_path, patch_image)
         cv2.imwrite(patch_label_path, patch_label)
-        
+
         # NOTE: Colored label only used for visual inspection!
         patch_label_colored = np.zeros_like(patch_image)
         patch_label_colored[patch_label == 1] = (0, 0, 255)
@@ -168,7 +168,7 @@ def process_MoNuSeg_data():
     #import pdb; pdb.set_trace()
 
     all_verts_list = []
-    
+
     for i, annotation_file in tqdm(enumerate(annotation_files)):
         image_id = os.path.basename(annotation_file).split('.')[0]
         # debug
@@ -241,10 +241,10 @@ def process_MoNuSeg_data():
     save_path = '../../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size, patch_size)
     plt.savefig(save_path + 'histogram.png')
 
-    
+
     return
 
-def process_test_MoNuSeg_data():
+def process_MoNuSeg_data():
     folder = '../../external_data/Chen_2024_MoNuSeg/MoNuSegTestData'
 
     annotation_files = sorted(glob(f'{folder}/*.xml'))
@@ -326,7 +326,6 @@ def process_test_MoNuSeg_data():
     plt.savefig(save_path + 'histogram.png')
 
 if __name__ == '__main__':
-    #process_MoNuSeg_data()
-    
-    process_test_MoNuSeg_data()
-    
+    patch_size = 96
+    process_MoNuSeg_data()
+

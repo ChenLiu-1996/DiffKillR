@@ -43,6 +43,11 @@ python -m pip install dipy
 # MoNuSeg
 python -m pip install xmltodict
 
+# PSM
+python -m pip install tensorboardX
+python -m pip install shapely
+python -m pip install ml_collections
+python -m pip install ttach
 
 # Export CuDNN
 echo 'CUDNN_PATH=$(dirname $(python -c "import nvidia.cudnn;print(nvidia.cudnn.__file__)"))' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
