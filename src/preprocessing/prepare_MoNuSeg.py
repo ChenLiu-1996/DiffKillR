@@ -156,7 +156,7 @@ def patchify_and_save(image, image_id, label, centroid_list,
 
     return
 
-def process_MoNuSeg_data():
+def process_MoNuSeg_Traindata():
     '''
         images are in .tif format, RGB, 1000x1000.
     '''
@@ -244,7 +244,7 @@ def process_MoNuSeg_data():
 
     return
 
-def process_MoNuSeg_data():
+def process_MoNuSeg_Testdata():
     folder = '../../external_data/Chen_2024_MoNuSeg/MoNuSegTestData'
 
     annotation_files = sorted(glob(f'{folder}/*.xml'))
@@ -327,5 +327,7 @@ def process_MoNuSeg_data():
 
 if __name__ == '__main__':
     patch_size = 96
-    process_MoNuSeg_data()
+    
+    process_MoNuSeg_Traindata()
+    process_MoNuSeg_Testdata()
 

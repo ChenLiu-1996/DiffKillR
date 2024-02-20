@@ -1,7 +1,11 @@
 '''
-Read annotations from json file, find the label maps, and patchify around them.
+Read the patches from the MoNuSeg2018TrainData_patch_96x96 folder.
+
+Perform augmentation and save the augmented patches to the 
+MoNuSeg2018TrainData_augmented_patch_32x32 folder, for each augmentation method.
 
 '''
+
 import cv2
 import os
 import numpy as np
@@ -10,6 +14,7 @@ from glob import glob
 from tqdm import tqdm
 import sys
 import argparse
+from Metas import Organ2FileID
 
 import_dir = '/'.join(os.path.realpath(__file__).split('/')[:-2])
 sys.path.insert(0, import_dir + '/augmentation/')
@@ -108,6 +113,7 @@ def main():
     argparser.add_argument('--augmented_patch_size', type=int, default=32)
     argparser.add_argument('--percentage', type=float, default=0.01)
     argparser.add_argument('--multiplier', type=int, default=2)
+    argparser.add_argument('--organ', type=str, default='Colon')
 
     args = argparser.parse_args()
     patch_size = args.patch_size
@@ -120,22 +126,50 @@ def main():
     image_path_list = sorted(glob(patches_folder + 'image/*.png'))
     label_path_list = sorted(glob(patches_folder + 'label/*.png'))
 
-    # Subset of the data.
-    #percentage = 0.01 # 1% of the data.
+    # Subset of the data by organ.
+    if args.organ in Organ2FileID:
+        file_ids = Organ2FileID[args.organ]['train']
+        image_path_list = [f for f in image_path_list if any(file_id in f for file_id in file_ids)]
+        label_path_list = [f for f in label_path_list if any(file_id in f for file_id in file_ids)]
+    else:
+        print('Organ not found:', args.organ)
+        return
+
+    # Subset of the data by percentage.
+    percentage = args.percentage
     total_cnt = int(len(image_path_list) * percentage)
+    num_patches_per_image = total_cnt // len(file_ids)
 
-    print('Total number of patches:', len(image_path_list),\
-          'Percentage:', percentage, 'Total count:', total_cnt)
+    # uniform sampling among this organ images
+    file_ids2cnt = {file_id: 0 for file_id in file_ids}
+    subset_image_path_list = []
+    for i in range(len(image_path_list)):
+        file_id = os.path.basename(image_path_list[i]).split('_')[0]
+        if file_ids2cnt[file_id] < num_patches_per_image:
+            subset_image_path_list.append(image_path_list[i])
+            file_ids2cnt[file_id] += 1
+    
+    if len(subset_image_path_list) < total_cnt:
+        for image_path in image_path_list:
+            if len(subset_image_path_list) >= total_cnt:
+                break
+            if image_path not in subset_image_path_list:
+                subset_image_path_list.append(image_path)
+    subset_label_path_list = [f.replace('image', 'label') for f in subset_image_path_list]
 
-    augmented_folder = '../../data/%.3f_MoNuSeg2018TrainData_augmented_patch_%dx%d' % (
-        percentage, augmented_patch_size, augmented_patch_size)
+    print(f'All patches: {len(image_path_list)}, \
+          percentage: {percentage}; \
+            {args.organ} subset count: {total_cnt}, {len(subset_image_path_list)}')
+
+    augmented_folder = '../../data/%.3f_%s_MoNuSeg2018TrainData_augmented_patch_%dx%d' % (
+        percentage, args.organ, augmented_patch_size, augmented_patch_size)
 
     prefix_list = []
 
-    # Read the images and labels. Record the prefix and count the numbers for each cell type.
+    # Read the images and labels.
     # e.g. image path : 'TCGA-18-5592-01Z-00-DX1_H-1_W378_patch_96x96.png'
     # prefix: 'TCGA-18-5592-01Z-00-DX1_H-1_W378'
-    for image_path, label_path in zip(image_path_list, label_path_list):
+    for image_path, label_path in zip(subset_image_path_list, subset_label_path_list):
         prefix = os.path.basename(image_path).replace(
             '_patch_%sx%s.png' % (patch_size, patch_size), '')
         assert prefix == os.path.basename(label_path).replace(
@@ -149,14 +183,10 @@ def main():
     # Use a single data structure to hold all information for augmentation.
     augmentation_tuple_list = []
 
-    prefix_list = prefix_list[:int(total_cnt)]
-    image_path_list = image_path_list[:int(total_cnt)]
-    label_path_list = label_path_list[:int(total_cnt)]
-
     for prefix, image_path, label_path in \
-        zip(prefix_list, image_path_list, label_path_list):
-        augmentation_tuple_list.append(
-            (prefix, image_path, label_path, multiplier))
+        zip(prefix_list, subset_image_path_list, subset_label_path_list):
+        augmentation_tuple_list.append((prefix, image_path, label_path, multiplier))
+    
     augmentation_methods = ['rotation',
                             'uniform_stretch',
                             'directional_stretch',
@@ -172,7 +202,8 @@ def main():
     print('Augmentation tuple list[:10]:')
     print(len(augmentation_tuple_list), augmentation_tuple_list[:10])
     print('Total number of patches:', \
-          len(augmentation_tuple_list) * multiplier * len(augmentation_methods))
+          len(augmentation_tuple_list) * multiplier * len(augmentation_methods) \
+            + len(augmentation_tuple_list))
 
 
 if __name__ == '__main__':

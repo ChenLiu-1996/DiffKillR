@@ -7,6 +7,28 @@
 
 ## Preparation
 
+## Train on MoNuSeg
+```
+# prepare data
+cd src/preprocessing/
+python prepare_MoNuseg.py # This will extract annotations & patches from the MoNuSeg dataset
+python augment_MoNuseg.py # This will subsample and augment the dataset
+
+# train AIAE
+cd src/
+python train_unsupervised_AE.py --config ../config/MoNuSeg_simCLR.yaml --mode train
+
+# infer matched pairs using AIAE
+python train_unsupervised_AE.py --config ../config/MoNuSeg_simCLR.yaml --mode infer
+
+# train Reg2Seg using matched pairs
+python train_reg2seg.py --config ../config/MoNuSeg_reg2seg.yaml --mode train
+
+# infer segmentation using Reg2Seg
+python train_reg2seg.py --config ../config/MoNuSeg_reg2seg.yaml --mode infer
+
+```
+
 ### External Dataset
 
 #### TissueNet
