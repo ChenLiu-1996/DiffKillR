@@ -106,7 +106,7 @@ def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--patch_size', type=int, default=96)
     argparser.add_argument('--augmented_patch_size', type=int, default=32)
-    argparser.add_argument('--percentage', type=float, default=0.1)
+    argparser.add_argument('--percentage', type=float, default=0.01)
     argparser.add_argument('--multiplier', type=int, default=2)
 
     args = argparser.parse_args()
@@ -121,7 +121,7 @@ def main():
     label_path_list = sorted(glob(patches_folder + 'label/*.png'))
 
     # Subset of the data.
-    #percentage = 0.1 # 1% of the data.
+    #percentage = 0.01 # 1% of the data.
     total_cnt = int(len(image_path_list) * percentage)
 
     print('Total number of patches:', len(image_path_list),\
