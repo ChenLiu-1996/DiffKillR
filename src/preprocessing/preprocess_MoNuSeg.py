@@ -277,7 +277,109 @@ def subset_MoNuSeg_data_by_cancer():
 
     return
 
+def subset_patchify_MoNuSeg_data_by_cancer(imsize: int):
+    train_image_folder = '../../external_data/MoNuSeg/MoNuSegTrainData/images/'
+    train_mask_folder = '../../external_data/MoNuSeg/MoNuSegTrainData/masks/'
+    test_image_folder = '../../external_data/MoNuSeg/MoNuSegTestData/images/'
+    test_mask_folder = '../../external_data/MoNuSeg/MoNuSegTestData/masks/'
+
+    target_folder = '../../external_data/MoNuSeg/MoNuSegByCancer_%sx%s/' % (imsize, imsize)
+
+    for cancer_type in ['breast', 'colon', 'prostate']:
+        if cancer_type == 'breast':
+            train_list = [
+                'TCGA-A7-A13E-01Z-00-DX1',
+                'TCGA-A7-A13F-01Z-00-DX1',
+                'TCGA-AR-A1AK-01Z-00-DX1',
+                'TCGA-AR-A1AS-01Z-00-DX1',
+                'TCGA-E2-A1B5-01Z-00-DX1',
+                'TCGA-E2-A14V-01Z-00-DX1',
+            ]
+            test_list = [
+                'TCGA-AC-A2FO-01A-01-TS1',
+                'TCGA-AO-A0J2-01A-01-BSA',
+            ]
+        if cancer_type == 'colon':
+            train_list = [
+                'TCGA-AY-A8YK-01A-01-TS1',
+                'TCGA-NH-A8F7-01A-01-TS1',
+            ]
+            test_list = [
+                'TCGA-A6-6782-01A-01-BS1'
+            ]
+        if cancer_type == 'prostate':
+            train_list = [
+                'TCGA-G9-6336-01Z-00-DX1',
+                'TCGA-G9-6348-01Z-00-DX1',
+                'TCGA-G9-6356-01Z-00-DX1',
+                'TCGA-G9-6363-01Z-00-DX1',
+                'TCGA-CH-5767-01Z-00-DX1',
+                'TCGA-G9-6362-01Z-00-DX1'
+            ]
+            test_list = [
+                'TCGA-EJ-A46H-01A-03-TSC',
+                'TCGA-HC-7209-01A-01-TS1'
+            ]
+
+        for train_item in tqdm(train_list):
+            image_path_from = train_image_folder + train_item + '.png'
+            mask_path_from = train_mask_folder + train_item + '.png'
+
+            h, w = 0, 0
+            image = cv2.imread(image_path_from)
+            mask = cv2.imread(mask_path_from)
+            image_h, image_w = image.shape[:2]
+
+            while h < image_h and w < image_w:
+                image_path_to = target_folder + '/' + cancer_type + '/train/images/' + train_item + '_H%sW%s.png' % (h, w)
+                mask_path_to = target_folder + '/' + cancer_type + '/train/masks/' + train_item + '_H%sW%s.png' % (h, w)
+                os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+
+                h_begin = max(h, 0)
+                w_begin = max(w, 0)
+                h_end = min(h + imsize, image_h)
+                w_end = min(w + imsize, image_w)
+
+                image_patch = image[h_begin:h_end, w_begin:w_end, :]
+                mask_patch = mask[h_begin:h_end, w_begin:w_end]
+
+                cv2.imwrite(image_path_to, image_patch)
+                cv2.imwrite(mask_path_to, mask_patch)
+                h += imsize
+                w += imsize
+
+        for test_item in tqdm(test_list):
+            image_path_from = test_image_folder + test_item + '.png'
+            mask_path_from = test_mask_folder + test_item + '.png'
+
+            h, w = 0, 0
+            image = cv2.imread(image_path_from)
+            mask = cv2.imread(mask_path_from)
+            image_h, image_w = image.shape[:2]
+
+            while h < image_h and w < image_w:
+                image_path_to = target_folder + '/' + cancer_type + '/test/images/' + test_item + '_H%sW%s.png' % (h, w)
+                mask_path_to = target_folder + '/' + cancer_type + '/test/masks/' + test_item + '_H%sW%s.png' % (h, w)
+                os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+
+                h_begin = max(h, 0)
+                w_begin = max(w, 0)
+                h_end = min(h + imsize, image_h)
+                w_end = min(w + imsize, image_w)
+
+                image_patch = image[h_begin:h_end, w_begin:w_end, :]
+                mask_patch = mask[h_begin:h_end, w_begin:w_end]
+
+                cv2.imwrite(image_path_to, image_patch)
+                cv2.imwrite(mask_path_to, mask_patch)
+                h += imsize
+                w += imsize
+
+    return
 
 if __name__ == '__main__':
     process_MoNuSeg_data()
     subset_MoNuSeg_data_by_cancer()
+    subset_patchify_MoNuSeg_data_by_cancer(imsize=200)
