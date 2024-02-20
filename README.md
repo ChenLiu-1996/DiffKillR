@@ -19,6 +19,12 @@ python preprocess_tissuenet.py
 ```
 
 
+#### MoNuSeg
+```
+cd external_data/MoNuSeg
+```
+
+
 ### Environment
 We developed the codebase in a miniconda environment.
 Tested on Python 3.9.13 + PyTorch 1.12.1.
@@ -34,6 +40,14 @@ conda install -c conda-forge libstdcxx-ng=12
 python -m pip install antspyx
 python -m pip install dipy
 
+# MoNuSeg
+python -m pip install xmltodict
+
+# PSM
+python -m pip install tensorboardX
+python -m pip install shapely
+python -m pip install ml_collections
+python -m pip install ttach
 
 # Export CuDNN
 echo 'CUDNN_PATH=$(dirname $(python -c "import nvidia.cudnn;print(nvidia.cudnn.__file__)"))' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
