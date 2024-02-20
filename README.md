@@ -51,16 +51,20 @@ cd external_data/MoNuSeg
 We developed the codebase in a miniconda environment.
 Tested on Python 3.9.13 + PyTorch 1.12.1.
 How we created the conda environment:
-**Some packages may no longer be required.**
 ```
-conda create --name cellseg pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch
+# Optional: Update to libmamba solver.
+conda update -n base conda
+conda install -n base conda-libmamba-solver
+conda config --set solver libmamba
+
+conda create --name cellseg pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch -c nvidia -c anaconda -c conda-forge
+
 conda activate cellseg
 conda install -c anaconda scikit-image scikit-learn pillow matplotlib seaborn tqdm
-python -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.12
-python -m pip install -U phate
-conda install -c conda-forge libstdcxx-ng=12
+# conda install -c conda-forge libstdcxx-ng=12
 python -m pip install antspyx
-python -m pip install dipy
+# python -m pip install dipy
+python -m pip install opencv-python
 
 # MoNuSeg
 python -m pip install xmltodict
@@ -72,10 +76,9 @@ python -m pip install ml_collections
 python -m pip install ttach
 
 # Export CuDNN
-echo 'CUDNN_PATH=$(dirname $(python -c "import nvidia.cudnn;print(nvidia.cudnn.__file__)"))' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
-echo 'export LD_LIBRARY_PATH=$CONDA_PREFIX/lib/:$CUDNN_PATH/lib:$LD_LIBRARY_PATH' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+# echo 'CUDNN_PATH=$(dirname $(python -c "import nvidia.cudnn;print(nvidia.cudnn.__file__)"))' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
+# echo 'export LD_LIBRARY_PATH=$CONDA_PREFIX/lib/:$CUDNN_PATH/lib:$LD_LIBRARY_PATH' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 source $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
-python -m pip install opencv-python
 
 ```
 
