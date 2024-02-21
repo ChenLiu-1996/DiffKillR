@@ -325,57 +325,58 @@ def subset_patchify_MoNuSeg_data_by_cancer(imsize: int):
             image_path_from = train_image_folder + train_item + '.png'
             mask_path_from = train_mask_folder + train_item + '.png'
 
-            h, w = 0, 0
             image = cv2.imread(image_path_from)
             mask = cv2.imread(mask_path_from)
             image_h, image_w = image.shape[:2]
 
-            while h < image_h and w < image_w:
-                image_path_to = target_folder + '/' + cancer_type + '/train/images/' + train_item + '_H%sW%s.png' % (h, w)
-                mask_path_to = target_folder + '/' + cancer_type + '/train/masks/' + train_item + '_H%sW%s.png' % (h, w)
-                os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
-                os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+            for h_chunk in range(image_h // imsize):
+                for w_chunk in range(image_w // imsize):
+                    h = h_chunk * imsize
+                    w = w_chunk * imsize
+                    image_path_to = target_folder + '/' + cancer_type + '/train/images/' + train_item + '_H%sW%s.png' % (h, w)
+                    mask_path_to = target_folder + '/' + cancer_type + '/train/masks/' + train_item + '_H%sW%s.png' % (h, w)
+                    os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                    os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
 
-                h_begin = max(h, 0)
-                w_begin = max(w, 0)
-                h_end = min(h + imsize, image_h)
-                w_end = min(w + imsize, image_w)
+                    h_begin = max(h, 0)
+                    w_begin = max(w, 0)
+                    h_end = min(h + imsize, image_h)
+                    w_end = min(w + imsize, image_w)
 
-                image_patch = image[h_begin:h_end, w_begin:w_end, :]
-                mask_patch = mask[h_begin:h_end, w_begin:w_end]
+                    image_patch = image[h_begin:h_end, w_begin:w_end, :]
+                    mask_patch = mask[h_begin:h_end, w_begin:w_end]
 
-                cv2.imwrite(image_path_to, image_patch)
-                cv2.imwrite(mask_path_to, mask_patch)
-                h += imsize
-                w += imsize
+                    cv2.imwrite(image_path_to, image_patch)
+                    cv2.imwrite(mask_path_to, mask_patch)
 
         for test_item in tqdm(test_list):
             image_path_from = test_image_folder + test_item + '.png'
             mask_path_from = test_mask_folder + test_item + '.png'
 
-            h, w = 0, 0
             image = cv2.imread(image_path_from)
             mask = cv2.imread(mask_path_from)
             image_h, image_w = image.shape[:2]
 
-            while h < image_h and w < image_w:
-                image_path_to = target_folder + '/' + cancer_type + '/test/images/' + test_item + '_H%sW%s.png' % (h, w)
-                mask_path_to = target_folder + '/' + cancer_type + '/test/masks/' + test_item + '_H%sW%s.png' % (h, w)
-                os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
-                os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+            for h_chunk in range(image_h // imsize):
+                for w_chunk in range(image_w // imsize):
+                    h = h_chunk * imsize
+                    w = w_chunk * imsize
 
-                h_begin = max(h, 0)
-                w_begin = max(w, 0)
-                h_end = min(h + imsize, image_h)
-                w_end = min(w + imsize, image_w)
+                    image_path_to = target_folder + '/' + cancer_type + '/test/images/' + test_item + '_H%sW%s.png' % (h, w)
+                    mask_path_to = target_folder + '/' + cancer_type + '/test/masks/' + test_item + '_H%sW%s.png' % (h, w)
+                    os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                    os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
 
-                image_patch = image[h_begin:h_end, w_begin:w_end, :]
-                mask_patch = mask[h_begin:h_end, w_begin:w_end]
+                    h_begin = max(h, 0)
+                    w_begin = max(w, 0)
+                    h_end = min(h + imsize, image_h)
+                    w_end = min(w + imsize, image_w)
 
-                cv2.imwrite(image_path_to, image_patch)
-                cv2.imwrite(mask_path_to, mask_patch)
-                h += imsize
-                w += imsize
+                    image_patch = image[h_begin:h_end, w_begin:w_end, :]
+                    mask_patch = mask[h_begin:h_end, w_begin:w_end]
+
+                    cv2.imwrite(image_path_to, image_patch)
+                    cv2.imwrite(mask_path_to, mask_patch)
 
     return
 

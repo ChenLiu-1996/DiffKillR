@@ -1,28 +1,13 @@
 import argparse
 import lib
 import torch
-import torchvision
 from torch import nn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
-from torchvision import transforms
-from torchvision.utils import save_image
-from torchvision.datasets import MNIST
-import torch.nn.functional as F
 import os
-import matplotlib.pyplot as plt
-import torch.utils.data as data
-from PIL import Image
-import numpy as np
-from torchvision.utils import save_image
 import torch
-import torch.nn.init as init
 from utils import JointTransform2D, ImageToImage2D, Image2D
-from metrics import jaccard_index, f1_score, LogNLLLoss,classwise_f1
-from utils import chk_mkdir, Logger, MetricList
 import cv2
-from functools import partial
-from random import randint
 
 
 parser = argparse.ArgumentParser(description='MedT')
@@ -45,7 +30,7 @@ parser.add_argument('--val_dataset', type=str)
 parser.add_argument('--save_freq', type=int,default = 5)
 parser.add_argument('--modelname', default='off', type=str,
                     help='name of the model to load')
-parser.add_argument('--cuda', default="on", type=str, 
+parser.add_argument('--cuda', default="on", type=str,
                     help='switch on/off cuda option (default: off)')
 
 parser.add_argument('--direc', default='./results', type=str,
@@ -59,8 +44,6 @@ args = parser.parse_args()
 
 direc = args.direc
 gray_ = args.gray
-aug = args.aug
-direc = args.direc
 modelname = args.modelname
 imgsize = args.imgsize
 loaddirec = args.loaddirec
@@ -85,65 +68,58 @@ predict_dataset = Image2D(args.val_dataset)
 dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
 valloader = DataLoader(val_dataset, 1, shuffle=True)
 
-device = torch.device("cuda")
+device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
 
-if modelname == "axialunet":
-    model = lib.models.axialunet(img_size = imgsize, imgchan = imgchant)
-elif modelname == "MedT":
-    model = lib.models.axialnet.MedT(img_size = imgsize, imgchan = imgchant)
-elif modelname == "gatedaxialunet":
-    model = lib.models.axialnet.gated(img_size = imgsize, imgchan = imgchant)
-elif modelname == "logo":
-    model = lib.models.axialnet.logo(img_size = imgsize, imgchan = imgchant)
+assert modelname == "UNet"
+
+model = torch.hub.load(
+        'mateuszbuda/brain-segmentation-pytorch',
+        'unet',
+        in_channels=3,
+        out_channels=1,
+        init_features=16,
+        pretrained=False)
 
 if torch.cuda.device_count() > 1:
-  print("Let's use", torch.cuda.device_count(), "GPUs!")
-  # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
-  model = nn.DataParallel(model,device_ids=[0,1]).cuda()
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
+    model = nn.DataParallel(model,device_ids=[0,1]).cuda()
 model.to(device)
 
-model.load_state_dict(torch.load(loaddirec))
-model.eval()
+model.load_state_dict(torch.load(loaddirec, map_location=device))
+# model.eval()
 
 
 for batch_idx, (X_batch, y_batch, *rest) in enumerate(valloader):
-    # print(batch_idx)
-    if isinstance(rest[0][0], str):
-                image_filename = rest[0][0]
-    else:
-                image_filename = '%s.png' % str(batch_idx + 1).zfill(3)
 
-    X_batch = Variable(X_batch.to(device='cuda'))
-    y_batch = Variable(y_batch.to(device='cuda'))
+    if isinstance(rest[0][0], str):
+        image_filename = rest[0][0]
+    else:
+        image_filename = '%s.png' % str(batch_idx + 1).zfill(3)
+
+    X_batch = Variable(X_batch.to(device))
+    y_batch = Variable(y_batch.to(device))
 
     y_out = model(X_batch)
 
-    tmp2 = y_batch.detach().cpu().numpy()
-    tmp = y_out.detach().cpu().numpy()
-    tmp[tmp>=0.5] = 1
-    tmp[tmp<0.5] = 0
-    tmp2[tmp2>0] = 1
-    tmp2[tmp2<=0] = 0
-    tmp2 = tmp2.astype(int)
-    tmp = tmp.astype(int)
+    mask_true = y_batch.detach().cpu().numpy()
+    mask_pred = y_out.detach().cpu().numpy()
+    mask_pred[mask_pred>=0.5] = 1
+    mask_pred[mask_pred<0.5] = 0
+    mask_true[mask_true>0] = 1
+    mask_true[mask_true<=0] = 0
 
-    # print(np.unique(tmp2))
-    yHaT = tmp
-    yval = tmp2
+    yval = (mask_true * 255).astype(int)
+    yHaT = (mask_pred * 255).astype(int)
 
-    epsilon = 1e-20
-    
-    del X_batch, y_batch,tmp,tmp2, y_out
+    del X_batch, y_batch,mask_pred, mask_true, y_out
 
-    yHaT[yHaT==1] =255
-    yval[yval==1] =255
     fulldir = direc+"/"
-    
+
     if not os.path.isdir(fulldir):
-        
         os.makedirs(fulldir)
-   
-    cv2.imwrite(fulldir+image_filename, yHaT[0,1,:,:])
+
+    cv2.imwrite(fulldir+image_filename, yHaT[0,0,:,:])
 
 
 
