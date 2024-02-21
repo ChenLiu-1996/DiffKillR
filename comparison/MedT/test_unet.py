@@ -1,5 +1,4 @@
 import argparse
-import lib
 import torch
 from torch import nn
 from torch.autograd import Variable
@@ -10,7 +9,7 @@ from utils import JointTransform2D, ImageToImage2D, Image2D
 import cv2
 
 
-parser = argparse.ArgumentParser(description='MedT')
+parser = argparse.ArgumentParser(description='UNet')
 parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                     help='number of data loading workers (default: 8)')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
@@ -88,6 +87,8 @@ model.to(device)
 
 model.load_state_dict(torch.load(loaddirec, map_location=device))
 # model.eval()
+# NOTE: Somehow turning on .eval() will make the upper-left
+# corner prediction very wrong. Need to investigate at some point.
 
 
 for batch_idx, (X_batch, y_batch, *rest) in enumerate(valloader):

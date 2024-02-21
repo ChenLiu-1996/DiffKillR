@@ -1,5 +1,4 @@
 import argparse
-import lib
 import torch
 from torch import nn
 from torch.autograd import Variable
@@ -8,9 +7,10 @@ import os
 import torch
 from utils import JointTransform2D, ImageToImage2D, Image2D
 import cv2
+import monai
 
 
-parser = argparse.ArgumentParser(description='MedT')
+parser = argparse.ArgumentParser(description='nnUNet')
 parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                     help='number of data loading workers (default: 8)')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
@@ -70,15 +70,19 @@ valloader = DataLoader(val_dataset, 1, shuffle=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
 
-assert modelname == "UNet"
+assert modelname == "nnUNet"
 
-model = torch.hub.load(
-        'mateuszbuda/brain-segmentation-pytorch',
-        'unet',
+model = torch.nn.Sequential(
+    monai.networks.nets.DynUNet(
+        spatial_dims=2,
         in_channels=3,
         out_channels=1,
-        init_features=16,
-        pretrained=False)
+        kernel_size=[5, 5, 5, 5],
+        filters=[16, 32, 64, 128],
+        strides=[1, 1, 1, 1],
+        upsample_kernel_size=[1, 1, 1, 1]),
+    torch.nn.Sigmoid()
+)
 
 if torch.cuda.device_count() > 1:
     print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -88,6 +92,8 @@ model.to(device)
 
 model.load_state_dict(torch.load(loaddirec, map_location=device))
 # model.eval()
+# NOTE: Somehow turning on .eval() will make the upper-left
+# corner prediction very wrong. Need to investigate at some point.
 
 
 for batch_idx, (X_batch, y_batch, *rest) in enumerate(valloader):

@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from .utils import *
 import pdb
 import matplotlib.pyplot as plt
- 
+
 import random
 
 
@@ -65,12 +65,12 @@ class AxialAttention(nn.Module):
         # Calculate position embedding
         all_embeddings = torch.index_select(self.relative, 1, self.flatten_index).view(self.group_planes * 2, self.kernel_size, self.kernel_size)
         q_embedding, k_embedding, v_embedding = torch.split(all_embeddings, [self.group_planes // 2, self.group_planes // 2, self.group_planes], dim=0)
-        
+
         qr = torch.einsum('bgci,cij->bgij', q, q_embedding)
         kr = torch.einsum('bgci,cij->bgij', k, k_embedding).transpose(2, 3)
-        
+
         qk = torch.einsum('bgci, bgcj->bgij', q, k)
-        
+
         stacked_similarity = torch.cat([qk, qr, kr], dim=1)
         stacked_similarity = self.bn_similarity(stacked_similarity).view(N * W, 3, self.groups, H, H).sum(dim=1)
         #stacked_similarity = self.bn_qr(qr) + self.bn_kr(kr) + self.bn_qk(qk)
@@ -119,9 +119,9 @@ class AxialAttention_dynamic(nn.Module):
 
         # Priority on encoding
 
-        ## Initial values 
+        ## Initial values
 
-        self.f_qr = nn.Parameter(torch.tensor(0.1),  requires_grad=False) 
+        self.f_qr = nn.Parameter(torch.tensor(0.1),  requires_grad=False)
         self.f_kr = nn.Parameter(torch.tensor(0.1),  requires_grad=False)
         self.f_sve = nn.Parameter(torch.tensor(0.1),  requires_grad=False)
         self.f_sv = nn.Parameter(torch.tensor(1.0),  requires_grad=False)
@@ -429,7 +429,7 @@ class ResAxialAttentionUNet(nn.Module):
                                        dilate=replace_stride_with_dilation[1])
         self.layer4 = self._make_layer(block, int(1024 * s), layers[3], stride=2, kernel_size=(img_size//8),
                                        dilate=replace_stride_with_dilation[2])
-        
+
         # Decoder
         self.decoder1 = nn.Conv2d(int(1024 *2*s)      ,        int(1024*2*s), kernel_size=3, stride=2, padding=1)
         self.decoder2 = nn.Conv2d(int(1024  *2*s)     , int(1024*s), kernel_size=3, stride=1, padding=1)
@@ -455,7 +455,7 @@ class ResAxialAttentionUNet(nn.Module):
 
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample, groups=self.groups,
-                            base_width=self.base_width, dilation=previous_dilation, 
+                            base_width=self.base_width, dilation=previous_dilation,
                             norm_layer=norm_layer, kernel_size=kernel_size))
         self.inplanes = planes * block.expansion
         if stride != 1:
@@ -469,7 +469,7 @@ class ResAxialAttentionUNet(nn.Module):
         return nn.Sequential(*layers)
 
     def _forward_impl(self, x):
-        
+
         # AxialAttention Encoder
         # pdb.set_trace()
         x = self.conv1(x)
@@ -510,7 +510,7 @@ class medt_net(nn.Module):
 
     def __init__(self, block, block_2, layers, num_classes=2, zero_init_residual=True,
                  groups=8, width_per_group=64, replace_stride_with_dilation=None,
-                 norm_layer=None, s=0.125, img_size = 128,imgchan = 3):
+                 norm_layer=None, s=0.125, img_size = 128, imgchan = 3):
         super(medt_net, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
@@ -543,7 +543,7 @@ class medt_net(nn.Module):
         #                                dilate=replace_stride_with_dilation[1])
         # self.layer4 = self._make_layer(block, int(1024 * s), layers[3], stride=2, kernel_size=(img_size//8),
         #                                dilate=replace_stride_with_dilation[2])
-        
+
         # Decoder
         # self.decoder1 = nn.Conv2d(int(1024 *2*s)      ,        int(1024*2*s), kernel_size=3, stride=2, padding=1)
         # self.decoder2 = nn.Conv2d(int(1024  *2*s)     , int(1024*s), kernel_size=3, stride=1, padding=1)
@@ -576,7 +576,7 @@ class medt_net(nn.Module):
                                        dilate=replace_stride_with_dilation[1])
         self.layer4_p = self._make_layer(block_2, int(1024 * s), layers[3], stride=2, kernel_size=(img_size_p//8),
                                        dilate=replace_stride_with_dilation[2])
-        
+
         # Decoder
         self.decoder1_p = nn.Conv2d(int(1024 *2*s)      ,        int(1024*2*s), kernel_size=3, stride=2, padding=1)
         self.decoder2_p = nn.Conv2d(int(1024  *2*s)     , int(1024*s), kernel_size=3, stride=1, padding=1)
@@ -604,7 +604,7 @@ class medt_net(nn.Module):
 
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample, groups=self.groups,
-                            base_width=self.base_width, dilation=previous_dilation, 
+                            base_width=self.base_width, dilation=previous_dilation,
                             norm_layer=norm_layer, kernel_size=kernel_size))
         self.inplanes = planes * block.expansion
         if stride != 1:
@@ -630,7 +630,7 @@ class medt_net(nn.Module):
         x = self.bn3(x)
         # x = F.max_pool2d(x,2,2)
         x = self.relu(x)
-        
+
         # x = self.maxpool(x)
         # pdb.set_trace()
         x1 = self.layer1(x)
@@ -651,13 +651,13 @@ class medt_net(nn.Module):
         x = torch.add(x, x1)
         x = F.relu(F.interpolate(self.decoder5(x) , scale_factor=(2,2), mode ='bilinear'))
         # print(x.shape)
-        
-        # end of full image training 
+
+        # end of full image training
 
         # y_out = torch.ones((1,2,128,128))
         x_loc = x.clone()
         # x = F.relu(F.interpolate(self.decoder5(x) , scale_factor=(2,2), mode ='bilinear'))
-        #start 
+        #start
         for i in range(0,4):
             for j in range(0,4):
 
@@ -676,7 +676,7 @@ class medt_net(nn.Module):
                 x_p = self.bn3_p(x_p)
                 # x = F.max_pool2d(x,2,2)
                 x_p = self.relu(x_p)
-                
+
                 # x = self.maxpool(x)
                 # pdb.set_trace()
                 x1_p = self.layer1_p(x_p)
@@ -686,7 +686,7 @@ class medt_net(nn.Module):
                 x3_p = self.layer3_p(x2_p)
                 # # print(x3.shape)
                 x4_p = self.layer4_p(x3_p)
-                
+
                 x_p = F.relu(F.interpolate(self.decoder1_p(x4_p), scale_factor=(2,2), mode ='bilinear'))
                 x_p = torch.add(x_p, x4_p)
                 x_p = F.relu(F.interpolate(self.decoder2_p(x_p) , scale_factor=(2,2), mode ='bilinear'))
@@ -696,12 +696,11 @@ class medt_net(nn.Module):
                 x_p = F.relu(F.interpolate(self.decoder4_p(x_p) , scale_factor=(2,2), mode ='bilinear'))
                 x_p = torch.add(x_p, x1_p)
                 x_p = F.relu(F.interpolate(self.decoder5_p(x_p) , scale_factor=(2,2), mode ='bilinear'))
-                
+
                 x_loc[:,:,32*i:32*(i+1),32*j:32*(j+1)] = x_p
 
         x = torch.add(x,x_loc)
         x = F.relu(self.decoderf(x))
-        
         x = self.adjust(F.relu(x))
 
         # pdb.set_trace()

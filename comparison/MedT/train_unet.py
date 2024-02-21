@@ -1,5 +1,3 @@
-# Code for MedT
-
 import torch
 import lib
 import argparse
@@ -15,7 +13,7 @@ import cv2
 from tqdm import tqdm
 
 
-parser = argparse.ArgumentParser(description='MedT')
+parser = argparse.ArgumentParser(description='UNet')
 parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                     help='number of data loading workers (default: 8)')
 parser.add_argument('--epochs', default=400, type=int, metavar='N',
@@ -34,7 +32,7 @@ parser.add_argument('--train_dataset', required=True, type=str)
 parser.add_argument('--val_dataset', type=str)
 parser.add_argument('--save_freq', type=int,default = 10)
 
-parser.add_argument('--modelname', default='MedT', type=str,
+parser.add_argument('--modelname', default='UNet', type=str,
                     help='type of model')
 parser.add_argument('--cuda', default="on", type=str,
                     help='switch on/off cuda option (default: off)')
@@ -44,7 +42,7 @@ parser.add_argument('--load', default='default', type=str,
                     help='load a pretrained model')
 parser.add_argument('--save', default='default', type=str,
                     help='save the model')
-parser.add_argument('--direc', default='./medt', type=str,
+parser.add_argument('--direc', default='./UNet', type=str,
                     help='directory to save')
 parser.add_argument('--crop', type=int, default=None)
 parser.add_argument('--imgsize', type=int, default=None)
@@ -80,26 +78,15 @@ valloader = DataLoader(val_dataset, 1, shuffle=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
 
-if modelname == "axialunet":
-    model = torch.nn.Sequential(
-        lib.models.axialunet(img_size = imgsize, imgchan = imgchant, num_classes=1),
-        torch.nn.Sigmoid(),
-    )
-elif modelname == "MedT":
-    model = torch.nn.Sequential(
-        lib.models.axialnet.MedT(img_size = imgsize, imgchan = imgchant, num_classes=1),
-        torch.nn.Sigmoid(),
-    )
-elif modelname == "gatedaxialunet":
-    model = torch.nn.Sequential(
-        lib.models.axialnet.gated(img_size = imgsize, imgchan = imgchant, num_classes=1),
-        torch.nn.Sigmoid(),
-    )
-elif modelname == "logo":
-    model = torch.nn.Sequential(
-        lib.models.axialnet.logo(img_size = imgsize, imgchan = imgchant, num_classes=1),
-        torch.nn.Sigmoid(),
-    )
+assert modelname == "UNet"
+
+model = torch.hub.load(
+        'mateuszbuda/brain-segmentation-pytorch',
+        'unet',
+        in_channels=3,
+        out_channels=1,
+        init_features=16,
+        pretrained=False)
 
 if torch.cuda.device_count() > 1:
     print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -119,8 +106,6 @@ seed = 3000
 np.random.seed(seed)
 torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
-# torch.set_deterministic(True)
-# random.seed(seed)
 
 
 for epoch in tqdm(range(args.epochs)):
