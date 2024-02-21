@@ -1,5 +1,4 @@
 import torch
-import lib
 import argparse
 import torch
 from torch import nn
@@ -11,6 +10,7 @@ import torch
 from utils import JointTransform2D, ImageToImage2D, Image2D
 import cv2
 from tqdm import tqdm
+import monai
 
 
 parser = argparse.ArgumentParser(description='UNet')
@@ -80,13 +80,16 @@ device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
 
 assert modelname == "UNet"
 
-model = torch.hub.load(
-        'mateuszbuda/brain-segmentation-pytorch',
-        'unet',
+model = torch.nn.Sequential(
+    monai.networks.nets.UNet(
+        spatial_dims=2,
         in_channels=3,
         out_channels=1,
-        init_features=16,
-        pretrained=False)
+        kernel_size=[5, 5],
+        channels=[16, 32, 64, 128],
+        strides=[1, 1, 1]),
+    torch.nn.Sigmoid()
+)
 
 if torch.cuda.device_count() > 1:
     print("Let's use", torch.cuda.device_count(), "GPUs!")
