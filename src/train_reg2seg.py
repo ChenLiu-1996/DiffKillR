@@ -73,9 +73,21 @@ def plot_side_by_side(save_path, im_U, im_A, im_U2A_A2U, im_U2A, ma_U, ma_A, ma_
 
     return
 
+def load_match_pairs(matched_pair_path: str, mode: str):
+    '''
+    Load the matched pairs from csv. file and return 
+        - unnanotated_images
+        - unannotated_masks # if mode is train; unavailable for infer.
+        - annotated_images
+        - annotated_masks
+    '''
+
+
+    pass
+
 # FIXME!: I think we can even use another cycle loss: AM -> UM -> AM
 # FIXME!: Also, if the augmented mask is good, we can use it as a target for the forward cycle: UM -> AM. 
-def train(config: AttributeHashmap, wandb_run=None):
+def train(config: OmegaConf, wandb_run=None):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     _, train_set, val_set, _ = prepare_dataset(config=config)
@@ -493,26 +505,38 @@ def infer(config):
 
     return
 
+from omegaconf import OmegaConf
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
     parser.add_argument('--mode', help='`train` or `test` or `infer` ?', default='train')
-    parser.add_argument('--run_count', help='Provide this during testing!', default=None, type=int)
+    parser.add_argument('--mode_config', help='Path to model config file', default='./config/MoNuSeg_reg2seg.yaml')
+    parser.add_argument('--aiae_config', help='Path to model config file', default='./config/MoNuSeg_AIAE.yaml')
+    parser.add_argument('--data_config', help='Path to data config file', default='./config/MoNuSeg_data.yaml')
+    # parser.add_argument('--run_count', help='Provide this during testing!', default=None, type=int)
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
-    parser.add_argument('--config',
-                        help='Path to config yaml file.',
-                        required=True)
     parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
     parser.add_argument('--use-wandb', help='Use wandb for logging', default=True, type=bool)
-    args = vars(parser.parse_args())
+    args = parser.parse_args()
 
-    args = AttributeHashmap(args)
-    config = AttributeHashmap(yaml.safe_load(open(args.config)))
-    config.config_file_name = args.config
+    model_config = OmegaConf.load(args.model_config)
+    aiae_config = OmegaConf.load(args.aiae_config)
+    data_config = OmegaConf.load(args.data_config)
+    config = OmegaConf.merge(model_config, data_config, aiae_config)
+    
     config.gpu_id = args.gpu_id
     config.num_workers = args.num_workers
-    config = parse_settings(config, log_settings=args.mode == 'train', run_count=args.run_count)
+    config.use_wandb = args.use_wandb
 
+    print(config)
+    seed_everything(config.random_seed)
+
+    # args = AttributeHashmap(args)
+    # config = AttributeHashmap(yaml.safe_load(open(args.config)))
+    # config.config_file_name = args.config
+    # config.gpu_id = args.gpu_id
+    # config.num_workers = args.num_workers
+    # config = parse_settings(config, log_settings=args.mode == 'train', run_count=args.run_count)
     assert args.mode in ['train', 'test', 'infer']
 
     seed_everything(config.random_seed)
@@ -524,7 +548,7 @@ if __name__ == '__main__':
             entity=config.wandb_entity,
             project="cellseg",
             name="monuseg-reg2seg",
-            config=config,
+            config=OmegaConf.to_container(config, resolve=True, throw_on_missing=True),
             reinit=True,
             settings=wandb.Settings(start_method="thread")
         )
