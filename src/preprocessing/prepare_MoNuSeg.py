@@ -2,6 +2,9 @@
 Read annotations from xml file, find the label maps, and patchify around them.
 images are in .tif format, RGB, 1000x1000.
 
+ASSUMPTIONS:
+executed from the '/src' folder of the project.
+
 '''
 import cv2
 import os
@@ -156,12 +159,12 @@ def patchify_and_save(image, image_id, label, centroid_list,
 
     return
 
-def process_MoNuSeg_Traindata():
+def process_MoNuSeg_Traindata(patch_size=96):
     '''
         images are in .tif format, RGB, 1000x1000.
     '''
-    image_folder = '../../external_data/Chen_2024_MoNuSeg/MoNuSeg2018TrainData/Tissue Images'
-    annotation_folder = '../../external_data/Chen_2024_MoNuSeg/MoNuSeg2018TrainData/Annotations'
+    image_folder = '../external_data/Chen_2024_MoNuSeg/MoNuSeg2018TrainData/Tissue Images'
+    annotation_folder = '../external_data/Chen_2024_MoNuSeg/MoNuSeg2018TrainData/Annotations'
 
     annotation_files = sorted(glob(f'{annotation_folder}/*.xml'))
     image_files = sorted(glob(f'{image_folder}/*.tif'))
@@ -194,8 +197,7 @@ def process_MoNuSeg_Traindata():
         label, centroids_list = annotation_to_label(verts_list, image, image_id, region_id_list)
 
         # Divide the image and label into patches.
-        patch_size = 96 #TODO: dynamically set this.
-        patches_folder = '../../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size, patch_size)
+        patches_folder = '../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size, patch_size)
         patchify_and_save(image, image_id, label, centroids_list, patches_folder, patch_size)
 
     print('Done processing all images and annotations: annotated cells: %d' % len(all_verts_list))
@@ -238,14 +240,14 @@ def process_MoNuSeg_Traindata():
     ax.hist(dx_list, bins=100, label='dx')
     ax = plt.subplot(1, 2, 2)
     ax.hist(dy_list, bins=100, label='dy')
-    save_path = '../../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size, patch_size)
+    save_path = '../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size, patch_size)
     plt.savefig(save_path + 'histogram.png')
 
 
     return
 
-def process_MoNuSeg_Testdata():
-    folder = '../../external_data/Chen_2024_MoNuSeg/MoNuSegTestData'
+def process_MoNuSeg_Testdata(patch_size=32):
+    folder = '../external_data/Chen_2024_MoNuSeg/MoNuSegTestData'
 
     annotation_files = sorted(glob(f'{folder}/*.xml'))
     image_files = sorted(glob(f'{folder}/*.tif'))
@@ -278,8 +280,8 @@ def process_MoNuSeg_Testdata():
         label, centroids_list = annotation_to_label(verts_list, image, image_id, region_id_list)
 
         # Divide the image and label into patches.
-        patch_size = 32 # NOTE: Should be the same as the training patch data.
-        patches_folder = '../../data/MoNuSeg2018TestData_patch_%dx%d/' % (patch_size, patch_size)
+        patch_size = 32 # NOTE: Should be the same as the aug patch data.
+        patches_folder = '../data/MoNuSeg2018TestData_patch_%dx%d/' % (patch_size, patch_size)
         patchify_and_save(image, image_id, label, centroids_list, patches_folder, patch_size)
 
     print('Done processing all images and annotations: annotated cells: %d' % len(all_verts_list))
@@ -322,12 +324,22 @@ def process_MoNuSeg_Testdata():
     ax.hist(dx_list, bins=100, label='dx')
     ax = plt.subplot(1, 2, 2)
     ax.hist(dy_list, bins=100, label='dy')
-    save_path = '../../data/MoNuSeg2018TestData_patch_%dx%d/' % (patch_size, patch_size)
+    save_path = '../data/MoNuSeg2018TestData_patch_%dx%d/' % (patch_size, patch_size)
     plt.savefig(save_path + 'histogram.png')
 
 if __name__ == '__main__':
-    patch_size = 96
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--patch_size', type=int, default=96)
+    parser.add_argument('--aug_patch_size', type=int, default=32)
+    args = parser.parse_args()
+
+    # NOTE: This is very confusing that test data is patchified with a different patch size.
+    # NOTE: but works for now.
+    patch_size = args.patch_size
+    aug_patch_size = args.aug_patch_size
     
-    process_MoNuSeg_Traindata()
-    process_MoNuSeg_Testdata()
+    process_MoNuSeg_Traindata(patch_size)
+    process_MoNuSeg_Testdata(aug_patch_size)
 

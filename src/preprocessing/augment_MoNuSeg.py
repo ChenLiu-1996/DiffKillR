@@ -14,6 +14,8 @@ from glob import glob
 from tqdm import tqdm
 import sys
 import argparse
+from omegaconf import OmegaConf
+
 from Metas import Organ2FileID
 
 import_dir = '/'.join(os.path.realpath(__file__).split('/')[:-2])
@@ -111,7 +113,7 @@ def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--patch_size', type=int, default=96)
     argparser.add_argument('--augmented_patch_size', type=int, default=32)
-    argparser.add_argument('--percentage', type=float, default=0.01)
+    argparser.add_argument('--percentage', type=float, default=0.1)
     argparser.add_argument('--multiplier', type=int, default=2)
     argparser.add_argument('--organ', type=str, default='Colon')
 
@@ -121,7 +123,7 @@ def main():
     percentage = args.percentage
     multiplier = args.multiplier
 
-    patches_folder = '../../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size, 
+    patches_folder = '../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size, 
                                                                        patch_size)
     image_path_list = sorted(glob(patches_folder + 'image/*.png'))
     label_path_list = sorted(glob(patches_folder + 'label/*.png'))
@@ -161,8 +163,7 @@ def main():
           percentage: {percentage}; \
             {args.organ} subset count: {total_cnt}, {len(subset_image_path_list)}')
 
-    augmented_folder = '../../data/%.3f_%s_MoNuSeg2018TrainData_augmented_patch_%dx%d' % (
-        percentage, args.organ, augmented_patch_size, augmented_patch_size)
+    augmented_folder = f'../data/{percentage:.3f}_{args.organ}_m{multiplier}_MoNuSeg2018TrainData_augmented_patch_{augmented_patch_size}x{augmented_patch_size}/'
 
     prefix_list = []
 
@@ -176,13 +177,12 @@ def main():
             '_patch_%sx%s.png' % (patch_size, patch_size), '')
         prefix_list.append(prefix)
 
-    # Augmentation.
+    '''Augmentation'''
     # Decide how many augmented versions per patch.
     multiplier = 2
 
     # Use a single data structure to hold all information for augmentation.
     augmentation_tuple_list = []
-
     for prefix, image_path, label_path in \
         zip(prefix_list, subset_image_path_list, subset_label_path_list):
         augmentation_tuple_list.append((prefix, image_path, label_path, multiplier))
@@ -204,6 +204,23 @@ def main():
     print('Total number of patches:', \
           len(augmentation_tuple_list) * multiplier * len(augmentation_methods) \
             + len(augmentation_tuple_list))
+    
+    # write 'MoNuSeg_data.yaml' config file so models can find the data
+    test_folder = f'../data/MoNuSeg2018TestData_patch_{augmented_patch_size}x{augmented_patch_size}/'
+    conf = OmegaConf.create(
+        {
+            'dataset_name': 'MoNuSeg',
+            'target_dim': [augmented_patch_size, augmented_patch_size],
+            'dataset_path': augmented_folder,
+            'aug_methods': ",".join(augmentation_methods),
+            'test_folder': test_folder,
+            'log_folder': '../logs/',
+            'percentage': percentage,
+            'organ': args.organ,
+            'multiplier': multiplier,
+        }
+    )
+    OmegaConf.save(conf, './config/MoNuSeg_data.yaml')
 
 
 if __name__ == '__main__':

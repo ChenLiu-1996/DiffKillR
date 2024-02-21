@@ -20,7 +20,7 @@ def prepare_dataset(config: AttributeHashmap):
     # elif config.dataset_name == 'tissuenet':
     #     dataset = TissueNetDataset(base_path=config.dataset_path,
     #                                target_dim=config.target_dim)
-    elif config.dataset_name == 'augmented_MoNuSeg':
+    elif config.dataset_name == 'MoNuSeg':
         aug_lists = config.aug_methods.split(',')
         dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,
                                          base_path=config.dataset_path,

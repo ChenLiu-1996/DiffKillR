@@ -120,10 +120,10 @@ def embedding_mAP(embeddings: np.ndarray,
     for i in range(N):
         # find the neighbors of i
         neighbors = np.argwhere(graph_adjacency[i] == 1).flatten()
-        print('neighbors: ', neighbors.shape, neighbors[:5])
+        #print('neighbors: ', neighbors.shape, neighbors[:5])
         # compute the distance between i and its neighbors
         distances = distance_matrix[i, neighbors] # (n_neighbors, )
-        print('distances: ', distances.shape, distances[:5])
+        #print('distances: ', distances.shape, distances[:5])
         for j in range(len(neighbors)):
             # compute the number of points enclosed by the ball_j centered at i
             all_enclosed = np.argwhere(distance_matrix[i] <= distances[j]).flatten()

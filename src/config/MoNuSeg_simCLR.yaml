@@ -1,10 +1,10 @@
 dataset_name: 'augmented_MoNuSeg'
 target_dim: (32, 32)
-dataset_path: '$ROOT/data/0.010_MoNuSeg2018TrainData_augmented_patch_32x32/'
-test_img_folder: '$ROOT/data/MoNuSeg2018TestData_patch_32x32/image/'
-model_save_path: '$ROOT/checkpoints/0.010_aug_MoNuSeg_depth5_seed1_SimCLR.pty'
-output_save_path: '$ROOT/results/0.010_aug_MoNuSeg_depth5_seed1_SimCLR/'
-matched_pair_path: '$ROOT/results/0.010_aug_MoNuSeg_depth5_seed1_SimCLR/AIAE_inference_results.csv'
+dataset_path: '$ROOT/data/1.000_Colon_MoNuSeg2018TrainData_augmented_patch_32x32/'
+test_img_folder: '$ROOT/data/Colon_MoNuSeg2018TestData_patch_32x32/image/'
+model_save_path: '$ROOT/checkpoints/1.000_Colon_aug_MoNuSeg_depth5_seed1_SimCLR.pty'
+output_save_path: '$ROOT/results/1.000_Colon_aug_MoNuSeg_depth5_seed1_SimCLR/'
+matched_pair_path: '$ROOT/results/1.000_Colon_aug_MoNuSeg_depth5_seed1_SimCLR/AIAE_inference_results.csv'
 log_folder: '$ROOT/logs'
 learning_rate: 1e-3
 latent_loss: 'SimCLR'

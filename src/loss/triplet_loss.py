@@ -66,3 +66,61 @@ class TripletLoss(nn.Module):
         triplet_loss = losses.sum() / self.num_pos / bsz
 
         return triplet_loss
+
+def construct_triplet_batch(img_paths,
+                            latent_features,
+                            num_pos,
+                            num_neg,
+                            model,
+                            dataset,
+                            split,
+                            device):
+    '''
+        Returns:
+        pos_features: (bsz * num_pos, latent_dim)
+        neg_features: (bsz * num_neg, latent_dim)
+
+    '''
+    pos_images = None
+    cell_type_labels = [] # (bsz)
+    pos_cell_type_labels = [] # (bsz * num_pos)
+
+    # Positive.
+    for img_path in img_paths:
+        cell_type = dataset.get_celltype(img_path=img_path)
+        cell_type_labels.append(dataset.cell_type_to_idx[cell_type])
+        pos_cell_type_labels.extend([dataset.cell_type_to_idx[cell_type]] * num_pos)
+
+        aug_images, _ = dataset.sample_celltype(split=split,
+                                                celltype=cell_type,
+                                                cnt=num_pos)
+        aug_images = torch.Tensor(aug_images).to(device)
+
+        if pos_images is not None:
+            pos_images = torch.cat([pos_images, aug_images], dim=0)
+        else:
+            pos_images = aug_images
+    _, pos_features = model(pos_images) # (bsz * num_pos, latent_dim)
+
+    # Negative.
+    num_neg = config.num_neg
+    neg_features = None # (bsz*num_neg, latent_dim)
+    all_features = torch.cat([latent_features, pos_features], dim=0) # (bsz * (1+num_pos), latent_dim)
+
+    all_cell_type_labels = cell_type_labels.copy()
+    all_cell_type_labels.extend(pos_cell_type_labels) # (bsz * (1+num_pos))
+
+    for img_path in img_paths:
+        cell_type = dataset.get_celltype(img_path=img_path)
+
+        negative_pool = np.argwhere(
+            (np.array(all_cell_type_labels) != dataset.cell_type_to_idx[cell_type]) * 1).flatten()
+
+        neg_idxs = np.random.choice(negative_pool, size=num_neg, replace=False)
+
+        if neg_features is not None:
+            neg_features = torch.cat([neg_features, all_features[neg_idxs]], dim=0)
+        else:
+            neg_features = all_features[neg_idxs]
+
+    return pos_features, neg_features
