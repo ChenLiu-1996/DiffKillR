@@ -69,9 +69,11 @@ def train(config: OmegaConf, wandb_run=None):
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     dataset, train_set, val_set, _ = \
         prepare_dataset(config=config)
+    
+    # Set all paths.
     model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
     log_dir = os.path.join(config.log_folder, model_name)
-    model_save_path = os.path.join(config.model_save_root, model_name)
+    model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
 
     # Build the model
     try:
@@ -297,7 +299,7 @@ def generate_train_pairs(config: OmegaConf):
     model = model.to(device)
 
     model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
-    model_save_path = os.path.join(config.model_save_root, model_name)
+    model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
     model.load_weights(model_save_path, device=device)
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)
@@ -356,6 +358,9 @@ def generate_train_pairs(config: OmegaConf):
     })
     results_df.to_csv(pairing_save_path, index=False)
 
+    # TODO: Do the same for val_set
+
+
     return
 
 import sklearn.metrics
@@ -379,15 +384,15 @@ def test(config: OmegaConf):
 
     # e.g. 1.000_Colon_aug_m2_MoNuSeg_depth5_seed1_SimCLR.pty
     model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
-    model_save_path = os.path.join(config.model_save_root, model_name)
-    model.load_weights(model_save_path, device=device)
-    log('%s: Model weights successfully loaded.' % config.model,
-        to_console=True)
-
+    model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
     output_save_path = os.path.join(config.output_save_root, model_name)
     os.makedirs(output_save_path, exist_ok=True)
     save_path_fig_embeddings_inst = '%s/embeddings_inst.png' % output_save_path
     save_path_fig_reconstructed = '%s/reconstructed.png' % output_save_path
+
+    model.load_weights(model_save_path, device=device)
+    log('%s: Model weights successfully loaded.' % config.model,
+        to_console=True)
 
     if config.latent_loss in ['SimCLR']:
         supercontrast_loss = SupConLoss(temperature=config.temp,
@@ -671,7 +676,7 @@ def infer(config: OmegaConf):
 
     model = model.to(device)
     model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
-    model_save_path = os.path.join(config.model_save_root, model_name)
+    model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
     model.load_weights(model_save_path, device=device)
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)

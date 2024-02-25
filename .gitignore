@@ -1,4 +1,8 @@
 .DS_Store
+/results/*
+/checkpoints/
+/logs/
+*/wandb
 */.DS_Store
 .vscode
 src/test.py

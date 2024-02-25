@@ -7,6 +7,8 @@ import os
 # from model.scheduler import LinearWarmupCosineAnnealingLR
 from tqdm import tqdm
 from matplotlib import pyplot as plt
+from omegaconf import OmegaConf
+
 from model.unet import UNet
 from registration.spatial_transformer import SpatialTransformer as Warper
 from utils.attribute_hashmap import AttributeHashmap
@@ -392,6 +394,44 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
 
     return
 
+def load_match_pairs(matched_pair_path: str, mode: str, config):
+    '''
+    Load the matched pairs from csv. file and return 
+        - unanotated_images
+        - unannotated_masks # if mode is train; unavailable for infer.
+        - annotated_images
+        - annotated_masks
+    '''
+    import pandas as pd
+    from datasets.augmented_MoNuSeg import load_image, load_mask
+
+    matched_df = pd.read_csv(matched_pair_path)
+    unanotated_image_paths = matched_df['test_image_path'].tolist()
+    annotated_image_paths = matched_df['closest_image_path'].tolist()
+    annotated_label_paths = [x.replace('image', 'label') for x in annotated_image_paths]
+    if mode == 'train':
+        unannotated_label_paths = [x.replace('image', 'label') for x in unanotated_image_paths]
+    
+    unannotated_images = [torch.Tensor(load_image(p, config.target_dim)) for p in unanotated_image_paths]
+    annotated_images = [torch.Tensor(load_image(p, config.target_dim)) for p in annotated_image_paths]
+    annotated_masks = [torch.Tensor(load_mask(p, config.target_dim)) for p in annotated_label_paths]
+    if mode == 'train':
+        unannotated_masks = [torch.Tensor(load_mask(p, config.target_dim)) for p in unannotated_label_paths]
+
+    unannotated_images = torch.stack(unannotated_images, dim=0) # (N, in_chan, H, W)
+    annotated_images = torch.stack(annotated_images, dim=0) # (N, in_chan, H, W)
+    annotated_masks = torch.stack(annotated_masks, dim=0) # (N, H, W)
+    if mode == 'train':
+        unannotated_masks = torch.stack(unannotated_masks, dim=0)
+    else:
+        unannotated_masks = None
+    
+    assert len(unannotated_images) == len(annotated_images) == len(annotated_masks)
+    print(f'Loaded {len(unannotated_images)} pairs of images and masks.')
+    
+    return unannotated_images, unannotated_masks, \
+        annotated_images, annotated_masks
+
 @torch.no_grad()
 def infer(config):
     '''
@@ -431,22 +471,24 @@ def infer(config):
     warper = warper.to(device)
 
     # Step 1: Load matched pairs.
-    matched_df = pd.read_csv(config.matched_pair_path)
-    test_image_paths = matched_df['test_image_path'].tolist()
-    closest_image_paths = matched_df['closest_image_path'].tolist()
-    closest_label_paths = [x.replace('image', 'label') for x in closest_image_paths]
-    test_label_paths = [x.replace('image', 'label') for x in test_image_paths]
+    load_results = load_match_pairs(config.matched_pair_path, mode='infer', config=config)
+    (test_images, _, closest_images, closest_masks) = load_results
+    # matched_df = pd.read_csv(config.matched_pair_path)
+    # test_image_paths = matched_df['test_image_path'].tolist()
+    # closest_image_paths = matched_df['closest_image_path'].tolist()
+    # closest_label_paths = [x.replace('image', 'label') for x in closest_image_paths]
+    # test_label_paths = [x.replace('image', 'label') for x in test_image_paths]
 
 
-    # load the images.
-    test_images = [torch.Tensor(load_image(p, config.target_dim)) for p in test_image_paths]
-    closest_images = [torch.Tensor(load_image(p, config.target_dim)) for p in closest_image_paths]
-    closest_masks = [torch.Tensor(load_mask(p, config.target_dim)) for p in closest_label_paths]
-    test_masks = [np.expand_dims(load_mask(p, config.target_dim), 0) for p in test_label_paths]
-    test_images = torch.stack(test_images, dim=0).to(device) # (N, in_chan, H, W)
-    closest_images = torch.stack(closest_images, dim=0).to(device) # (N, in_chan, H, W)
-    closest_masks = torch.stack(closest_masks, dim=0).to(device) # (N, H, W)
-    # test_masks = torch.stack(test_masks, dim=0).numpy() # (N, H, W)
+    # # load the images.
+    # test_images = [torch.Tensor(load_image(p, config.target_dim)) for p in test_image_paths]
+    # closest_images = [torch.Tensor(load_image(p, config.target_dim)) for p in closest_image_paths]
+    # closest_masks = [torch.Tensor(load_mask(p, config.target_dim)) for p in closest_label_paths]
+    # test_masks = [np.expand_dims(load_mask(p, config.target_dim), 0) for p in test_label_paths]
+    # test_images = torch.stack(test_images, dim=0).to(device) # (N, in_chan, H, W)
+    # closest_images = torch.stack(closest_images, dim=0).to(device) # (N, in_chan, H, W)
+    # closest_masks = torch.stack(closest_masks, dim=0).to(device) # (N, H, W)
+    # # test_masks = torch.stack(test_masks, dim=0).numpy() # (N, H, W)
 
     dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_masks)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=False)
@@ -513,7 +555,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode_config', help='Path to model config file', default='./config/MoNuSeg_reg2seg.yaml')
     parser.add_argument('--aiae_config', help='Path to model config file', default='./config/MoNuSeg_AIAE.yaml')
     parser.add_argument('--data_config', help='Path to data config file', default='./config/MoNuSeg_data.yaml')
-    # parser.add_argument('--run_count', help='Provide this during testing!', default=None, type=int)
+    #parser.add_argument('--run_count', help='Provide this during testing!', default=None, type=int)
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
     parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
     parser.add_argument('--use-wandb', help='Use wandb for logging', default=True, type=bool)

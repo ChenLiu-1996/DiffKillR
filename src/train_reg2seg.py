@@ -7,6 +7,8 @@ import os
 # from model.scheduler import LinearWarmupCosineAnnealingLR
 from tqdm import tqdm
 from matplotlib import pyplot as plt
+from omegaconf import OmegaConf
+
 from model.unet import UNet
 from registration.spatial_transformer import SpatialTransformer as Warper
 from utils.attribute_hashmap import AttributeHashmap
@@ -73,24 +75,57 @@ def plot_side_by_side(save_path, im_U, im_A, im_U2A_A2U, im_U2A, ma_U, ma_A, ma_
 
     return
 
-def load_match_pairs(matched_pair_path: str, mode: str):
+def load_match_pairs(matched_pair_path: str, mode: str, config):
     '''
     Load the matched pairs from csv. file and return 
-        - unnanotated_images
-        - unannotated_masks # if mode is train; unavailable for infer.
+        - unanotated_images
+        - unannotated_masks
         - annotated_images
         - annotated_masks
     '''
+    import pandas as pd
+    from datasets.augmented_MoNuSeg import load_image, load_mask
 
+    matched_df = pd.read_csv(matched_pair_path)
+    unanotated_image_paths = matched_df['test_image_path'].tolist()
+    annotated_image_paths = matched_df['closest_image_path'].tolist()
+    annotated_label_paths = [x.replace('image', 'label') for x in annotated_image_paths]
+    unannotated_label_paths = [x.replace('image', 'label') for x in unanotated_image_paths]
+    
+    unannotated_images = [torch.Tensor(load_image(p, config.target_dim)) for p in unanotated_image_paths]
+    annotated_images = [torch.Tensor(load_image(p, config.target_dim)) for p in annotated_image_paths]
+    annotated_masks = [torch.Tensor(load_mask(p, config.target_dim)) for p in annotated_label_paths]
+    unannotated_masks = [torch.Tensor(load_mask(p, config.target_dim)) for p in unannotated_label_paths]
 
-    pass
+    unannotated_images = torch.stack(unannotated_images, dim=0) # (N, in_chan, H, W)
+    annotated_images = torch.stack(annotated_images, dim=0) # (N, in_chan, H, W)
+    annotated_masks = torch.stack(annotated_masks, dim=0) # (N, H, W)
+    unannotated_masks = torch.stack(unannotated_masks, dim=0)
+    
+    assert len(unannotated_images) == len(annotated_images) == len(annotated_masks)
+    print(f'Loaded {len(unannotated_images)} pairs of images and masks.')
+    
+    return unannotated_images, unannotated_masks, \
+        annotated_images, annotated_masks
 
 # FIXME!: I think we can even use another cycle loss: AM -> UM -> AM
 # FIXME!: Also, if the augmented mask is good, we can use it as a target for the forward cycle: UM -> AM. 
 def train(config: OmegaConf, wandb_run=None):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    _, train_set, val_set, _ = prepare_dataset(config=config)
+    
+    #_, train_set, val_set, _ = prepare_dataset(config=config)
+    # Set all the paths.
+    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
+    matched_pair_path = os.path.join(config.output_save_root, model_name, 'train_pairs.csv')
+    config.log_dir = os.path.join(config.log_folder, model_name) # This is log file path.
+    config.model_save_path = os.path.join(config.output_save_root, model_name, 'reg2seg.ckpt')
+    
+    load_results = load_match_pairs(matched_pair_path, mode='train', config=config)
+    (unannotated_images, unannotated_masks, annotated_images, annotated_masks) = load_results
+
+    dataset = torch.utils.data.TensorDataset(unannotated_images, unannotated_masks, annotated_images, annotated_masks)
+    train_set = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
 
     # Build the model
     try:
@@ -120,7 +155,7 @@ def train(config: OmegaConf, wandb_run=None):
 
         warp_predictor.train()
         plot_freq = int(len(train_set) // config.n_plot_per_epoch)
-        for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks, _, _) in enumerate(tqdm(train_set)):
+        for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks) in enumerate(tqdm(train_set)):
             shall_plot = iter_idx % plot_freq == plot_freq - 1
 
             if len(unannotated_masks.shape) == 3:
@@ -157,8 +192,9 @@ def train(config: OmegaConf, wandb_run=None):
                                (unannotated_masks[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0)))
 
             if shall_plot:
+                save_folder = os.path.join(config.output_save_root, model_name, 'reg2seg')
                 save_path_fig_sbs = '%s/train/figure_log_epoch%s_sample%s.png' % (
-                    config.save_folder, str(epoch_idx).zfill(5), str(iter_idx).zfill(5))
+                    save_folder, str(epoch_idx).zfill(5), str(iter_idx).zfill(5))
                 plot_side_by_side(save_path_fig_sbs, *numpy_variables(
                     unannotated_images[0], annotated_images[0],
                     images_U2A_A2U[0], images_U2A[0],
@@ -203,8 +239,8 @@ def train(config: OmegaConf, wandb_run=None):
         with torch.no_grad():
             val_loss, val_loss_forward, val_loss_cyclic = 0, 0, 0
             val_dice_ref_list, val_dice_seg_list = [], []
-            plot_freq = int(len(val_set) // config.n_plot_per_epoch)
-            for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks, _, _) in enumerate(tqdm(val_set)):
+            plot_freq = int(len(train_set) // config.n_plot_per_epoch)
+            for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks) in enumerate(tqdm(train_set)):
                 shall_plot = iter_idx % plot_freq == plot_freq - 1
 
                 # NOTE: batch size is len(val_set) here.
@@ -243,8 +279,9 @@ def train(config: OmegaConf, wandb_run=None):
                                    (unannotated_masks[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0)))
 
                 if shall_plot:
+                    save_folder = os.path.join(config.output_save_root, model_name, 'reg2seg')
                     save_path_fig_sbs = '%s/val/figure_log_epoch%s_sample%s.png' % (
-                        config.save_folder, str(epoch_idx).zfill(5), str(iter_idx).zfill(5))
+                        save_folder, str(epoch_idx).zfill(5), str(iter_idx).zfill(5))
                     plot_side_by_side(save_path_fig_sbs, *numpy_variables(
                         unannotated_images[0], annotated_images[0],
                         images_U2A_A2U[0], images_U2A[0],
@@ -416,6 +453,13 @@ def infer(config):
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     _, _, _, test_set = prepare_dataset(config=config)
 
+    # Set all the paths.
+    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
+    config.matched_pair_path = os.path.join(config.output_save_root, model_name, 'test_pairs.csv')
+    config.model_save_path = os.path.join(config.output_save_root, model_name, 'reg2seg.ckpt')
+    config.log_dir = os.path.join(config.log_folder, model_name) # This is log file path.
+
+
     # Build the model
     try:
         warp_predictor = globals()[config.model](num_filters=config.num_filters,
@@ -431,23 +475,8 @@ def infer(config):
     warper = warper.to(device)
 
     # Step 1: Load matched pairs.
-    matched_df = pd.read_csv(config.matched_pair_path)
-    test_image_paths = matched_df['test_image_path'].tolist()
-    closest_image_paths = matched_df['closest_image_path'].tolist()
-    closest_label_paths = [x.replace('image', 'label') for x in closest_image_paths]
-    test_label_paths = [x.replace('image', 'label') for x in test_image_paths]
-
-
-    # load the images.
-    test_images = [torch.Tensor(load_image(p, config.target_dim)) for p in test_image_paths]
-    closest_images = [torch.Tensor(load_image(p, config.target_dim)) for p in closest_image_paths]
-    closest_masks = [torch.Tensor(load_mask(p, config.target_dim)) for p in closest_label_paths]
-    test_masks = [np.expand_dims(load_mask(p, config.target_dim), 0) for p in test_label_paths]
-    test_images = torch.stack(test_images, dim=0).to(device) # (N, in_chan, H, W)
-    closest_images = torch.stack(closest_images, dim=0).to(device) # (N, in_chan, H, W)
-    closest_masks = torch.stack(closest_masks, dim=0).to(device) # (N, H, W)
-    # test_masks = torch.stack(test_masks, dim=0).numpy() # (N, H, W)
-
+    load_results = load_match_pairs(config.matched_pair_path, mode='infer', config=config)
+    (test_images, test_masks, closest_images, closest_masks) = load_results
     dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_masks)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=False)
 
@@ -484,14 +513,19 @@ def infer(config):
     print(f'Computing Dice Coeff for {len(pred_mask_list)} total masks...')
     dice_list = []
     iou_list = []
+
+    # convert between torch Tensor & np array
+    if 'torch' in str(type(test_masks)):
+        test_masks = test_masks.cpu().detach().numpy()
+
     for i in range(len(pred_mask_list)):
         # print('test_masks[i].shape, pred_mask_list[i].shape: ', \
         #       test_masks[i].shape, pred_mask_list[i].shape)
         dice_list.append(
-            dice_coeff((test_masks[i] > 0.5).transpose(1, 2, 0),
+            dice_coeff((np.expand_dims(test_masks[i], 0) > 0.5).transpose(1, 2, 0),
                        (pred_mask_list[i] > 0.5).transpose(1, 2, 0)))
         iou_list.append(
-            IoU((test_masks[i] > 0.5).transpose(1, 2, 0),
+            IoU((np.expand_dims(test_masks[i], 0) > 0.5).transpose(1, 2, 0),
                        (pred_mask_list[i] > 0.5).transpose(1, 2, 0)))
     
     log('[Eval] Dice coeff (seg): %.3f \u00B1 %.3f.'
@@ -505,41 +539,33 @@ def infer(config):
 
     return
 
-from omegaconf import OmegaConf
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
     parser.add_argument('--mode', help='`train` or `test` or `infer` ?', default='train')
-    parser.add_argument('--mode_config', help='Path to model config file', default='./config/MoNuSeg_reg2seg.yaml')
-    parser.add_argument('--aiae_config', help='Path to model config file', default='./config/MoNuSeg_AIAE.yaml')
+    parser.add_argument('--model_config', help='Path to model config file', default='./config/MoNuSeg_reg2seg.yaml')
     parser.add_argument('--data_config', help='Path to data config file', default='./config/MoNuSeg_data.yaml')
-    # parser.add_argument('--run_count', help='Provide this during testing!', default=None, type=int)
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
     parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
     parser.add_argument('--use-wandb', help='Use wandb for logging', default=True, type=bool)
+    parser.add_argument('--aiae-depth', help='Depth of the AIAE model', default=5, type=int) # in sync with aiae model
+    parser.add_argument('--aiae-latent-loss', help='latent loss of AIAE model', default='SimCLR', type=str) #  in sync with aiae model
     args = parser.parse_args()
 
     model_config = OmegaConf.load(args.model_config)
-    aiae_config = OmegaConf.load(args.aiae_config)
     data_config = OmegaConf.load(args.data_config)
-    config = OmegaConf.merge(model_config, data_config, aiae_config)
+    config = OmegaConf.merge(model_config, data_config)
     
     config.gpu_id = args.gpu_id
     config.num_workers = args.num_workers
     config.use_wandb = args.use_wandb
+    config.depth = args.aiae_depth
+    config.latent_loss = args.aiae_latent_loss
 
     print(config)
     seed_everything(config.random_seed)
 
-    # args = AttributeHashmap(args)
-    # config = AttributeHashmap(yaml.safe_load(open(args.config)))
-    # config.config_file_name = args.config
-    # config.gpu_id = args.gpu_id
-    # config.num_workers = args.num_workers
-    # config = parse_settings(config, log_settings=args.mode == 'train', run_count=args.run_count)
     assert args.mode in ['train', 'test', 'infer']
-
-    seed_everything(config.random_seed)
 
     wandb_run = None
     import wandb
@@ -555,8 +581,9 @@ if __name__ == '__main__':
 
     if args.mode == 'train':
         train(config=config, wandb_run=wandb_run)
-        test(config=config)
+        #test(config=config)
     elif args.mode == 'test':
-        test(config=config)
+        pass
+        #test(config=config)
     elif args.mode == 'infer':
         infer(config=config)

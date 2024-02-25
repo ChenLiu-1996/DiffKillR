@@ -7,7 +7,7 @@ temp: 1.0
 base_temp: 1.0
 n_views: 2
 contrast_mode: 'one'
-max_epochs: 2
+max_epochs: 200
 patience: 50
 batch_size: 64
 model: 'AutoEncoder'
@@ -16,5 +16,5 @@ depth: 5
 pairing: ['aug','non_mother'] #['aug', 'mother']
 num_workers: 4
 random_seed: 1
-train_val_test_ratio: '6:2:2'
+train_val_test_ratio: '8:1:1'
 wandb_entity: 'danqiliao'
