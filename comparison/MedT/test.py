@@ -70,15 +70,26 @@ valloader = DataLoader(val_dataset, 1, shuffle=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else 'cpu')
 
-assert modelname == "UNet"
-
-model = torch.hub.load(
-        'mateuszbuda/brain-segmentation-pytorch',
-        'unet',
-        in_channels=3,
-        out_channels=1,
-        init_features=16,
-        pretrained=False)
+if modelname == "axialunet":
+    model = torch.nn.Sequential(
+        lib.models.axialunet(img_size = imgsize, imgchan = imgchant, num_classes=1),
+        torch.nn.Sigmoid(),
+    )
+elif modelname == "MedT":
+    model = torch.nn.Sequential(
+        lib.models.axialnet.MedT(img_size = imgsize, imgchan = imgchant, num_classes=1),
+        torch.nn.Sigmoid(),
+    )
+elif modelname == "gatedaxialunet":
+    model = torch.nn.Sequential(
+        lib.models.axialnet.gated(img_size = imgsize, imgchan = imgchant, num_classes=1),
+        torch.nn.Sigmoid(),
+    )
+elif modelname == "logo":
+    model = torch.nn.Sequential(
+        lib.models.axialnet.logo(img_size = imgsize, imgchan = imgchant, num_classes=1),
+        torch.nn.Sigmoid(),
+    )
 
 if torch.cuda.device_count() > 1:
     print("Let's use", torch.cuda.device_count(), "GPUs!")
