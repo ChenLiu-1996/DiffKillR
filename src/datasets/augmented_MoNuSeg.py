@@ -43,7 +43,7 @@ class AugmentedMoNuSegDataset(Dataset):
 
         for folder in self.augmentation_folders:
             aug_method = folder.split('/')[-2]
-            print('Loading images and labels from %s; aug_method: %s ' % (folder, aug_method))
+            #print('Loading images and labels from %s; aug_method: %s ' % (folder, aug_method))
             
             img_paths = sorted(glob('%s/image/*.png' % (folder)))
             label_paths = sorted(glob('%s/label/*.png' % (folder)))

@@ -163,49 +163,14 @@ def main():
           percentage: {percentage}; \
             {args.organ} subset count: {total_cnt}, {len(subset_image_path_list)}')
 
-    augmented_folder = f'../data/{percentage:.3f}_{args.organ}_m{multiplier}_MoNuSeg2018TrainData_augmented_patch_{augmented_patch_size}x{augmented_patch_size}/'
-
-    prefix_list = []
-
-    # Read the images and labels.
-    # e.g. image path : 'TCGA-18-5592-01Z-00-DX1_H-1_W378_patch_96x96.png'
-    # prefix: 'TCGA-18-5592-01Z-00-DX1_H-1_W378'
-    for image_path, label_path in zip(subset_image_path_list, subset_label_path_list):
-        prefix = os.path.basename(image_path).replace(
-            '_patch_%sx%s.png' % (patch_size, patch_size), '')
-        assert prefix == os.path.basename(label_path).replace(
-            '_patch_%sx%s.png' % (patch_size, patch_size), '')
-        prefix_list.append(prefix)
-
-    '''Augmentation'''
-    # Decide how many augmented versions per patch.
-    multiplier = 2
-
-    # Use a single data structure to hold all information for augmentation.
-    augmentation_tuple_list = []
-    for prefix, image_path, label_path in \
-        zip(prefix_list, subset_image_path_list, subset_label_path_list):
-        augmentation_tuple_list.append((prefix, image_path, label_path, multiplier))
-    
     augmentation_methods = ['rotation',
                             'uniform_stretch',
                             'directional_stretch',
                             'volume_preserving_stretch',
                             'partial_stretch']
-    for augmentation_method in augmentation_methods:
-        augment_and_save(augmentation_tuple_list, 
-                         augmented_patch_size, 
-                         augmented_folder, 
-                         augmentation_method)
 
-    print('Done.')
-    print('Augmentation tuple list[:10]:')
-    print(len(augmentation_tuple_list), augmentation_tuple_list[:10])
-    print('Total number of patches:', \
-          len(augmentation_tuple_list) * multiplier * len(augmentation_methods) \
-            + len(augmentation_tuple_list))
-    
-    # write 'MoNuSeg_data.yaml' config file so models can find the data
+    augmented_folder = f'../data/{percentage:.3f}_{args.organ}_m{multiplier}_MoNuSeg2018TrainData_augmented_patch_{augmented_patch_size}x{augmented_patch_size}/'
+    # Overwrite 'MoNuSeg_data.yaml' config file so models can find the data
     test_folder = f'../data/MoNuSeg2018TestData_patch_{augmented_patch_size}x{augmented_patch_size}/'
     conf = OmegaConf.create(
         {
@@ -221,6 +186,45 @@ def main():
         }
     )
     OmegaConf.save(conf, './config/MoNuSeg_data.yaml')
+
+    if os.path.exists(augmented_folder):
+        print(f'Augmented folder already exists at {augmented_folder}. \
+                 Skipping sub-sampling & augmenting...')
+
+        return
+
+    prefix_list = []
+
+    # Read the images and labels.
+    # e.g. image path : 'TCGA-18-5592-01Z-00-DX1_H-1_W378_patch_96x96.png'
+    # prefix: 'TCGA-18-5592-01Z-00-DX1_H-1_W378'
+    for image_path, label_path in zip(subset_image_path_list, subset_label_path_list):
+        prefix = os.path.basename(image_path).replace(
+            '_patch_%sx%s.png' % (patch_size, patch_size), '')
+        assert prefix == os.path.basename(label_path).replace(
+            '_patch_%sx%s.png' % (patch_size, patch_size), '')
+        prefix_list.append(prefix)
+
+    '''Augmentation'''
+    # Use a single data structure to hold all information for augmentation.
+    augmentation_tuple_list = []
+    for prefix, image_path, label_path in \
+        zip(prefix_list, subset_image_path_list, subset_label_path_list):
+        augmentation_tuple_list.append((prefix, image_path, label_path, multiplier))
+    
+    for augmentation_method in augmentation_methods:
+        augment_and_save(augmentation_tuple_list, 
+                         augmented_patch_size, 
+                         augmented_folder, 
+                         augmentation_method)
+
+    print('Done.')
+    print('Augmentation tuple list[:10]:')
+    print(len(augmentation_tuple_list), augmentation_tuple_list[:10])
+    print('Total number of patches:', \
+          len(augmentation_tuple_list) * multiplier * len(augmentation_methods) \
+            + len(augmentation_tuple_list))
+
 
 
 if __name__ == '__main__':

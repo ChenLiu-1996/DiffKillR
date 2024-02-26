@@ -1,0 +1,18 @@
+project: cellseg
+program: run_experiment.py
+command:
+  - python
+  - ${program}
+  - ${args_no_hyphens}
+method: grid  # or 'random', 'bayes'
+metric:
+  name: infer/iou_seg_mean
+  goal: maximize
+parameters:
+  data.sample_percent:
+    values: [0.1, 0.01]
+  data.aug_multiplier:
+    values: [3, 5, 8]
+  data.organ_type:
+    values: ['Breast','Kidney','Colon']
+  

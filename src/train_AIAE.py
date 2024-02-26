@@ -271,9 +271,6 @@ def train(config: OmegaConf, wandb_run=None):
                 filepath=log_dir,
                 to_console=True)
             break
-    
-    if wandb_run is not None:
-        wandb_run.finish()
 
     return
 
@@ -317,6 +314,7 @@ def generate_train_pairs(config: OmegaConf):
         images = images.float().to(device)
         _, latent_features = model(images)
         latent_features = torch.flatten(latent_features, start_dim=1)
+        latent_features = latent_features.cpu().numpy()
         for i in range(len(latent_features)):
             if 'original' in img_paths[i]:
                 bank_embeddings.append(latent_features[i])
@@ -339,10 +337,10 @@ def generate_train_pairs(config: OmegaConf):
     for i in range(len(to_be_matched_embeddings)):
         patch_id = dataset.get_patch_id(to_be_matched_paths[i])
         mother = dataset.patch_id_to_canonical_pose_path[patch_id]
+        sorted_idx = np.argsort(dist_matrix[i])
+        # remove mother index from sorted_idx
         if mother in bank_paths: # mother may not be in the same split
             mother_index = bank_paths.index(mother)
-            sorted_idx = np.argsort(dist_matrix[i])
-            # remove mother index from sorted_idx
             sorted_idx = sorted_idx[sorted_idx != mother_index]
         
         # select the closest non-mother index
@@ -710,12 +708,12 @@ def infer(config: OmegaConf):
     test_img_folder = os.path.join(config.test_folder, 'image')
     print('test_img_folder: ', test_img_folder)
     test_img_files = sorted(glob(os.path.join(test_img_folder, '*.png')))
-    print('test_img_files: ', test_img_files[:5])
+    #print('test_img_files: ', test_img_files[:5])
     test_img_bank = {
         'embeddings': [],
     }
     test_images = [torch.Tensor(load_image(img_path, config.target_dim)) for img_path in test_img_files]
-    print('Test images: ', test_images[:5])
+    #print('Test images: ', test_images[:5])
     test_images = torch.stack(test_images, dim=0)
     print('Test images shape: ', test_images.shape) # (N, in_chan, H, W)
     test_dataset = torch.utils.data.TensorDataset(test_images)
@@ -810,3 +808,8 @@ if __name__ == '__main__':
     elif args.mode == 'infer':
         generate_train_pairs(config=config)
         infer(config=config)
+
+    if wandb_run is not None:
+        wandb_run.finish()
+    
+    print('Done.\n')

@@ -327,8 +327,6 @@ def train(config: OmegaConf, wandb_run=None):
                 filepath=config.log_dir,
                 to_console=True)
             break
-    if wandb_run is not None:
-        wandb_run.finish()
 
     return
 
@@ -430,7 +428,7 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
     return
 
 @torch.no_grad()
-def infer(config):
+def infer(config, wandb_run=None):
     '''
         Given input pair of images, infer the warping field.
         pair input is a cvs file with columns:
@@ -537,6 +535,12 @@ def infer(config):
         filepath=config.log_dir,
         to_console=True)
 
+    if wandb_run is not None:
+        wandb_run.log({'infer/dice_seg_mean': np.mean(dice_list),
+                       'infer/dice_seg_std': np.std(dice_list),
+                       'infer/iou_seg_mean': np.mean(iou_list),
+                       'infer/iou_seg_std': np.std(iou_list)})
+
     return
 
 
@@ -582,8 +586,12 @@ if __name__ == '__main__':
     if args.mode == 'train':
         train(config=config, wandb_run=wandb_run)
         #test(config=config)
+        infer(config=config, wandb_run=wandb_run)
     elif args.mode == 'test':
         pass
         #test(config=config)
     elif args.mode == 'infer':
-        infer(config=config)
+        infer(config=config, wandb_run=wandb_run)
+
+    if wandb_run is not None:
+        wandb_run.finish()
