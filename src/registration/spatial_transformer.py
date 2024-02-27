@@ -58,10 +58,10 @@ if __name__ == '__main__':
     from dipy.align.metrics import CCMetric
 
     fixed_image = cv2.cvtColor(
-        cv2.imread('../../data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_augmented_patch_32x32/partial_stretch/image/EpithelialCell_H3018_W10206_original.png'),
+        cv2.imread('../../data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_augmented_patch_32x32/partial_stretch/image/EpithelialCell_H6852_W13114_original.png'),
         cv2.COLOR_BGR2RGB)
     moving_image = cv2.cvtColor(
-        cv2.imread('../../data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_augmented_patch_32x32/partial_stretch/image/EpithelialCell_H3018_W10206_aug00001.png'),
+        cv2.imread('../../data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_augmented_patch_32x32/partial_stretch/image/EpithelialCell_H3018_W10206_original.png'),
         cv2.COLOR_BGR2RGB)
 
     # Use classic registration to generate the warping field.
@@ -85,19 +85,19 @@ if __name__ == '__main__':
 
     # Plotting.
     plt.rcParams['font.family'] = 'serif'
-    fig = plt.figure(figsize=(18, 4))
+    fig = plt.figure(figsize=(12, 9))
 
-    ax = fig.add_subplot(1, 5, 1)
+    ax = fig.add_subplot(2, 3, 1)
     ax.imshow(fixed_image)
     ax.set_axis_off()
     ax.set_title('Fixed image')
 
-    ax = fig.add_subplot(1, 5, 2)
+    ax = fig.add_subplot(2, 3, 4)
     ax.imshow(moving_image)
     ax.set_axis_off()
     ax.set_title('Moving image')
 
-    ax = fig.add_subplot(1, 5, 3)
+    ax = fig.add_subplot(2, 3, 2)
     vectors = [np.arange(0, s) for s in (32, 32)]
     X, Y = np.meshgrid(vectors[0], vectors[1])
     warped_X = X + mapping.backward[:, :, 0]
@@ -108,14 +108,27 @@ if __name__ == '__main__':
         ax.plot(warped_X[:, j], warped_Y[:, j], color='k')
     ax.invert_yaxis()
     ax.set_axis_off()
-    ax.set_title('Warping field')
+    ax.set_title('Forward warp')
 
-    ax = fig.add_subplot(1, 5, 4)
+    ax = fig.add_subplot(2, 3, 5)
+    vectors = [np.arange(0, s) for s in (32, 32)]
+    X, Y = np.meshgrid(vectors[0], vectors[1])
+    warped_X = X + mapping.forward[:, :, 0]
+    warped_Y = Y + mapping.forward[:, :, 1]
+    for i in range(32):
+        ax.plot(warped_X[i, :], warped_Y[i, :], color='k')
+    for j in range(32):
+        ax.plot(warped_X[:, j], warped_Y[:, j], color='k')
+    ax.invert_yaxis()
+    ax.set_axis_off()
+    ax.set_title('Inverse warp')
+
+    ax = fig.add_subplot(2, 3, 3)
     ax.imshow(warped_dipy)
     ax.set_axis_off()
     ax.set_title('Warp operation by\nClassic registration')
 
-    ax = fig.add_subplot(1, 5, 5)
+    ax = fig.add_subplot(2, 3, 6)
     ax.imshow(warped_st)
     ax.set_axis_off()
     ax.set_title('Warp operation by\nDifferentiable Neural Network')

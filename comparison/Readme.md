@@ -49,3 +49,22 @@ python test_nnunet.py --loaddirec "../results/MoNuSegByCancer_200x200/colon/nnUN
 --direc "../results/MoNuSegByCancer_200x200/colon/nnUNet/" \
 --batch_size 1 --modelname "nnUNet" --imgsize 200 --gray "no"
 ```
+
+
+## PSM
+```
+cd PSM
+
+python main_monuseg.py --mode 'train_base' --crop_edge_size 200
+
+python main_monuseg.py --mode 'generate_label' --method 'gradcam'
+
+python main_monuseg.py --mode 'train_second_stage' --crop_edge_size 200
+
+python main_monuseg.py --mode 'generate_voronoi' --crop_edge_size 200
+
+python main_monuseg.py --mode 'train_final_stage' --crop_edge_size 200
+
+python main_monuseg.py --mode 'test' --crop_edge_size 200
+
+```

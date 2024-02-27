@@ -143,13 +143,8 @@ class ImageToImage2D(Dataset):
 
     def __getitem__(self, idx):
         image_filename = self.images_list[idx]
-        #print(image_filename[: -3])
         # read image
-        # print(os.path.join(self.input_path, image_filename))
-        # print(os.path.join(self.output_path, image_filename[: -3] + "png"))
-        # print(os.path.join(self.input_path, image_filename))
         image = cv2.imread(os.path.join(self.input_path, image_filename))
-        # print(image.shape)
         # read mask image
         mask = cv2.imread(os.path.join(self.output_path, image_filename[: -3] + "png"),0)
 
@@ -157,7 +152,6 @@ class ImageToImage2D(Dataset):
         mask[mask>127] = 1
         # correct dimensions if needed
         image, mask = correct_dims(image, mask)
-        # print(image.shape)
 
         if self.joint_transform:
             image, mask = self.joint_transform(image, mask)
@@ -165,13 +159,6 @@ class ImageToImage2D(Dataset):
         if self.one_hot_mask:
             assert self.one_hot_mask > 0, 'one_hot_mask must be nonnegative'
             mask = torch.zeros((self.one_hot_mask, mask.shape[1], mask.shape[2])).scatter_(0, mask.long(), 1)
-        # mask = np.swapaxes(mask,2,0)
-        # print(image.shape)
-        # print(mask.shape)
-        # mask = np.transpose(mask,(2,0,1))
-        # image = np.transpose(image,(2,0,1))
-        # print(image.shape)
-        # print(mask.shape)
 
         return image, mask, image_filename
 
