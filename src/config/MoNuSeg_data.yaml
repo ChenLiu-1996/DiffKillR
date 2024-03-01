@@ -2,10 +2,10 @@ dataset_name: MoNuSeg
 target_dim:
 - 32
 - 32
-dataset_path: ../data/0.100_Colon_m3_MoNuSeg2018TrainData_augmented_patch_32x32/
+dataset_path: ../data/0.100_Breast_m3_MoNuSeg2018TrainData_augmented_patch_32x32/
 aug_methods: rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch
 test_folder: ../data/MoNuSeg2018TestData_patch_32x32/
 log_folder: ../logs/
 percentage: 0.1
-organ: Colon
+organ: Breast
 multiplier: 3
