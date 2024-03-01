@@ -307,65 +307,70 @@ def generate_train_pairs(config: OmegaConf):
         to_console=True)
     output_save_path = os.path.join(config.output_save_root, model_name)
     os.makedirs(output_save_path, exist_ok=True)
-    pairing_save_path = os.path.join(output_save_path, 'train_pairs.csv')
 
-    # Generate training embeddings.
-    to_be_matched_embeddings = []
-    to_be_matched_paths = []
-    bank_embeddings = []
-    bank_paths = []
-    for iter_idx, (images, _, _, _, img_paths, _) in enumerate(train_set):
-        images = images.float().to(device)
-        _, latent_features = model(images)
-        latent_features = torch.flatten(latent_features, start_dim=1)
-        latent_features = latent_features.cpu().numpy()
-        for i in range(len(latent_features)):
-            if 'original' in img_paths[i]:
-                bank_embeddings.append(latent_features[i])
-                bank_paths.append(img_paths[i])
-            else:
-                to_be_matched_embeddings.append(latent_features[i])
-                to_be_matched_paths.append(img_paths[i])
+    loader_map = {
+        'train': train_set,
+        'val': val_set,
+        'test': test_set,
+    }
+    for k, loader in loader_map.items():
+        log(f'Generating {k} embeddings pairs ...')
 
-    to_be_matched_embeddings = np.stack(to_be_matched_embeddings, axis=0) # (N1, latent_dim)
-    bank_embeddings = np.stack(bank_embeddings, axis=0) # (N2, latent_dim)
-    log(f'Bank: {bank_embeddings.shape}, \
-        To be matched: {to_be_matched_embeddings.shape}', to_console=True)
+        # Generate embeddings.
+        to_be_matched_embeddings = []
+        to_be_matched_paths = []
+        bank_embeddings = []
+        bank_paths = []
+        pairing_save_path = os.path.join(output_save_path, f'{k}_pairs.csv')
+
+        for iter_idx, (images, _, _, _, img_paths, _) in enumerate(loader):
+            images = images.float().to(device)
+            _, latent_features = model(images)
+            latent_features = torch.flatten(latent_features, start_dim=1)
+            latent_features = latent_features.cpu().numpy()
+            for i in range(len(latent_features)):
+                if 'original' in img_paths[i]:
+                    bank_embeddings.append(latent_features[i])
+                    bank_paths.append(img_paths[i])
+                else:
+                    to_be_matched_embeddings.append(latent_features[i])
+                    to_be_matched_paths.append(img_paths[i])
+
+        to_be_matched_embeddings = np.stack(to_be_matched_embeddings, axis=0) # (N1, latent_dim)
+        bank_embeddings = np.stack(bank_embeddings, axis=0) # (N2, latent_dim)
+        log(f'[{k}]Bank: {bank_embeddings.shape}, \
+            To be matched: {to_be_matched_embeddings.shape}', to_console=True)
+        
+        # Generate pairing, match augmented images to its non-mother anchor
+        dist_matrix = sklearn.metrics.pairwise_distances(to_be_matched_embeddings,
+                                            bank_embeddings,
+                                            metric='cosine') # [N1, N2]
+        closest_img_paths = []
+        closest_dists = []
+        for i in range(len(to_be_matched_embeddings)):
+            patch_id = dataset.get_patch_id(to_be_matched_paths[i])
+            mother = dataset.patch_id_to_canonical_pose_path[patch_id]
+            sorted_idx = np.argsort(dist_matrix[i])
+            # remove mother index from sorted_idx
+            if mother in bank_paths: # mother may not be in the same split
+                mother_index = bank_paths.index(mother)
+                sorted_idx = sorted_idx[sorted_idx != mother_index]
+            
+            # select the closest non-mother index
+            closest_index = sorted_idx[0]
+            closest_img_paths.append(bank_paths[closest_index])
+            closest_dists.append(dist_matrix[i, closest_index]) # NOTE: this is wrong, but not affecting the result.
+            
+        results_df = pd.DataFrame({
+            'test_image_path': to_be_matched_paths,
+            'closest_image_path': closest_img_paths,
+            'distance': closest_dists,
+            'source': ['original'] * len(to_be_matched_paths),
+        })
+        results_df.to_csv(pairing_save_path, index=False)
+        log(f'[{k}] Pairing saved to {pairing_save_path}', to_console=True)
     
-    # Generate pairing, match augmented images to its non-mother anchor
-    dist_matrix = sklearn.metrics.pairwise_distances(to_be_matched_embeddings,
-                                        bank_embeddings,
-                                        metric='cosine') # [N1, N2]
-    closest_img_paths = []
-    closest_dists = []
-    for i in range(len(to_be_matched_embeddings)):
-        patch_id = dataset.get_patch_id(to_be_matched_paths[i])
-        mother = dataset.patch_id_to_canonical_pose_path[patch_id]
-        sorted_idx = np.argsort(dist_matrix[i])
-        # remove mother index from sorted_idx
-        if mother in bank_paths: # mother may not be in the same split
-            mother_index = bank_paths.index(mother)
-            sorted_idx = sorted_idx[sorted_idx != mother_index]
-        
-        # select the closest non-mother index
-        closest_index = sorted_idx[0]
-        closest_img_paths.append(bank_paths[closest_index])
-        closest_dists.append(dist_matrix[i, closest_index]) # NOTE: this is wrong, but not affecting the result.
-        
-    results_df = pd.DataFrame({
-        'test_image_path': to_be_matched_paths,
-        'closest_image_path': closest_img_paths,
-        'distance': closest_dists,
-        'source': ['original'] * len(to_be_matched_paths),
-    })
-    results_df.to_csv(pairing_save_path, index=False)
-
-    # TODO: Do the same for val_set, test_set
-
-
     return
-
-
 
 
 import sklearn.metrics

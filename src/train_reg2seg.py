@@ -86,7 +86,7 @@ def plot_side_by_side(save_path, im_U, im_A, im_U2A_A2U, im_U2A, ma_U, ma_A, ma_
 
     return
 
-def load_match_pairs(matched_pair_path: str, mode: str, config):
+def load_match_pairs(matched_pair_path_root: str, mode: str, config):
     '''
     Load the matched pairs from csv. file and return 
         - unanotated_images
@@ -97,7 +97,7 @@ def load_match_pairs(matched_pair_path: str, mode: str, config):
     import pandas as pd
     from datasets.augmented_MoNuSeg import load_image, load_mask
 
-    matched_df = pd.read_csv(matched_pair_path)
+    matched_df = pd.read_csv(os.path.join(matched_pair_path_root, f'{mode}_pairs.csv'))
     unanotated_image_paths = matched_df['test_image_path'].tolist()
     annotated_image_paths = matched_df['closest_image_path'].tolist()
     annotated_label_paths = [x.replace('image', 'label') for x in annotated_image_paths]
@@ -125,18 +125,33 @@ def train(config: OmegaConf, wandb_run=None):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     
-    #_, train_set, val_set, _ = prepare_dataset(config=config)
     # Set all the paths.
     model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
-    matched_pair_path = os.path.join(config.output_save_root, model_name, 'train_pairs.csv')
+    matched_pair_path_root = os.path.join(config.output_save_root, model_name)
     config.log_dir = os.path.join(config.log_folder, model_name) # This is log file path.
     config.model_save_path = os.path.join(config.output_save_root, model_name, 'reg2seg.ckpt')
     
-    load_results = load_match_pairs(matched_pair_path, mode='train', config=config)
-    (unannotated_images, unannotated_masks, annotated_images, annotated_masks) = load_results
+    # Load train, val, test sets
+    load_results_map = {
+        'train': load_match_pairs(matched_pair_path_root, mode='train', config=config),
+        'val': load_match_pairs(matched_pair_path_root, mode='val', config=config),
+        'test': load_match_pairs(matched_pair_path_root, mode='test', config=config)
+    }
+    dataset_map = {}
+    dataloader_map = {}
+    for k, load_results in load_results_map.items():
+        (unannotated_images, unannotated_masks, annotated_images, annotated_masks) = load_results
+        dataset = torch.utils.data.TensorDataset(unannotated_images, unannotated_masks, annotated_images, annotated_masks)
+        loader = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
+        dataset_map[k] = dataset
+        dataloader_map[k] = loader
 
-    dataset = torch.utils.data.TensorDataset(unannotated_images, unannotated_masks, annotated_images, annotated_masks)
-    train_set = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
+    train_loader = dataloader_map['train']
+    val_loader = dataloader_map['val']
+    test_loader = dataloader_map['test']
+    # merge val, test loader?
+    val_test_set = torch.utils.data.ConcatDataset([dataset_map['val'], dataset_map['test']])
+    val_test_loader = torch.utils.data.DataLoader(val_test_set, batch_size=config.batch_size, shuffle=True)
 
     # Build the model
     try:
@@ -165,8 +180,8 @@ def train(config: OmegaConf, wandb_run=None):
         train_dice_ref_list, train_dice_seg_list = [], []
 
         warp_predictor.train()
-        plot_freq = int(len(train_set) // config.n_plot_per_epoch)
-        for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks) in enumerate(tqdm(train_set)):
+        plot_freq = int(len(dataset_map['train']) // config.n_plot_per_epoch)
+        for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks) in enumerate(tqdm(train_loader)):
             shall_plot = iter_idx % plot_freq == plot_freq - 1
 
             if len(unannotated_masks.shape) == 3:
@@ -250,8 +265,9 @@ def train(config: OmegaConf, wandb_run=None):
         with torch.no_grad():
             val_loss, val_loss_forward, val_loss_cyclic = 0, 0, 0
             val_dice_ref_list, val_dice_seg_list = [], []
-            plot_freq = int(len(train_set) // config.n_plot_per_epoch)
-            for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks) in enumerate(tqdm(train_set)):
+            plot_freq = int(len(val_test_set) // config.n_plot_per_epoch)
+            print('yo: ', plot_freq, len(val_test_loader))
+            for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks) in enumerate(tqdm(val_test_loader)):
                 shall_plot = iter_idx % plot_freq == plot_freq - 1
 
                 # NOTE: batch size is len(val_set) here.
@@ -464,7 +480,7 @@ def infer(config, wandb_run=None):
 
     # Set all the paths.
     model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
-    config.matched_pair_path = os.path.join(config.output_save_root, model_name, 'infer_pairs.csv')
+    config.matched_pair_path_root = os.path.join(config.output_save_root, model_name)
     config.model_save_path = os.path.join(config.output_save_root, model_name, 'reg2seg.ckpt')
     config.log_dir = os.path.join(config.log_folder, model_name) # This is log file path.
     save_folder = os.path.join(config.output_save_root, model_name, 'reg2seg')
@@ -484,7 +500,7 @@ def infer(config, wandb_run=None):
     warper = warper.to(device)
 
     # Step 1: Load matched pairs.
-    load_results = load_match_pairs(config.matched_pair_path, mode='infer', config=config)
+    load_results = load_match_pairs(config.matched_pair_path_root, mode='infer', config=config)
     (test_images, test_masks, closest_images, closest_masks) = load_results
     dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_masks, test_masks)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=False)
