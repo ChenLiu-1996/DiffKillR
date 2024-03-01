@@ -2,9 +2,14 @@ import argparse
 import numpy as np
 import torch
 import os
+from glob import glob
 import yaml
-from model.scheduler import LinearWarmupCosineAnnealingLR
+from omegaconf import OmegaConf
+import wandb
 from tqdm import tqdm
+from torch.utils.data import DataLoader
+
+from model.scheduler import LinearWarmupCosineAnnealingLR
 from model.autoencoder import AutoEncoder
 from utils.attribute_hashmap import AttributeHashmap
 from utils.prepare_dataset import prepare_dataset
@@ -15,9 +20,7 @@ from utils.seed import seed_everything
 from utils.early_stop import EarlyStopping
 from loss.supervised_contrastive import SupConLoss
 from loss.triplet_loss import TripletLoss, construct_triplet_batch
-
-from omegaconf import OmegaConf
-import wandb
+from datasets.augmented_MoNuSeg import AugmentedMoNuSegDataset, load_image
 
 def construct_batch_images_with_n_views(
         images,
@@ -79,7 +82,8 @@ def train(config: OmegaConf, wandb_run=None):
     try:
         model = globals()[config.model](num_filters=config.num_filters,
                                         in_channels=3,
-                                        out_channels=3)
+                                        out_channels=3,
+                                        use_residual=config.use_residual)
     except:
         raise ValueError('`config.model`: %s not supported.' % config.model)
 
@@ -295,12 +299,12 @@ def generate_train_pairs(config: OmegaConf):
         raise ValueError('`config.model`: %s not supported.' % config.model)
     model = model.to(device)
 
+    # Set all paths.
     model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
     model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
     model.load_weights(model_save_path, device=device)
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)
-
     output_save_path = os.path.join(config.output_save_root, model_name)
     os.makedirs(output_save_path, exist_ok=True)
     pairing_save_path = os.path.join(output_save_path, 'train_pairs.csv')
@@ -356,10 +360,13 @@ def generate_train_pairs(config: OmegaConf):
     })
     results_df.to_csv(pairing_save_path, index=False)
 
-    # TODO: Do the same for val_set
+    # TODO: Do the same for val_set, test_set
 
 
     return
+
+
+
 
 import sklearn.metrics
 import pandas as pd
@@ -387,7 +394,7 @@ def test(config: OmegaConf):
     os.makedirs(output_save_path, exist_ok=True)
     save_path_fig_embeddings_inst = '%s/embeddings_inst.png' % output_save_path
     save_path_fig_reconstructed = '%s/reconstructed.png' % output_save_path
-
+    
     model.load_weights(model_save_path, device=device)
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)
@@ -647,14 +654,13 @@ def infer(config: OmegaConf):
             - distance
             - source (original or augmented)
     '''
-    from datasets.augmented_MoNuSeg import AugmentedMoNuSegDataset, load_image
-    from torch.utils.data import DataLoader
-    from glob import glob
-
     # Step 1: Load the model & generate embeddings for images in anchor bank.
+    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
+    model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
+
+    # Load test data
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    # dataset, train_set, val_set, test_set = prepare_dataset(config=config)
     aug_lists = config.aug_methods.split(',')
     dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,
                                          base_path=config.dataset_path,
@@ -671,14 +677,12 @@ def infer(config: OmegaConf):
                                         out_channels=3)
     except:
         raise ValueError('`config.model`: %s not supported.' % config.model)
-
     model = model.to(device)
-    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
-    model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
     model.load_weights(model_save_path, device=device)
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)
     
+    # Generate embeddings for anchor bank
     log('Generating embeddings for anchor bank. Total images: %d' % len(dataset), 
         to_console=True)
     anchor_bank = {
@@ -687,7 +691,9 @@ def infer(config: OmegaConf):
         'sources': [],
     }
     log('Inferring ...', to_console=True)
+
     model.eval()
+    config.anchor_only = False # FIXME: add as param
     with torch.no_grad():
         for iter_idx, (images, _, _, _, img_paths, cannoical_img_path) in enumerate(dataloader):
             images = images.float().to(device)
@@ -695,42 +701,48 @@ def infer(config: OmegaConf):
             latent_features = torch.flatten(latent_features, start_dim=1)
             #print('latent_features.shape: ', latent_features.shape) # (bsz, latent_dim)
 
-            anchor_bank['embeddings'].extend([latent_features.cpu().numpy()]) # (bsz, latent_dim)
-            anchor_bank['img_paths'].extend(img_paths)
-            sources = ['original' if 'original' in img_path else 'augmented' for img_path in img_paths]
-            anchor_bank['sources'].extend(sources)
+            for i in range(len(latent_features)):
+                if config.anchor_only:
+                    if 'original' in img_paths[i]:
+                        anchor_bank['embeddings'].append(latent_features[i].cpu().numpy())
+                        anchor_bank['img_paths'].append(img_paths[i])
+                        anchor_bank['sources'].append('original')
+                else:
+                    anchor_bank['embeddings'].append(latent_features[i].cpu().numpy())
+                    anchor_bank['img_paths'].append(img_paths[i])
+                    anchor_bank['sources'].append('original' if 'original' in img_paths[i] else 'augmented')
         
-    anchor_bank['embeddings'] = np.concatenate(anchor_bank['embeddings'], axis=0) # (N, latent_dim)
+    anchor_bank['embeddings'] = np.concatenate([anchor_bank['embeddings']], axis=0) # (N, latent_dim)
+    print('anchor_bank[embeddings].shape: ', anchor_bank['embeddings'].shape)
+    print('len(anchor_bank[img_paths]): ', len(anchor_bank['img_paths']))
+    print('len(anchor_bank[sources]): ', len(anchor_bank['sources']))
     assert anchor_bank['embeddings'].shape[0] == len(anchor_bank['img_paths']) == len(anchor_bank['sources'])
     log(f'Anchor bank embeddings generated. shape:{anchor_bank["embeddings"].shape}', to_console=True)
 
     # Step 2: Generate embeddings for test images.
     test_img_folder = os.path.join(config.test_folder, 'image')
-    print('test_img_folder: ', test_img_folder)
     test_img_files = sorted(glob(os.path.join(test_img_folder, '*.png')))
-    #print('test_img_files: ', test_img_files[:5])
+    print('test_img_folder: ', test_img_folder)
     test_img_bank = {
         'embeddings': [],
     }
     test_images = [torch.Tensor(load_image(img_path, config.target_dim)) for img_path in test_img_files]
-    #print('Test images: ', test_images[:5])
-    test_images = torch.stack(test_images, dim=0)
-    print('Test images shape: ', test_images.shape) # (N, in_chan, H, W)
+    test_images = torch.stack(test_images, dim=0) # (N, in_chan, H, W)
+    log(f'Done loading test images, shape: {test_images.shape}', to_console=True)
+
     test_dataset = torch.utils.data.TensorDataset(test_images)
     test_dataloader = DataLoader(dataset=test_dataset,
                                  batch_size=config.batch_size,
                                  shuffle=False, # No shuffle since we're using the indices
                                  num_workers=config.num_workers)
+    
     with torch.no_grad():
         for iter_idx, (images,) in enumerate(test_dataloader):
-            # print('Processing batch %d/%d' % (iter_idx, len(test_dataloader)))
-            # print(len(images))
-            # print(images[0].shape)
-            # print('images.shape: ', images.shape)
             images = images.float().to(device)
             _, latent_features = model(images)
             latent_features = torch.flatten(latent_features, start_dim=1)
             test_img_bank['embeddings'].extend([latent_features.cpu().numpy()])
+
     test_img_bank['embeddings'] = np.concatenate(test_img_bank['embeddings'], axis=0) # (N, latent_dim)
     log(f"test_img_bank[embeddings].shape: {test_img_bank['embeddings'].shape}", to_console=True)
     log('Done generating embeddings for test images.', to_console=True)
@@ -760,8 +772,8 @@ def infer(config: OmegaConf):
         'source': [anchor_bank['sources'][idx] for idx in closest_anchor_idxs],
     })
     output_save_path = os.path.join(config.output_save_root, model_name)
-    results_df.to_csv(os.path.join(output_save_path, 'test_pairs.csv'), index=False)
-    print('Results saved to: ', os.path.join(output_save_path, 'test_pairs.csv'))
+    results_df.to_csv(os.path.join(output_save_path, 'infer_pairs.csv'), index=False)
+    print('Results saved to: ', os.path.join(output_save_path, 'infer_pairs.csv'))
 
     return
 

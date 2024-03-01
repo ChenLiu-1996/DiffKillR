@@ -65,10 +65,17 @@ def augment_and_save(augmentation_tuple_list: List[tuple],
             augmented_folder, augmentation_method, prefix)
         label_orig_path = '%s/%s/label/%s_original.png' % (
             augmented_folder, augmentation_method, prefix)
+        colored_label_orig_path = '%s/%s/colored_label/%s_original.png' % (
+            augmented_folder, augmentation_method, prefix)
         os.makedirs(os.path.dirname(image_orig_path), exist_ok=True)
         os.makedirs(os.path.dirname(label_orig_path), exist_ok=True)
+        os.makedirs(os.path.dirname(colored_label_orig_path), exist_ok=True)
         cv2.imwrite(image_orig_path, cv2.cvtColor(image_orig, cv2.COLOR_RGB2BGR))
         cv2.imwrite(label_orig_path, label_orig)
+        colored_label_orig = np.zeros_like(image_orig)
+        print(colored_label_orig.shape, label_orig.shape)
+        colored_label_orig[label_orig == 1] = [0, 0, 255]
+        cv2.imwrite(colored_label_orig_path, colored_label_orig)
 
         aug_counter = 0
         for _ in range(multiplier):
@@ -96,12 +103,19 @@ def augment_and_save(augmentation_tuple_list: List[tuple],
                 augmented_folder, augmentation_method, prefix, str(aug_counter).zfill(5))
             label_aug_path = '%s/%s/label/%s_aug%s.png' % (
                 augmented_folder, augmentation_method, prefix, str(aug_counter).zfill(5))
+            colored_label_aug_path = '%s/%s/colored_label/%s_aug%s.png' % (
+                augmented_folder, augmentation_method, prefix, str(aug_counter).zfill(5))
 
             os.makedirs(os.path.dirname(image_aug_path), exist_ok=True)
             os.makedirs(os.path.dirname(label_aug_path), exist_ok=True)
+            os.makedirs(os.path.dirname(colored_label_aug_path), exist_ok=True)
 
             cv2.imwrite(image_aug_path, cv2.cvtColor(image_aug, cv2.COLOR_RGB2BGR))
             cv2.imwrite(label_aug_path, label_aug)
+            colored_label_aug = np.zeros_like(image_aug)
+            colored_label_aug[label_aug == 1] = [0, 0, 255]
+            cv2.imwrite(colored_label_aug_path, colored_label_aug)
+
 
     return
 

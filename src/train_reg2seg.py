@@ -24,8 +24,19 @@ def numpy_variables(*tensors: torch.Tensor) -> Tuple[np.array]:
     '''
     Some repetitive numpy casting of variables.
     '''
-    return [_tensor.cpu().detach().numpy().transpose(1, 2, 0) for _tensor in tensors]
+    results = []
+    
+    # convert all tensors to have the same shape. [C, H, W]
+    for i in range(len(tensors)):
+        curr = tensors[i].cpu().detach().numpy()
+        if len(curr.shape) == 2:
+            curr = np.expand_dims(curr, 0)
+        curr = curr.transpose(1, 2, 0)
+        results.append(curr)
 
+    # [N, C, H, W] -> [N, H, W, C] for visualization.
+    assert all([len(t.shape) == 3 for t in results])
+    return results
 
 def plot_side_by_side(save_path, im_U, im_A, im_U2A_A2U, im_U2A, ma_U, ma_A, ma_A2U):
     plt.rcParams['font.family'] = 'serif'
@@ -66,8 +77,8 @@ def plot_side_by_side(save_path, im_U, im_A, im_U2A_A2U, im_U2A, ma_U, ma_A, ma_
     ax.set_title('Projected Mask (A->U)')
     ax.set_axis_off()
 
-    fig_sbs.suptitle('Dice (Mask(U), Mask(A)) = %.3f, Dice (Mask(U), Mask(A->U)) = %.3f' % (
-        dice_coeff(ma_U, ma_A), dice_coeff(ma_U, ma_A2U)), fontsize=15)
+    fig_sbs.suptitle('IoU (Mask(U), Mask(A)) = %.3f, IoU (Mask(U), Mask(A->U)) = %.3f' % (
+        IoU(ma_U, ma_A), IoU(ma_U, ma_A2U)), fontsize=15)
     fig_sbs.tight_layout()
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig_sbs.savefig(save_path)
@@ -453,10 +464,10 @@ def infer(config, wandb_run=None):
 
     # Set all the paths.
     model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
-    config.matched_pair_path = os.path.join(config.output_save_root, model_name, 'test_pairs.csv')
+    config.matched_pair_path = os.path.join(config.output_save_root, model_name, 'infer_pairs.csv')
     config.model_save_path = os.path.join(config.output_save_root, model_name, 'reg2seg.ckpt')
     config.log_dir = os.path.join(config.log_folder, model_name) # This is log file path.
-
+    save_folder = os.path.join(config.output_save_root, model_name, 'reg2seg')
 
     # Build the model
     try:
@@ -475,14 +486,14 @@ def infer(config, wandb_run=None):
     # Step 1: Load matched pairs.
     load_results = load_match_pairs(config.matched_pair_path, mode='infer', config=config)
     (test_images, test_masks, closest_images, closest_masks) = load_results
-    dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_masks)
+    dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_masks, test_masks)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=False)
 
     # Step 2: Predict & Apply the warping field.
     warp_predictor.eval()
     pred_mask_list = []
     print(f'Starting inference for {test_images.shape[0]} test images ...')
-    for iter_idx, (bclosest_images, btest_images, bclosest_masks) in enumerate(tqdm(dataloader)):
+    for iter_idx, (bclosest_images, btest_images, bclosest_masks, btest_masks) in enumerate(tqdm(dataloader)):
         # [N, H, W] -> [N, 1, H, W]
         if len(bclosest_masks.shape) == 3:
             bclosest_masks = bclosest_masks[:, None, ...]
@@ -498,10 +509,23 @@ def infer(config, wandb_run=None):
         #print(warp_field_forward.shape, warp_field_reverse.shape)
 
         # Apply the warping field.
-        #images_U2A = warper(btest_images, flow=warp_field_forward)
+        images_U2A = warper(btest_images, flow=warp_field_forward)
+        images_U2A_A2U = warper(images_U2A, flow=warp_field_reverse)
         pred_masks = warper(bclosest_masks, flow=warp_field_reverse)
         bpred_mask_list = [m.cpu().detach().numpy() for m in pred_masks]
         pred_mask_list.extend(bpred_mask_list)
+        
+        plot_freq = 10
+        shall_plot = iter_idx % plot_freq == 0
+        print('shall_plot: ', shall_plot, iter_idx, plot_freq, len(dataset))
+        if shall_plot:
+            save_path_fig_sbs = '%s/infer/figure_sample%s.png' % (
+                save_folder, str(iter_idx).zfill(5))
+            plot_side_by_side(save_path_fig_sbs, *numpy_variables(
+                btest_images[0], bclosest_images[0],
+                images_U2A_A2U[0], images_U2A[0],
+                btest_masks[0] > 0.5, bclosest_masks[0] > 0.5,
+                pred_masks[0] > 0.5))
 
     assert len(pred_mask_list) == len(test_masks)
     print('Completed inference.')
