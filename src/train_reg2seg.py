@@ -517,7 +517,7 @@ def infer(config, wandb_run=None):
         
         plot_freq = 10
         shall_plot = iter_idx % plot_freq == 0
-        print('shall_plot: ', shall_plot, iter_idx, plot_freq, len(dataset))
+        #print('shall_plot: ', shall_plot, iter_idx, plot_freq, len(dataset))
         if shall_plot:
             save_path_fig_sbs = '%s/infer/figure_sample%s.png' % (
                 save_folder, str(iter_idx).zfill(5))
@@ -567,6 +567,10 @@ def infer(config, wandb_run=None):
 
     return
 
+from dotenv import load_dotenv
+
+load_dotenv('../.env')
+WANDB_ENTITY = os.getenv('WANDB_ENTITY')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
@@ -575,7 +579,6 @@ if __name__ == '__main__':
     parser.add_argument('--data_config', help='Path to data config file', default='./config/MoNuSeg_data.yaml')
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
     parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
-    parser.add_argument('--use-wandb', help='Use wandb for logging', default=True, type=bool)
     parser.add_argument('--aiae-depth', help='Depth of the AIAE model', default=5, type=int) # in sync with aiae model
     parser.add_argument('--aiae-latent-loss', help='latent loss of AIAE model', default='SimCLR', type=str) #  in sync with aiae model
     args = parser.parse_args()
@@ -586,7 +589,6 @@ if __name__ == '__main__':
     
     config.gpu_id = args.gpu_id
     config.num_workers = args.num_workers
-    config.use_wandb = args.use_wandb
     config.depth = args.aiae_depth
     config.latent_loss = args.aiae_latent_loss
 
@@ -597,9 +599,9 @@ if __name__ == '__main__':
 
     wandb_run = None
     import wandb
-    if args.use_wandb and args.mode == 'train':
+    if config.use_wandb and args.mode == 'train':
         wandb_run = wandb.init(
-            entity=config.wandb_entity,
+            entity=WANDB_ENTITY,
             project="cellseg",
             name="monuseg-reg2seg",
             config=OmegaConf.to_container(config, resolve=True, throw_on_missing=True),
