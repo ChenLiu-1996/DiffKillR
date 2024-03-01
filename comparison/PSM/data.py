@@ -74,7 +74,7 @@ def get_monuseg(epoch, args):
 
     if args.mode in('train_second_stage', 'generate_voronoi', 'train_final_stage'):
 
-        for i, j, k in os.walk('/'.join(args.data_train.split('/')[:-1]) + '/data_second_stage_train'):
+        for i, j, k in os.walk('./data_%s/data_second_stage_train' % args.dataset_name):
             list_all = sorted(k[:])
         image_list = sorted([item for item in list_all if item.endswith('_original.png')])
 
@@ -83,7 +83,7 @@ def get_monuseg(epoch, args):
         else:
             anno_list = sorted([item for item in list_all if item.endswith('_pos.png')])
 
-        for i, j, k in os.walk('/'.join(args.data_test.split('/')[:-1])+ '/data_second_stage_test'):
+        for i, j, k in os.walk('./data_%s/data_second_stage_test' % args.dataset_name):
             test_list = k[:]
 
         input_test = sorted([item for item in test_list if item.endswith('_original.png')])

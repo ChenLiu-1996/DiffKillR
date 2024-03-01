@@ -10,4 +10,4 @@ num_workers: 4
 random_seed: 1
 train_val_test_ratio: '8:1:1'
 n_plot_per_epoch: 3
-wandb_entity: danqiliao
+wandb_entity: 'cl2482'

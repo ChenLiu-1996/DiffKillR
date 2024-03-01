@@ -82,9 +82,9 @@ def psm_for_seg(x_fname, y_fname, model, args, tag, device):
 
     #####
     if tag == 'test_set':
-        save_dir = '/'.join(args.data_test.split('/')[:-1]) + '/data_second_stage_test'
+        save_dir = './data_%s/data_second_stage_test' % args.dataset_name
     elif tag == 'train_set':
-        save_dir = '/'.join(args.data_train.split('/')[:-1]) + '/data_second_stage_train'
+        save_dir = './data_%s/data_second_stage_train' % args.dataset_name
     os.makedirs(save_dir, exist_ok=True)
 
     basename = x_fname.split('.')[0]

@@ -24,10 +24,12 @@ parser.add_argument('--cudnn', type=str, default='True',
                     help='set cudnn')
 
 # Data specifications
-parser.add_argument('--data_train', type=str, default='./data/training/',
+parser.add_argument('--data_train', type=str, required=True,
                     help='train dataset')
-parser.add_argument('--data_test', type=str, default='./data/testing/',
+parser.add_argument('--data_test', type=str, required=True,
                     help='test dataset')
+parser.add_argument('--dataset_name', type=str, required=True,
+                    help='dataset name')
 parser.add_argument('--crop_edge_size', type=int, default=512,
                     help='crop edge size')
 parser.add_argument('--scale', type=int, default=1,

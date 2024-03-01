@@ -25,10 +25,10 @@ torch.manual_seed(args.seed)
 os.environ["CUDA_VISIBLE_DEVICES"] = args.set_gpu
 EPOCH = args.epochs
 
-def save_model(dict, epoch, name):
-    if not os.path.exists('checkpoint'):
-        os.makedirs('checkpoint')
-    torch.save(dict, f'checkpoint/{name}_{epoch}.pth')
+def save_model(dict, epoch, name, folder):
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    torch.save(dict, f'{folder}/{name}_{epoch}.pth')
 
 def crop(x, size):
     if not size:
@@ -66,11 +66,11 @@ def preProcess_train(x_fname_list, y_fname_list, args):
         x_path = args.data_train + '/images/' + x_fname
         y_path = args.data_train + '/masks/' + y_fname
         if args.mode in ('train_second_stage', 'generate_voronoi', 'train_final_stage'):
-            x_path = '/'.join(args.data_train.split('/')[:-1]) + '/data_second_stage_train/' + x_fname
-            y_path = '/'.join(args.data_train.split('/')[:-1]) + '/data_second_stage_train/' + y_fname
+            x_path = './data_%s/data_second_stage_train/' % args.dataset_name + x_fname
+            y_path = './data_%s/data_second_stage_train/' % args.dataset_name + y_fname
 
             if args.mode == 'train_final_stage':
-                path_edge = '/'.join(args.data_train.split('/')[:-1]) + '/data_second_stage_train/' + y_fname.split('_')[-2] + '_vor.png'
+                path_edge = './data_%s/data_second_stage_train/' % args.dataset_name + y_fname.split('_')[-2] + '_vor.png'
 
         x_img = cv2.cvtColor(cv2.imread(x_path, cv2.IMREAD_COLOR), code=cv2.COLOR_BGR2RGB)
         y_img = cv2.imread(y_path, cv2.IMREAD_GRAYSCALE)
@@ -113,8 +113,8 @@ def preProcess_test(x_fname_list, y_fname_list, args):
         y_fname = y_fname_list[i]
         assert x_fname[:16] == y_fname[:16]
         if args.mode in ('train_second_stage', 'generate_voronoi', 'train_final_stage'):
-            x_path = '/'.join(args.data_test.split('/')[:-1]) + '/data_second_stage_test/' + x_fname
-            y_path = '/'.join(args.data_test.split('/')[:-1]) + '/data_second_stage_test/' + y_fname
+            x_path = './data_%s/data_second_stage_test/' % args.dataset_name + x_fname
+            y_path = './data_%s/data_second_stage_test/' % args.dataset_name + y_fname
         else:
             x_path = args.data_test + '/images/' + x_fname
             y_path = args.data_test + '/masks/' + y_fname
@@ -162,12 +162,11 @@ def trainer_selfsupervised(EPOCH, args, model, loss_func, optimizer):
         loss_mean = loss_epoch / num_items
 
         if loss_mean < best_loss:
-            save_model(model.state_dict(), 'best', 'self_stage')
+            save_model(model.state_dict(), 'best', 'self_stage', folder='checkpoint_%s' % args.dataset_name)
 
         print(F'loss:{loss_mean}')
-
-        if (epoch + 1) % args.test_interval == 0:
-            save_model(model.state_dict(), epoch, 'self_stage')
+        # if (epoch + 1) % args.test_interval == 0:
+        #     save_model(model.state_dict(), epoch, 'self_stage', folder='checkpoint_%s' % args.dataset_name)
 
 
 def trainer_selfsupervised_contrastive(EPOCH, args, model, loss_func, optimizer):
@@ -206,7 +205,7 @@ def trainer_selfsupervised_contrastive(EPOCH, args, model, loss_func, optimizer)
         print(F'loss:{loss_mean}')
 
         if (epoch + 1) % args.test_interval == 0:
-            save_model(model.state_dict(), epoch, args.model)
+            save_model(model.state_dict(), epoch, args.model, folder='checkpoint_%s' % args.dataset_name)
 
 def trainer_selfsupervised_random_rotate(EPOCH, args, model, loss_func, optimizer):
     for epoch in range(EPOCH):
@@ -234,8 +233,7 @@ def trainer_selfsupervised_random_rotate(EPOCH, args, model, loss_func, optimize
         loss_mean = sum(loss_list) / len(loss_list)
         print(F'loss:{loss_mean}')
         if (epoch + 1) % args.test_interval == 0:
-
-            save_model(model.state_dict(), epoch, args.model)
+            save_model(model.state_dict(), epoch, args.model, folder='checkpoint_%s' % args.dataset_name)
 
 def trainer_selfsupervised_simsiam(EPOCH, args, model, loss_func, optimizer):
     encoder = model
@@ -273,8 +271,7 @@ def trainer_selfsupervised_simsiam(EPOCH, args, model, loss_func, optimizer):
         loss_mean = sum(loss_list) / len(loss_list)
         print(F'loss:{loss_mean}')
         if (epoch + 1) % args.test_interval == 0:
-
-            save_model(model_whole.state_dict(), epoch, args.model)
+            save_model(model_whole.state_dict(), epoch, args.model, folder='checkpoint_%s' % args.dataset_name)
 
 def trainer_selfsupervised_mean_value(EPOCH, args, model, loss_func, optimizer):
     for epoch in range(EPOCH):
@@ -300,8 +297,7 @@ def trainer_selfsupervised_mean_value(EPOCH, args, model, loss_func, optimizer):
         loss_mean = sum(loss_list) / len(loss_list)
         print(F'loss:{loss_mean}')
         if (epoch + 1) % args.test_interval == 0:
-
-            save_model(model.state_dict(), epoch, args.model)
+            save_model(model.state_dict(), epoch, args.model, folder='checkpoint_%s' % args.dataset_name)
 
 
 def trainer_second_stage(EPOCH, args, model, loss_func, optimizer):
@@ -375,7 +371,7 @@ def trainer_second_stage(EPOCH, args, model, loss_func, optimizer):
                             best_model = copy.deepcopy(model.state_dict())
 
         optimizer.schedule()
-    save_model(best_model, 'best', 'second_stage')
+    save_model(best_model, 'best', 'second_stage', folder='checkpoint_%s' % args.dataset_name)
 
     print(f'best-epoch: {best_epoch}, aji: {best_aji}')
 
@@ -460,7 +456,7 @@ def trainer_final_stage(EPOCH, args, model, loss_func, optimizer):
                             best_model = copy.deepcopy(model.state_dict())
 
         optimizer.schedule()
-    save_model(best_model, 'best', 'final_stage')
+    save_model(best_model, 'best', 'final_stage', folder='checkpoint_%s' % args.dataset_name)
 
     print(f'best-epoch: {best_epoch}, aji: {best_aji}')
 
@@ -495,10 +491,16 @@ def test_stage(EPOCH, args, model):
                 img_save = cv2.cvtColor(img_save, cv2.COLOR_RGB2BGR)
                 label_save = cv2.cvtColor(label_save, cv2.COLOR_RGB2BGR)
                 input_save = cv2.cvtColor(np.uint8(x_test_img[i].permute(1, 2, 0).detach().cpu().numpy() * 255), cv2.COLOR_RGB2BGR)
-                os.makedirs('./check_final_results/', exist_ok=True)
-                cv2.imwrite('./check_final_results/' + x_test_fname_list[i].replace('.png', '_pred.png'), img_save)
-                cv2.imwrite('./check_final_results/' + x_test_fname_list[i].replace('.png', '_label.png'), label_save)
-                cv2.imwrite('./check_final_results/' + x_test_fname_list[i].replace('.png', '_input.png'), input_save)
+                os.makedirs('./data_%s/check_final_results/' % args.dataset_name, exist_ok=True)
+                cv2.imwrite('./data_%s/check_final_results/' % args.dataset_name + x_test_fname_list[i].replace('.png', '_pred.png'), img_save)
+                cv2.imwrite('./data_%s/check_final_results/' % args.dataset_name + x_test_fname_list[i].replace('.png', '_label.png'), label_save)
+                cv2.imwrite('./data_%s/check_final_results/' % args.dataset_name + x_test_fname_list[i].replace('.png', '_input.png'), input_save)
+
+                # NOTE: Change this path
+                save_dir = '../results/%s/PSM/' % args.dataset_name
+                os.makedirs(os.path.dirname(save_dir), exist_ok=True)
+                seg_result = pred[i].detach().cpu().numpy().astype(np.uint8)
+                cv2.imwrite(save_dir + x_test_fname_list[i], seg_result * 255)
 
     for key in dic[0].keys():
         num = sum([i[key] for i in dic]) / len(dic)
@@ -525,9 +527,9 @@ def generate_voronoi_label( args, model):
 
             for i in range(pred.shape[0]):
                 if sub_loader == loader.test_loader:
-                    path = '/'.join(args.data_test.split('/')[:-1]) + '/data_second_stage_test/' + y_fname_list[i]
+                    path = './data_%s/data_second_stage_test/' % args.dataset_name + y_fname_list[i]
                 else:
-                    path = '/'.join(args.data_train.split('/')[:-1]) + '/data_second_stage_train/' + y_fname_list[i]
+                    path = './data_%s/data_second_stage_train/' % args.dataset_name + y_fname_list[i]
 
                 label = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
                 point_list, bp, prob = peak_point(prob_maps.detach().cpu()[i][1].numpy(), 20, 0.6)
@@ -542,9 +544,9 @@ def generate_voronoi_label( args, model):
                 voronoi_label = create_Voronoi_label(point_list, label.shape)
 
                 if sub_loader == loader.test_loader:
-                    cv2.imwrite('/'.join(args.data_test.split('/')[:-1]) + '/data_second_stage_test/' + x_fname_list[i].split('_')[-2] + '_vor.png', voronoi_label)
+                    cv2.imwrite('./data_%s/data_second_stage_test/' % args.dataset_name + x_fname_list[i].split('_')[-2] + '_vor.png', voronoi_label)
                 else:
-                    cv2.imwrite('/'.join(args.data_train.split('/')[:-1]) +  '/data_second_stage_train/' + x_fname_list[i].split('_')[-2] + '_vor.png', voronoi_label)
+                    cv2.imwrite('./data_%s/data_second_stage_train/' % args.dataset_name + x_fname_list[i].split('_')[-2] + '_vor.png', voronoi_label)
 
                 fig_for_save = x_img[i].cpu().permute(1, 2, 0).contiguous().numpy()
                 for j in range(point_list.shape[0]):
@@ -553,11 +555,11 @@ def generate_voronoi_label( args, model):
                     cv2.line(fig_for_save, (point_list[j][1], point_list[j][0] - 3),
                              (point_list[j][1], point_list[j][0] + 3), color=(0, 0, 255), thickness=1)
 
-                if not os.path.exists('./data/voronoi'):
-                    os.mkdir('./data/voronoi')
+                if not os.path.exists('./data_%s/voronoi' % args.dataset_name):
+                    os.mkdir('./data_%s/voronoi' % args.dataset_name)
 
-                cv2.imwrite('./data/voronoi/' + x_fname_list[i].split('_')[-2] + '_point.png', cv2.cvtColor(np.uint8(fig_for_save*255), cv2.COLOR_RGB2BGR))
-                cv2.imwrite('./data/voronoi/' + x_fname_list[i].split('_')[-2] + '_prob.png', cv2.cvtColor(np.uint8(prob*255), cv2.COLOR_RGB2BGR))
+                cv2.imwrite('./data_%s/voronoi/' % args.dataset_name + x_fname_list[i].split('_')[-2] + '_point.png', cv2.cvtColor(np.uint8(fig_for_save*255), cv2.COLOR_RGB2BGR))
+                cv2.imwrite('./data_%s/voronoi/' % args.dataset_name + x_fname_list[i].split('_')[-2] + '_prob.png', cv2.cvtColor(np.uint8(prob*255), cv2.COLOR_RGB2BGR))
 
     print('end')
 
@@ -667,7 +669,7 @@ if __name__ == "__main__":
         print('-----------------------')
         model = timm.create_model('res2net101_26w_4s', num_classes=1, pretrained=True).to(device)
 
-        model.load_state_dict(torch.load('./checkpoint/self_stage_best.pth', map_location=device))
+        model.load_state_dict(torch.load('./checkpoint_%s/self_stage_best.pth' % args.dataset_name, map_location=device))
         optimizer = make_optimizer(args, model)
 
         loader = data.get_monuseg(0, args)
@@ -698,7 +700,7 @@ if __name__ == "__main__":
 
     elif args.mode == 'generate_voronoi':
         model = ResUNet34(pretrained=True).to(device)
-        model.load_state_dict(torch.load('./checkpoint/second_stage_best.pth', map_location=device))
+        model.load_state_dict(torch.load('./checkpoint_%s/second_stage_best.pth' % args.dataset_name, map_location=device))
         generate_voronoi_label(args, model)
 
     elif args.mode == 'train_final_stage':
@@ -710,7 +712,7 @@ if __name__ == "__main__":
     elif args.mode == 'test':
         model = ResUNet34(pretrained=True).to(device)
         # Second stage gives better result than final stage.
-        best_path = './checkpoint/second_stage_best.pth'
+        best_path = './checkpoint_%s/second_stage_best.pth' % args.dataset_name
         model.load_state_dict(torch.load(best_path, map_location=device))
         model.eval()
         test_stage(EPOCH, args, model)

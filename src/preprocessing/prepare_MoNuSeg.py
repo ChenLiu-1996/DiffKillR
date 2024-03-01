@@ -80,7 +80,7 @@ def annotation_to_label(verts_list: list[np.ndarray],
 
     label = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
     centroids = []
-    for idx, cell in tqdm(enumerate(verts_list)):
+    for idx, cell in enumerate(tqdm(verts_list)):
         # cell is shape (n, 2)
 
         cell_mask = polygon2mask(label.shape, cell)
@@ -163,16 +163,16 @@ def process_MoNuSeg_Traindata(patch_size=96):
     '''
         images are in .tif format, RGB, 1000x1000.
     '''
-    image_folder = '../external_data/Chen_2024_MoNuSeg/MoNuSeg2018TrainData/Tissue Images'
-    annotation_folder = '../external_data/Chen_2024_MoNuSeg/MoNuSeg2018TrainData/Annotations'
+    image_folder = '../external_data/MoNuSeg/MoNuSegTrainData/Tissue Images'
+    annotation_folder = '../external_data/MoNuSeg/MoNuSegTrainData/Annotations'
 
     annotation_files = sorted(glob(f'{annotation_folder}/*.xml'))
     image_files = sorted(glob(f'{image_folder}/*.tif'))
-    #import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
 
     all_verts_list = []
 
-    for i, annotation_file in tqdm(enumerate(annotation_files)):
+    for i, annotation_file in enumerate(tqdm(annotation_files)):
         image_id = os.path.basename(annotation_file).split('.')[0]
         # debug
         # if image_id != 'TCGA-HE-7128-01Z-00-DX1':
@@ -247,7 +247,7 @@ def process_MoNuSeg_Traindata(patch_size=96):
     return
 
 def process_MoNuSeg_Testdata(patch_size=32):
-    folder = '../external_data/Chen_2024_MoNuSeg/MoNuSegTestData'
+    folder = '../external_data/MoNuSeg/MoNuSegTestData'
 
     annotation_files = sorted(glob(f'{folder}/*.xml'))
     image_files = sorted(glob(f'{folder}/*.tif'))
@@ -255,7 +255,7 @@ def process_MoNuSeg_Testdata(patch_size=32):
 
     all_verts_list = []
     # e.g. TCGA-2Z-A9J9-01A-01-TS1.tif
-    for i, annotation_file in tqdm(enumerate(annotation_files)):
+    for i, annotation_file in enumerate(tqdm(annotation_files)):
         image_id = os.path.basename(annotation_file).split('.')[0]
         # debug
         # if image_id != 'TCGA-HE-7128-01Z-00-DX1':
@@ -339,7 +339,7 @@ if __name__ == '__main__':
     # NOTE: but works for now.
     patch_size = args.patch_size
     aug_patch_size = args.aug_patch_size
-    
+
     process_MoNuSeg_Traindata(patch_size)
     process_MoNuSeg_Testdata(aug_patch_size)
 
