@@ -727,6 +727,11 @@ def infer(config: OmegaConf):
     # Step 2: Generate embeddings for test images.
     test_img_folder = os.path.join(config.test_folder, 'image')
     test_img_files = sorted(glob(os.path.join(test_img_folder, '*.png')))
+    # Filter out on organ type
+    from preprocessing.Metas import Organ2FileID
+    file_ids = Organ2FileID[config.organ]['test']
+    test_img_files = [x for x in test_img_files if any([f'{file_id}' in x for file_id in file_ids])]
+
     print('test_img_folder: ', test_img_folder)
     test_img_bank = {
         'embeddings': [],

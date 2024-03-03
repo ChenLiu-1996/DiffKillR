@@ -193,6 +193,7 @@ def main():
             'dataset_path': augmented_folder,
             'aug_methods': ",".join(augmentation_methods),
             'test_folder': test_folder,
+            'groudtruth_folder': '../external_data/Chen_2024_MoNuSeg/MoNuSegTestData/masks',
             'log_folder': '../logs/',
             'percentage': percentage,
             'organ': args.organ,

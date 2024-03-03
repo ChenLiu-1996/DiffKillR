@@ -1,7 +1,8 @@
-from typing import Tuple
+from typing import Tuple, List
 import argparse
 import numpy as np
 import torch
+import cv2
 import yaml
 import os
 # from model.scheduler import LinearWarmupCosineAnnealingLR
@@ -93,6 +94,7 @@ def load_match_pairs(matched_pair_path_root: str, mode: str, config):
         - unannotated_masks
         - annotated_images
         - annotated_masks
+        - unanonated_image_paths
     '''
     import pandas as pd
     from datasets.augmented_MoNuSeg import load_image, load_mask
@@ -117,7 +119,7 @@ def load_match_pairs(matched_pair_path_root: str, mode: str, config):
     print(f'Loaded {len(unannotated_images)} pairs of images and masks.')
     
     return unannotated_images, unannotated_masks, \
-        annotated_images, annotated_masks
+        annotated_images, annotated_masks, unanotated_image_paths
 
 # FIXME!: I think we can even use another cycle loss: AM -> UM -> AM
 # FIXME!: Also, if the augmented mask is good, we can use it as a target for the forward cycle: UM -> AM. 
@@ -140,7 +142,7 @@ def train(config: OmegaConf, wandb_run=None):
     dataset_map = {}
     dataloader_map = {}
     for k, load_results in load_results_map.items():
-        (unannotated_images, unannotated_masks, annotated_images, annotated_masks) = load_results
+        (unannotated_images, unannotated_masks, annotated_images, annotated_masks, unannotated_images_paths) = load_results
         dataset = torch.utils.data.TensorDataset(unannotated_images, unannotated_masks, annotated_images, annotated_masks)
         loader = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
         dataset_map[k] = dataset
@@ -454,6 +456,129 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
 
     return
 
+
+import re
+from glob import glob
+
+def extract_h_w(file_path):
+    h_w = re.findall('H(-?\d+)_W(-?\d+)', file_path)
+    assert len(h_w) == 1
+
+    h = int(h_w[0][0])
+    w = int(h_w[0][1])
+    
+    return h, w
+
+def stitch_patches(pred_mask_folder, stitched_size=(1000,1000)) -> Tuple[List[np.array], str]:
+    '''
+    Stitch the patches together.
+
+    '''
+    imsize = 32 # TODO: add as param
+    stitched_folder = pred_mask_folder.replace('pred_patches', 'stitched_masks')
+    colored_stitched_folder = pred_mask_folder.replace('pred_patches', 'colored_stitched_masks')
+    os.makedirs(stitched_folder, exist_ok=True)
+    os.makedirs(colored_stitched_folder, exist_ok=True)
+
+    print('pred_mask_folder: ', pred_mask_folder, ' stitched_folder: ', stitched_folder)
+
+    mask_list = sorted(glob(pred_mask_folder + '/*.png'))
+
+    base_mask_list = []
+    for mask_path in mask_list:
+        # print('mask_path: ', mask_path)
+        h, w = extract_h_w(mask_path)
+        h_w_string = f'_H{h}_W{w}'
+        # print('mask_path: ', mask_path, h, w)
+        h_w_string_idx = mask_path.find(h_w_string)
+        base_mask_path = mask_path[:h_w_string_idx] + '.png'
+
+        if base_mask_path not in base_mask_list:
+            # print('[True] base_mask_path: ', base_mask_path)
+            base_mask_list.append(base_mask_path)
+    
+
+    stitched_mask_list = []
+
+    for base_mask_path in base_mask_list:
+        # print('[Stitching] base_mask_path: ', base_mask_path)        
+        mask_stitched = np.zeros((stitched_size[0], stitched_size[1]), dtype=np.uint8)
+        mask_patch_list = [item for item in mask_list if base_mask_path.replace('.png', '') in item]
+        
+        for mask_patch_path in mask_patch_list:
+            h, w = extract_h_w(mask_patch_path)
+
+            offset_h = min(0, h) # negative in case of negative h or w
+            offset_w = min(0, w)
+            start_h = max(0, h)
+            start_w = max(0, w)
+            end_h = min(start_h + imsize + offset_h, stitched_size[0])
+            end_w = min(start_w + imsize + offset_w, stitched_size[1])
+            actual_height = end_h - start_h
+            actual_width = end_w - start_w
+
+            # print('mask_patch h, w: ', h, w)
+            # print('start_h, end_h, start_w, end_w: ', start_h, end_h, start_w, end_w)
+            mask_patch = cv2.imread(mask_patch_path, cv2.IMREAD_GRAYSCALE)
+            new_patch = mask_patch[-offset_h:-offset_h + actual_height, -offset_w:-offset_w + actual_width]
+            old_patch = mask_stitched[start_h:end_h, start_w:end_w]
+            # print('old_patch.shape: ', old_patch.shape, ' mask_patch.shape: ', mask_patch.shape, \
+            #       ' new_patch.shape: ', new_patch.shape)
+
+            updated_patch = np.maximum(old_patch, new_patch)
+            mask_stitched[start_h:end_h, start_w:end_w] = updated_patch[:, :]
+
+        stitched_mask_list.append(mask_stitched)
+
+        save_path = base_mask_path.replace(pred_mask_folder, stitched_folder)
+        cv2.imwrite(save_path, mask_stitched)
+
+        # save a colored version for visualization
+        #print('mask_stitched.shape: ', mask_stitched.shape)
+        colored_mask_stitched = np.zeros((mask_stitched.shape[0], mask_stitched.shape[1], 3), dtype=np.uint8)
+        colored_mask_stitched[mask_stitched == 1] = (0, 255, 0)
+        cv2.imwrite(save_path.replace(pred_mask_folder, colored_stitched_folder), colored_mask_stitched)
+    
+    log(f'Done stitching {len(mask_list)} patches. Stitched: {len(stitched_mask_list)}.')
+
+    return stitched_mask_list, stitched_folder
+
+import utils.metrics as metrics
+from preprocessing.Metas import Organ2FileID
+def eval_stitched(pred_folder, true_folder, organ='Colon') -> dict:
+    '''
+        Evaluation on final stitched mask against the ground truth mask.
+    
+    '''
+    pred_list = sorted(glob(os.path.join(pred_folder + '/*.png')))
+    true_list = sorted(glob(os.path.join(true_folder + '/*.png')))
+    # Filter out other organs
+    file_ids = Organ2FileID[organ]['test']
+    true_list = [x for x in true_list if any([f'{file_id}' in x for file_id in file_ids])]
+    print('pred_folder: ', pred_folder, '\ntrue_folder: ', true_folder)
+    print(len(pred_list), len(true_list))
+
+    assert len(pred_list) == len(true_list)
+
+    metric_list = []
+    for pred_mask_path, true_mask_path in zip(pred_list, true_list):
+        pred_mask = cv2.imread(pred_mask_path, cv2.IMREAD_GRAYSCALE)
+        true_mask = cv2.imread(true_mask_path, cv2.IMREAD_GRAYSCALE)
+        assert pred_mask.shape == true_mask.shape
+
+        metric = metrics.compute_metrics(pred_mask, true_mask, ['p_F1', 'aji', 'iou'])
+        metric_list.append(metric)
+
+    eval_results = {}
+    for key in metric_list[0].keys():
+        num = sum([i[key] for i in metric_list]) / len(metric_list)
+        eval_results[key] = num
+        print(F'{key}: {num}')
+    
+    return eval_results
+
+    
+
 @torch.no_grad()
 def infer(config, wandb_run=None):
     '''
@@ -484,6 +609,8 @@ def infer(config, wandb_run=None):
     config.model_save_path = os.path.join(config.output_save_root, model_name, 'reg2seg.ckpt')
     config.log_dir = os.path.join(config.log_folder, model_name) # This is log file path.
     save_folder = os.path.join(config.output_save_root, model_name, 'reg2seg')
+    pred_mask_folder = os.path.join(config.output_save_root, model_name, 'pred_patches')
+    os.makedirs(pred_mask_folder, exist_ok=True)
 
     # Build the model
     try:
@@ -501,7 +628,7 @@ def infer(config, wandb_run=None):
 
     # Step 1: Load matched pairs.
     load_results = load_match_pairs(config.matched_pair_path_root, mode='infer', config=config)
-    (test_images, test_masks, closest_images, closest_masks) = load_results
+    (test_images, test_masks, closest_images, closest_masks, test_image_paths) = load_results
     dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_masks, test_masks)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=False)
 
@@ -565,6 +692,16 @@ def infer(config, wandb_run=None):
         iou_list.append(
             IoU((np.expand_dims(test_masks[i], 0) > 0.5).transpose(1, 2, 0),
                        (pred_mask_list[i] > 0.5).transpose(1, 2, 0)))
+        
+        # save to disk
+        fname = os.path.join(pred_mask_folder, os.path.basename(test_image_paths[i]))
+        print((pred_mask_list[i] > 0.5).astype(np.uint8).shape)
+        cv2.imwrite(fname, np.squeeze((pred_mask_list[i] > 0.5).astype(np.uint8)))
+    
+    # Stitch the masks together.
+    stitched_mask_list, stitched_folder = stitch_patches(pred_mask_folder)
+    test_mask_folder = config.groudtruth_folder
+    stitched_results = eval_stitched(stitched_folder, test_mask_folder, organ=config.organ)
     
     log('[Eval] Dice coeff (seg): %.3f \u00B1 %.3f.'
         % (np.mean(dice_list), np.std(dice_list)),
@@ -574,12 +711,17 @@ def infer(config, wandb_run=None):
         % (np.mean(iou_list), np.std(iou_list)),
         filepath=config.log_dir,
         to_console=True)
+    
+    for k, v in stitched_results.items():
+        log(F'[Eval] Stitched {k}: {v}', filepath=config.log_dir, to_console=True) 
 
     if wandb_run is not None:
         wandb_run.log({'infer/dice_seg_mean': np.mean(dice_list),
                        'infer/dice_seg_std': np.std(dice_list),
                        'infer/iou_seg_mean': np.mean(iou_list),
                        'infer/iou_seg_std': np.std(iou_list)})
+        for k, v in stitched_results.items():
+            wandb_run.log({F'infer/stitched_{k}': v})
 
     return
 
@@ -587,6 +729,7 @@ from dotenv import load_dotenv
 
 load_dotenv('../.env')
 WANDB_ENTITY = os.getenv('WANDB_ENTITY')
+PROJECT_PATH = os.getenv('PROJECT_PATH')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
