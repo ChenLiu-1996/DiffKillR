@@ -1,5 +1,5 @@
 project: cellseg
-program: run_experiment.py
+program: our_experiment.py
 command:
   - python
   - ${program}
@@ -12,7 +12,6 @@ parameters:
   data.sample_percent:
     values: [0.1, 0.01]
   data.aug_multiplier:
-    values: [8,20]
+    values: [3, 5]
   data.organ_type:
-    values: ['Breast','Kidney','Colon']
-  
+    values: ['Colon', 'Breast', 'Prostate']

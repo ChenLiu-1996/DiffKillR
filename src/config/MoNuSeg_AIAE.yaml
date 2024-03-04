@@ -7,8 +7,8 @@ temp: 1.0
 base_temp: 1.0
 n_views: 2
 contrast_mode: 'one'
-max_epochs: 100
-patience: 50
+max_epochs: 2
+patience: 10
 batch_size: 64
 model: 'AutoEncoder'
 num_filters: 32
@@ -18,4 +18,4 @@ pairing: ['aug','non_mother'] #['aug', 'mother']
 num_workers: 4
 random_seed: 1
 train_val_test_ratio: '8:1:1'
-use_wandb: False
+use_wandb: True

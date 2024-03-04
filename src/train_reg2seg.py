@@ -526,7 +526,8 @@ def stitch_patches(pred_mask_folder, stitched_size=(1000,1000)) -> Tuple[List[np
             #       ' new_patch.shape: ', new_patch.shape)
 
             updated_patch = np.maximum(old_patch, new_patch)
-            mask_stitched[start_h:end_h, start_w:end_w] = updated_patch[:, :]
+            #mask_stitched[start_h:end_h, start_w:end_w] = updated_patch[:, :]
+            mask_stitched[start_h:end_h, start_w:end_w] = new_patch[:, :]
 
         stitched_mask_list.append(mask_stitched)
 
@@ -534,10 +535,10 @@ def stitch_patches(pred_mask_folder, stitched_size=(1000,1000)) -> Tuple[List[np
         cv2.imwrite(save_path, mask_stitched)
 
         # save a colored version for visualization
-        #print('mask_stitched.shape: ', mask_stitched.shape)
         colored_mask_stitched = np.zeros((mask_stitched.shape[0], mask_stitched.shape[1], 3), dtype=np.uint8)
         colored_mask_stitched[mask_stitched == 1] = (0, 255, 0)
-        cv2.imwrite(save_path.replace(pred_mask_folder, colored_stitched_folder), colored_mask_stitched)
+        color_save_path = base_mask_path.replace(pred_mask_folder, colored_stitched_folder)
+        cv2.imwrite(color_save_path, colored_mask_stitched)
     
     log(f'Done stitching {len(mask_list)} patches. Stitched: {len(stitched_mask_list)}.')
 
@@ -695,7 +696,7 @@ def infer(config, wandb_run=None):
         
         # save to disk
         fname = os.path.join(pred_mask_folder, os.path.basename(test_image_paths[i]))
-        print((pred_mask_list[i] > 0.5).astype(np.uint8).shape)
+        # print((pred_mask_list[i] > 0.5).astype(np.uint8).shape)
         cv2.imwrite(fname, np.squeeze((pred_mask_list[i] > 0.5).astype(np.uint8)))
     
     # Stitch the masks together.
