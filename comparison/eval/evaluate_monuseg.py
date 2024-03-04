@@ -6,7 +6,7 @@ if __name__ == '__main__':
 
     for subset in ['breast', 'colon', 'prostate']:
 
-        for model in ['PSM', 'MedT', 'UNet', 'nnUNet']:
+        for model in ['PSM', 'MedT', 'UNet', 'nnUNet', 'StarDist', 'LACSS']:
 
             pred_folder = '../results/MoNuSegByCancer_200x200/%s/%s_stitched/' % (subset, model)
             true_folder = '../../external_data/MoNuSeg/MoNuSegByCancer/%s/test/masks/' % subset

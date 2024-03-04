@@ -8,7 +8,7 @@
 ## Preparation
 
 ## Naming Conventions
-``` 
+```
     # The output of the model will be saved in the following directory
     # e.g. 0.100_Colon_m2_MoNuSeg_depth5_seed1_SimCLR
     # -- reg2seg: Reg2Seg results
@@ -40,7 +40,7 @@ python train_unsupervised_AE.py \
               --model-config '../config/MoNuSeg_AIAE.yaml' \
               --num-workers {num_workers}
 
-# infer & generate training & test pairs for Reg2Seg 
+# infer & generate training & test pairs for Reg2Seg
 python train_unsupervised_AE.py \
               --mode infer \
               --data-config '../config/MoNuSeg_data.yaml' \
@@ -100,6 +100,16 @@ python -m pip install tensorboardX
 python -m pip install shapely
 python -m pip install ml_collections
 python -m pip install ttach
+
+## LACSS
+#python -m pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+python -m pip install jax==0.4.24
+python -m pip install lacss
+#python -m pip install ml_dtypes==0.2.0
+
+## StarDist
+python -m pip install stardist
+python -m pip install tensorflow
 
 # Export CuDNN
 # echo 'CUDNN_PATH=$(dirname $(python -c "import nvidia.cudnn;print(nvidia.cudnn.__file__)"))' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
