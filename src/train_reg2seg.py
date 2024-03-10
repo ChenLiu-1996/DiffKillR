@@ -108,12 +108,16 @@ def load_match_pairs(matched_pair_path_root: str, mode: str, config):
     unannotated_images = [torch.Tensor(load_image(p, config.target_dim)) for p in unanotated_image_paths]
     annotated_images = [torch.Tensor(load_image(p, config.target_dim)) for p in annotated_image_paths]
     annotated_masks = [torch.Tensor(load_mask(p, config.target_dim)) for p in annotated_label_paths]
-    unannotated_masks = [torch.Tensor(load_mask(p, config.target_dim)) for p in unannotated_label_paths]
+    if os.path.exists(unannotated_label_paths[0]):
+        unannotated_masks = [torch.Tensor(load_mask(p, config.target_dim)) for p in unannotated_label_paths]
+    else:
+        unannotated_masks = None
 
     unannotated_images = torch.stack(unannotated_images, dim=0) # (N, in_chan, H, W)
     annotated_images = torch.stack(annotated_images, dim=0) # (N, in_chan, H, W)
     annotated_masks = torch.stack(annotated_masks, dim=0) # (N, H, W)
-    unannotated_masks = torch.stack(unannotated_masks, dim=0)
+    if unannotated_masks is not None:
+        unannotated_masks = torch.stack(unannotated_masks, dim=0)
     
     assert len(unannotated_images) == len(annotated_images) == len(annotated_masks)
     print(f'Loaded {len(unannotated_images)} pairs of images and masks.')
@@ -574,7 +578,6 @@ def eval_stitched(pred_folder, true_folder, organ='Colon') -> dict:
     for key in metric_list[0].keys():
         num = sum([i[key] for i in metric_list]) / len(metric_list)
         eval_results[key] = num
-        print(F'{key}: {num}')
     
     return eval_results
 
@@ -630,15 +633,25 @@ def infer(config, wandb_run=None):
     # Step 1: Load matched pairs.
     load_results = load_match_pairs(config.matched_pair_path_root, mode='infer', config=config)
     (test_images, test_masks, closest_images, closest_masks, test_image_paths) = load_results
-    dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_masks, test_masks)
+    
+    print('=====test_image_path====: ', test_image_paths[:10])
+    if test_masks is not None:
+        dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_masks, test_masks)
+    else:
+        dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_masks)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=False)
 
     # Step 2: Predict & Apply the warping field.
     warp_predictor.eval()
     pred_mask_list = []
     print(f'Starting inference for {test_images.shape[0]} test images ...')
-    for iter_idx, (bclosest_images, btest_images, bclosest_masks, btest_masks) in enumerate(tqdm(dataloader)):
+    for iter_idx, batch in enumerate(tqdm(dataloader)):
         # [N, H, W] -> [N, 1, H, W]
+        if test_masks is not None:
+            (bclosest_images, btest_images, bclosest_masks, btest_masks) = batch
+        else:
+            (bclosest_images, btest_images, bclosest_masks) = batch
+
         if len(bclosest_masks.shape) == 3:
             bclosest_masks = bclosest_masks[:, None, ...]
 
@@ -662,7 +675,7 @@ def infer(config, wandb_run=None):
         plot_freq = 10
         shall_plot = iter_idx % plot_freq == 0
         #print('shall_plot: ', shall_plot, iter_idx, plot_freq, len(dataset))
-        if shall_plot:
+        if shall_plot and test_masks is not None:
             save_path_fig_sbs = '%s/infer/figure_sample%s.png' % (
                 save_folder, str(iter_idx).zfill(5))
             plot_side_by_side(save_path_fig_sbs, *numpy_variables(
@@ -671,32 +684,12 @@ def infer(config, wandb_run=None):
                 btest_masks[0] > 0.5, bclosest_masks[0] > 0.5,
                 pred_masks[0] > 0.5))
 
-    assert len(pred_mask_list) == len(test_masks)
     print('Completed inference.')
-    print('len(test_masks), len(pred_mask_list): ', len(test_masks), len(pred_mask_list))
-    
-    # Step 3: Evaluation. Compute Dice Coeff.
-    print(f'Computing Dice Coeff for {len(pred_mask_list)} total masks...')
-    dice_list = []
-    iou_list = []
 
-    # convert between torch Tensor & np array
-    if 'torch' in str(type(test_masks)):
-        test_masks = test_masks.cpu().detach().numpy()
-
+    print('Saving pred masks to disk ...')
     for i in range(len(pred_mask_list)):
-        # print('test_masks[i].shape, pred_mask_list[i].shape: ', \
-        #       test_masks[i].shape, pred_mask_list[i].shape)
-        dice_list.append(
-            dice_coeff((np.expand_dims(test_masks[i], 0) > 0.5).transpose(1, 2, 0),
-                       (pred_mask_list[i] > 0.5).transpose(1, 2, 0)))
-        iou_list.append(
-            IoU((np.expand_dims(test_masks[i], 0) > 0.5).transpose(1, 2, 0),
-                       (pred_mask_list[i] > 0.5).transpose(1, 2, 0)))
-        
         # save to disk
         fname = os.path.join(pred_mask_folder, os.path.basename(test_image_paths[i]))
-        # print((pred_mask_list[i] > 0.5).astype(np.uint8).shape)
         cv2.imwrite(fname, np.squeeze((pred_mask_list[i] > 0.5).astype(np.uint8)))
     
     # Stitch the masks together.
@@ -704,27 +697,52 @@ def infer(config, wandb_run=None):
     test_mask_folder = config.groudtruth_folder
     stitched_results = eval_stitched(stitched_folder, test_mask_folder, organ=config.organ)
     
-    log('[Eval] Dice coeff (seg): %.3f \u00B1 %.3f.'
-        % (np.mean(dice_list), np.std(dice_list)),
-        filepath=config.log_dir,
-        to_console=True)
-    log('[Eval] IoU (seg): %.3f \u00B1 %.3f.'
-        % (np.mean(iou_list), np.std(iou_list)),
-        filepath=config.log_dir,
-        to_console=True)
-    
     for k, v in stitched_results.items():
         log(F'[Eval] Stitched {k}: {v}', filepath=config.log_dir, to_console=True) 
 
     if wandb_run is not None:
-        wandb_run.log({'infer/dice_seg_mean': np.mean(dice_list),
-                       'infer/dice_seg_std': np.std(dice_list),
-                       'infer/iou_seg_mean': np.mean(iou_list),
-                       'infer/iou_seg_std': np.std(iou_list)})
         for k, v in stitched_results.items():
             wandb_run.log({F'infer/stitched_{k}': v})
 
+    if test_masks is not None:
+        assert len(pred_mask_list) == len(test_masks)
+        print('len(test_masks), len(pred_mask_list): ', len(test_masks), len(pred_mask_list))
+        
+        # Step 3: Evaluation. Compute Dice Coeff.
+        print(f'Computing Dice Coeff for {len(pred_mask_list)} total masks...')
+        dice_list = []
+        iou_list = []
+
+        # convert between torch Tensor & np array
+        if 'torch' in str(type(test_masks)):
+            test_masks = test_masks.cpu().detach().numpy()
+
+        for i in range(len(pred_mask_list)):
+            # print('test_masks[i].shape, pred_mask_list[i].shape: ', \
+            #       test_masks[i].shape, pred_mask_list[i].shape)
+            dice_list.append(
+                dice_coeff((np.expand_dims(test_masks[i], 0) > 0.5).transpose(1, 2, 0),
+                        (pred_mask_list[i] > 0.5).transpose(1, 2, 0)))
+            iou_list.append(
+                IoU((np.expand_dims(test_masks[i], 0) > 0.5).transpose(1, 2, 0),
+                        (pred_mask_list[i] > 0.5).transpose(1, 2, 0)))
+        
+        log('[Eval] Dice coeff (seg): %.3f \u00B1 %.3f.'
+            % (np.mean(dice_list), np.std(dice_list)),
+            filepath=config.log_dir,
+            to_console=True)
+        log('[Eval] IoU (seg): %.3f \u00B1 %.3f.'
+            % (np.mean(iou_list), np.std(iou_list)),
+            filepath=config.log_dir,
+            to_console=True)
+        if wandb_run is not None:
+            wandb_run.log({'infer/dice_seg_mean': np.mean(dice_list),
+                    'infer/dice_seg_std': np.std(dice_list),
+                    'infer/iou_seg_mean': np.mean(iou_list),
+                    'infer/iou_seg_std': np.std(iou_list)})
+    
     return
+
 
 from dotenv import load_dotenv
 

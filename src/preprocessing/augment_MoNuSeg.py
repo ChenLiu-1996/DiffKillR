@@ -130,6 +130,7 @@ def main():
     argparser.add_argument('--percentage', type=float, default=0.1)
     argparser.add_argument('--multiplier', type=int, default=2)
     argparser.add_argument('--organ', type=str, default='Colon')
+    argparser.add_argument('--detection', type=str, default='None', help='None, BlobLocalization')
 
     args = argparser.parse_args()
     patch_size = args.patch_size
@@ -185,7 +186,13 @@ def main():
 
     augmented_folder = f'../data/{percentage:.3f}_{args.organ}_m{multiplier}_MoNuSeg2018TrainData_augmented_patch_{augmented_patch_size}x{augmented_patch_size}/'
     # Overwrite 'MoNuSeg_data.yaml' config file so models can find the data
-    test_folder = f'../data/MoNuSeg2018TestData_patch_{augmented_patch_size}x{augmented_patch_size}/'
+    if args.detection == 'BlobLocalization':
+        test_folder = f'../data/MoNuSegTestData_BlobLocalization_patch_{augmented_patch_size}x{augmented_patch_size}'
+    elif args.detection == 'None':
+        test_folder = f'../data/MoNuSeg2018TestData_patch_{augmented_patch_size}x{augmented_patch_size}/'
+    else:
+        raise ValueError('Detection method not found:', args.detection)
+    
     conf = OmegaConf.create(
         {
             'dataset_name': 'MoNuSeg',

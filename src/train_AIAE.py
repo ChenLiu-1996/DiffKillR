@@ -663,7 +663,7 @@ def infer(config: OmegaConf):
     model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
     model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
 
-    # Load test data
+    # Load anchor bank data
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     aug_lists = config.aug_methods.split(',')
