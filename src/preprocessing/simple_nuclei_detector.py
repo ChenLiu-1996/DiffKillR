@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import skimage.feature
 import skimage.segmentation
+from skimage.color import rgb2hed
 
 
 def detect_nuclei(img: np.array, return_overlay: bool = False):
@@ -10,35 +11,29 @@ def detect_nuclei(img: np.array, return_overlay: bool = False):
         img = np.repeat(img, 3, axis=-1)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # Pad white the image to avoid border effects
-    gray = cv2.copyMakeBorder(gray, 5, 5, 5, 5, cv2.BORDER_CONSTANT, value=[255, 255, 255])
-
-    # Setup SimpleBlobDetector parameters.
-    print('Default parameters: =====')
     params = cv2.SimpleBlobDetector_Params()
-    for p in dir(params):
-        if not p.startswith('__'):
-            print(p, getattr(params, p))
 
-    params.minThreshold = 5
-    params.maxThreshold = 220
+    # Change thresholds
+    # params.minThreshold = 10;
+    # params.maxThreshold = 200;
 
-    # params.filterByArea = True
-    params.minArea = 150
-    params.maxArea = 10000.0
+    # Filter by Area.
+    params.filterByArea = True
+    params.minArea = 100
 
-    # params.filterByCircularity = False
-    # params.filterByConvexity = False
-    # params.filterByInertia = False
-    params.minConvexity = 0.8 #0.9499
-    params.minDistBetweenBlobs = 1
+    # Filter by Circularity
+    # params.filterByCircularity = True
+    # params.minCircularity = 0.1
 
-    # # Create a detector with the parameters
-    # detector = cv2.SimpleBlobDetector_create(params)
-    print('Updated parameters: =====')
-    for p in dir(params):
-        if not p.startswith('__'):
-            print(p, getattr(params, p))
+    # Filter by Convexity
+    params.filterByConvexity = True
+    params.minConvexity = 0.6
+
+    # Filter by Inertia
+    # params.filterByInertia = True
+    # params.minInertiaRatio = 0.01
+
+    # Create a detector with the parameters
     detector = cv2.SimpleBlobDetector_create(params)
 
     # Detect blobs.
@@ -50,14 +45,16 @@ def detect_nuclei(img: np.array, return_overlay: bool = False):
         nuclei_list.append([h, w])
 
     if return_overlay:
+        pseudomask = cv2.drawKeypoints(np.zeros_like(gray), keypoints, np.array([]), (255, 255, 255),
+                                       cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
         # Draw detected blobs as red circles.
         # cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS ensures the size of the circle corresponds to the size of blob
-        im_with_keypoints = cv2.drawKeypoints(gray, keypoints, np.array([]), (0, 0, 255),
-                                              cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-        return nuclei_list, im_with_keypoints
+        pseudomask_overlay = cv2.drawKeypoints(gray, keypoints, np.array([]), (0, 0, 255),
+                                               cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        return nuclei_list, pseudomask, pseudomask_overlay
     else:
         return nuclei_list
-    
+
 def detection_eval(nuclei_list, mask, total_pos):
     # Convert nuclei_list to mask
     mask = (mask > 0) * 1.0
@@ -84,50 +81,36 @@ from glob import glob
 from Metas import Organ2FileID
 from matplotlib import pyplot as plt
 
+def rgb2Hematoxylin(image):
+    '''
+    Get the Hematoxylin channel from an RGB H&E image.
+    '''
+    image_HED = rgb2hed(image)
+
+    assert len(image_HED[:, :, 0].shape) == 2
+    return image_HED[:, :, 0][:, :, None]
+
+
 if __name__ == '__main__':
-    organ = 'Breast'
-    print('Organ:', organ)
-    file_ids = Organ2FileID[organ]['test']
-    
-    img_path_list = [f'../../external_data/Chen_2024_MoNuSeg/MoNuSegTestData/images/{file_id}.png' for file_id in file_ids]
-    mask_path_list = [f'../../external_data/Chen_2024_MoNuSeg/MoNuSegTestData/masks/{file_id}.png' for file_id in file_ids]
-    image_list = [cv2.cvtColor(cv2.imread(image_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB) for image_path in img_path_list]
-    mask_list = [cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE) for mask_path in mask_path_list]
+    image_path = '../../external_data/MoNuSeg/MoNuSegByCancer/colon/test/images/TCGA-A6-6782-01A-01-BS1.png'
+    mask_path = '../../external_data/MoNuSeg/MoNuSegByCancer/colon/test/masks/TCGA-A6-6782-01A-01-BS1.png'
+    image = cv2.cvtColor(cv2.imread(image_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
 
-    test_patch_folder = os.path.join('/gpfs/gibbs/pi/krishnaswamy_smita/dl2282/CellSeg/data/MoNuSeg2018TestData_patch_32x32', 'label')
-    test_patch_files = sorted(glob(os.path.join(test_patch_folder, '*.png')))
-
-    n = len(image_list)
-
-    fig = plt.figure(figsize=(18, 6*n))
-    for i in range(n):
-        image = image_list[i]
-        mask = mask_list[i]
-
-        ax = fig.add_subplot(n, 3, 3*i+1)
-        ax.imshow(image)
-        ax.set_axis_off()
-
-        # Detected nuclei
-        ax = fig.add_subplot(n, 3, 3*i+2)
-        nuclei_list, pseudomask = detect_nuclei(image, return_overlay=True)
-        print(f'Detected {len(nuclei_list)} nuclei.')
-        ax.imshow(pseudomask, cmap='gray')
-        ax.set_axis_off()
-        ax.set_title(f'Detected {len(nuclei_list)} nuclei.')
-        
-        # Groud truth mask
-        filtered_patch_files = [x for x in test_patch_files if f'{file_ids[i]}' in x]
-        print(f'Ground truth nuclei count: {len(filtered_patch_files)}')
-        ax = fig.add_subplot(n, 3, 3*i+3)
-        ax.imshow(mask, cmap='gray')
-        ax.set_axis_off()
-        ax.set_title(f'GT nuclei: {len(filtered_patch_files)}')
-
-        # Compute accuracy of detected nuclei
-        recall, TP, FN = detection_eval(nuclei_list, mask, total_pos=len(filtered_patch_files))
-        print(f'Dection Recall: {recall:.2f}')
-        print(f'True Positive: {TP}, False Negative: {FN}')
-
-    
+    from matplotlib import pyplot as plt
+    fig = plt.figure(figsize=(12, 12))
+    ax = fig.add_subplot(2, 2, 1)
+    ax.imshow(image)
+    ax.set_axis_off()
+    ax = fig.add_subplot(2, 2, 2)
+    image_Hematoxylin = rgb2Hematoxylin(image)
+    _, pseudomask, pseudomask_overlay = detect_nuclei(image, return_overlay=True)
+    ax.imshow(pseudomask_overlay, cmap='gray')
+    ax.set_axis_off()
+    ax = fig.add_subplot(2, 2, 3)
+    ax.imshow(pseudomask, cmap='gray')
+    ax.set_axis_off()
+    ax = fig.add_subplot(2, 2, 4)
+    ax.imshow(mask, cmap='gray')
+    ax.set_axis_off()
     fig.savefig('check_nuclei_detector.png')
