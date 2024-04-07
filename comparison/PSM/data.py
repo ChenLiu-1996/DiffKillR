@@ -50,7 +50,7 @@ class Data:
             num_workers=args.n_threads,
         )
 
-def get_monuseg(epoch, args):
+def get_dataset(epoch, args):
     list_all = None
     image_list = None
     anno_list = None

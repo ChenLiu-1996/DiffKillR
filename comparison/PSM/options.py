@@ -126,8 +126,6 @@ parser.add_argument('--num_queries', type=int, default=1)
 
 args, unparsed = parser.parse_known_args()
 
-
-
 for arg in vars(args):
     if vars(args)[arg] == 'True':
         vars(args)[arg] = True

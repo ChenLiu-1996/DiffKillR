@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from options import args
 from utils.optimization import make_optimizer
-from utils.generate_point_label import  peak_point
+from utils.generate_point_label import peak_point
 from utils.generate_voronoi import  create_Voronoi_label
 import torch
 import torch.nn as nn
@@ -140,7 +140,7 @@ def trainer_selfsupervised(EPOCH, args, model, loss_func, optimizer):
         print(F'--EPOCH : {epoch} ')
 
         loss_epoch, num_items = 0, 0
-        loader = data.get_monuseg(epoch, args)
+        loader = data.get_dataset(epoch, args)
         for x_fname_list, y_fname_list in tqdm(loader.train_loader, desc='training'):
             x_img, _ = preProcess_train(x_fname_list, y_fname_list, args)
 
@@ -174,7 +174,7 @@ def trainer_selfsupervised_contrastive(EPOCH, args, model, loss_func, optimizer)
         print(F'--EPOCH : {epoch} ')
 
         loss_epoch, num_items = 0, 0
-        loader = data.get_monuseg(epoch, args)
+        loader = data.get_dataset(epoch, args)
         for x_fname_list, y_fname_list in tqdm(loader.train_loader, desc='training'):
             x_img, _ = preProcess_train(x_fname_list, y_fname_list, args)
             x_img = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(x_img)
@@ -211,7 +211,7 @@ def trainer_selfsupervised_random_rotate(EPOCH, args, model, loss_func, optimize
     for epoch in range(EPOCH):
         print(F'--EPOCH : {epoch} ')
         loss_list = []
-        loader = data.get_monuseg(epoch, args)
+        loader = data.get_dataset(epoch, args)
         for x_fname_list, y_fname_list in tqdm(loader.train_loader, desc='training'):
             x_img, _ = preProcess_train(x_fname_list, y_fname_list, args)
             x_img = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(x_img)
@@ -243,7 +243,7 @@ def trainer_selfsupervised_simsiam(EPOCH, args, model, loss_func, optimizer):
     for epoch in range(EPOCH):
         print(F'--EPOCH : {epoch} ')
         loss_list = []
-        loader = data.get_monuseg(epoch, args)
+        loader = data.get_dataset(epoch, args)
         for x_fname_list, y_fname_list in tqdm(loader.train_loader, desc='training'):
             x_img, _ = preProcess_train(x_fname_list, y_fname_list, args)
             x_img = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(x_img)
@@ -277,7 +277,7 @@ def trainer_selfsupervised_mean_value(EPOCH, args, model, loss_func, optimizer):
     for epoch in range(EPOCH):
         print(F'--EPOCH : {epoch} ')
         loss_list = []
-        loader = data.get_monuseg(epoch, args)
+        loader = data.get_dataset(epoch, args)
         for x_fname_list, y_fname_list in tqdm(loader.train_loader, desc='training'):
             x_img, _ = preProcess_train(x_fname_list, y_fname_list, args)
             x_img = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(x_img)
@@ -309,7 +309,7 @@ def trainer_second_stage(EPOCH, args, model, loss_func, optimizer):
         print(F'--EPOCH : {epoch} ')
         loss_list = []
 
-        loader = data.get_monuseg(epoch, args)
+        loader = data.get_dataset(epoch, args)
         model.train()
 
         for x_fname_list, y_fname_list in tqdm(loader.train_loader, desc='training'):
@@ -385,7 +385,7 @@ def trainer_final_stage(EPOCH, args, model, loss_func, optimizer):
         loss_list = []
         loss_seg =[]
         loss_edge = []
-        loader = data.get_monuseg(epoch, args)
+        loader = data.get_dataset(epoch, args)
         model.train()
 
         for x_fname_list, y_fname_list in tqdm(loader.train_loader, desc='training'):
@@ -461,7 +461,7 @@ def trainer_final_stage(EPOCH, args, model, loss_func, optimizer):
     print(f'best-epoch: {best_epoch}, aji: {best_aji}')
 
 def test_stage(EPOCH, args, model):
-    loader = data.get_monuseg(0, args)
+    loader = data.get_dataset(0, args)
     dic = []
 
     with torch.no_grad():
@@ -509,7 +509,7 @@ def test_stage(EPOCH, args, model):
 
 
 def generate_voronoi_label( args, model):
-    loader = data.get_monuseg(0, args)
+    loader = data.get_dataset(0, args)
     model.eval()
     for sub_loader in [loader.train_loader, loader.val_loader, loader.test_loader]:
         for x_fname_list, y_fname_list in tqdm(sub_loader, desc='testing'):
@@ -564,7 +564,7 @@ def generate_voronoi_label( args, model):
     print('end')
 
 def fully_supervised(EPOCH, args, model, optimizer, loss_func):
-    loader = data.get_monuseg(0, args)
+    loader = data.get_dataset(0, args)
 
     for epoch in range(EPOCH):
         model.train()
@@ -672,7 +672,7 @@ if __name__ == "__main__":
         model.load_state_dict(torch.load('./checkpoint_%s/self_stage_best.pth' % args.dataset_name, map_location=device))
         optimizer = make_optimizer(args, model)
 
-        loader = data.get_monuseg(0, args)
+        loader = data.get_dataset(0, args)
         model.eval()
 
         loss_list = []
