@@ -88,67 +88,6 @@ def annotation_to_label(verts_list: list[np.ndarray],
 
     return label, centroids
 
-
-# def patchify_and_save(image, image_id, label, centroid_list,
-#                       patches_folder, patch_size):
-#     '''
-#     Divide the image and label into patches and save them.
-
-#     image: original image.
-#     image_id: id of the image. This should be unique.
-#     label: binary image mask.
-#     centroid_list: list of centroids for each polygon/cell.
-
-#     '''
-#     for centroid in tqdm(centroid_list, desc='patchifying...'):
-#         patch_image_path = '%s/image/%s_H%d_W%d_patch_%dx%d.png' % (
-#             patches_folder, image_id, centroid[0] - patch_size // 2,
-#             centroid[1] - patch_size // 2, patch_size, patch_size)
-#         patch_label_path = '%s/label/%s_H%d_W%d_patch_%dx%d.png' % (
-#             patches_folder, image_id, centroid[0] - patch_size // 2,
-#             centroid[1] - patch_size // 2, patch_size, patch_size)
-#         patch_colored_label_path = '%s/colored_label/%s_H%d_W%d_patch_%dx%d.png' % (
-#                 patches_folder, image_id, centroid[0] - patch_size // 2,
-#                 centroid[1] - patch_size // 2, patch_size, patch_size)
-#         os.makedirs(os.path.dirname(patch_image_path), exist_ok=True)
-#         os.makedirs(os.path.dirname(patch_label_path), exist_ok=True)
-#         os.makedirs(os.path.dirname(patch_colored_label_path), exist_ok=True)
-
-
-#         h_begin = max(centroid[0] - patch_size // 2, 0)
-#         w_begin = max(centroid[1] - patch_size // 2, 0)
-#         h_end = min(h_begin + patch_size, image.shape[0])
-#         w_end = min(w_begin + patch_size, image.shape[1])
-
-#         # print('centroid', centroid)
-#         # print('h, w', h_begin, h_end, w_begin, w_end)
-
-#         patch_image = image[h_begin:h_end, w_begin:w_end, :]
-#         patch_label = label[h_begin:h_end, w_begin:w_end]
-
-#         # Handle edge cases: literally on the edge.
-#         if patch_image.shape != (patch_size, patch_size, 3):
-#             h_diff = patch_size - patch_image.shape[0]
-#             w_diff = patch_size - patch_image.shape[1]
-#             patch_image = np.pad(patch_image,
-#                                     pad_width=((0, h_diff), (0, w_diff), (0,
-#                                                                         0)),
-#                                     mode='constant')
-#             patch_label = np.pad(patch_label,
-#                                     pad_width=((0, h_diff), (0, w_diff)),
-#                                     mode='constant')
-
-#         patch_image = cv2.cvtColor(patch_image, cv2.COLOR_RGB2BGR)
-#         cv2.imwrite(patch_image_path, patch_image)
-#         cv2.imwrite(patch_label_path, patch_label)
-
-#         # NOTE: Colored label only used for visual inspection!
-#         patch_label_colored = np.zeros_like(patch_image)
-#         patch_label_colored[patch_label == 1] = (0, 0, 255)
-#         cv2.imwrite(patch_colored_label_path, patch_label_colored)
-
-#     return
-
 def process_MoNuSeg_data():
     '''
     images are in .tif format, RGB, 1000x1000.
@@ -377,10 +316,99 @@ def subset_patchify_MoNuSeg_data_by_cancer(imsize: int):
 
                     cv2.imwrite(image_path_to, image_patch)
                     cv2.imwrite(mask_path_to, mask_patch)
-
     return
+
+def subset_patchify_MoNuSeg_data_by_cancer_intraimage(imsize: int):
+    test_image_folder = '../../external_data/MoNuSeg/MoNuSegTestData/images/'
+    test_mask_folder = '../../external_data/MoNuSeg/MoNuSegTestData/masks/'
+
+    for cancer_type in ['breast', 'colon', 'prostate']:
+        if cancer_type == 'breast':
+            test_list = [
+                'TCGA-AC-A2FO-01A-01-TS1',
+                'TCGA-AO-A0J2-01A-01-BSA',
+            ]
+        if cancer_type == 'colon':
+            test_list = [
+                'TCGA-A6-6782-01A-01-BS1'
+            ]
+        if cancer_type == 'prostate':
+            test_list = [
+                'TCGA-EJ-A46H-01A-03-TSC',
+                'TCGA-HC-7209-01A-01-TS1'
+            ]
+
+        for percentage in [5, 10, 20, 50]:
+            target_folder = '../../external_data/MoNuSeg/MoNuSegByCancer_intraimage%dpct_%sx%s/' % (percentage, imsize, imsize)
+
+            for test_item_count, test_item in enumerate(tqdm(test_list)):
+                image_path_from = test_image_folder + test_item + '.png'
+                mask_path_from = test_mask_folder + test_item + '.png'
+
+                image = cv2.imread(image_path_from)
+                mask = cv2.imread(mask_path_from)
+                image_h, image_w = image.shape[:2]
+
+                total_count = (image_h // imsize) * (image_w // imsize)
+                target_count = int(np.ceil(percentage * total_count / 100))
+                curr_count = 0
+
+                for h_chunk in range(image_h // imsize):
+                    for w_chunk in range(image_w // imsize):
+                        h = h_chunk * imsize
+                        w = w_chunk * imsize
+
+                        h_begin = max(h, 0)
+                        w_begin = max(w, 0)
+                        h_end = min(h + imsize, image_h)
+                        w_end = min(w + imsize, image_w)
+
+                        image_patch = image[h_begin:h_end, w_begin:w_end, :]
+                        mask_patch = mask[h_begin:h_end, w_begin:w_end]
+
+                        if curr_count < target_count:
+                            # 1. Save the image/mask pair to the train folder.
+                            image_path_to = target_folder + '/' + cancer_type + \
+                                '/img%d_train/images/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            mask_path_to = target_folder + '/' + cancer_type + \
+                                '/img%d_train/masks/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                            os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+
+                            cv2.imwrite(image_path_to, image_patch)
+                            cv2.imwrite(mask_path_to, mask_patch)
+
+                            # 2. Save an empty image/mask pair to the test folder.
+                            empty_image_patch = image_patch * 0
+                            empty_mask_patch = mask_patch * 0
+                            empty_image_path_to = target_folder + '/' + cancer_type + \
+                                '/img%d_test/images/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            empty_mask_path_to = target_folder + '/' + cancer_type + \
+                                '/img%d_test/masks/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            os.makedirs(os.path.dirname(empty_image_path_to), exist_ok=True)
+                            os.makedirs(os.path.dirname(empty_mask_path_to), exist_ok=True)
+
+                            cv2.imwrite(empty_image_path_to, empty_image_patch)
+                            cv2.imwrite(empty_mask_path_to, empty_mask_patch)
+
+                        else:
+                            # Save the image/mask pair to the test folder.
+                            image_path_to = target_folder + '/' + cancer_type + \
+                                '/img%d_test/images/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            mask_path_to = target_folder + '/' + cancer_type + \
+                                '/img%d_test/masks/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                            os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+
+                            cv2.imwrite(image_path_to, image_patch)
+                            cv2.imwrite(mask_path_to, mask_patch)
+
+                        curr_count += 1
+    return
+
 
 if __name__ == '__main__':
     process_MoNuSeg_data()
     subset_MoNuSeg_data_by_cancer()
     subset_patchify_MoNuSeg_data_by_cancer(imsize=200)
+    subset_patchify_MoNuSeg_data_by_cancer_intraimage(imsize=200)

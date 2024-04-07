@@ -272,10 +272,108 @@ def subset_patchify_GLySAC_data_by_tumor(imsize: int):
 
                     cv2.imwrite(image_path_to, image_patch)
                     cv2.imwrite(mask_path_to, mask_patch)
+    return
 
+def subset_patchify_GLySAC_data_by_tumor_intraimage(imsize: int):
+    test_image_folder = '../../external_data/GLySAC/Test/images/'
+    test_mask_folder = '../../external_data/GLySAC/Test/masks/'
+
+    for tumor_type in ['tumor', 'normal']:
+        if tumor_type == 'tumor':
+            test_list = [
+                'AGC1_tumor_2',
+                'AGC1_tumor_4',
+                'AGC1_tumor_11',
+                'DB-0001_tumor_2',
+                'DB-0466_tumor_1',
+                'EGC1_new_tumor_1',
+                'EGC1_new_tumor_2',
+                'EGC1_new_tumor_3',
+                'EGC1_new_tumor_4',
+                'EGC1_new_tumor_5',
+                'EGC1_new_tumor_6',
+                'EGC1_new_tumor_7',
+                'EGC1_new_tumor_10',
+                'EGC1_new_tumor_11',
+            ]
+        if tumor_type == 'normal':
+            test_list = [
+                'DB-0001_normal_1',
+                'DB-0037_normal_1',
+                'EGC1_new_normal_2',
+                'EGC1_new_normal_5',
+            ]
+
+        for percentage in [5, 10, 20, 50]:
+            target_folder = '../../external_data/GLySAC/GLySACByTumor_intraimage%dpct_%sx%s/' % (percentage, imsize, imsize)
+
+            for test_item_count, test_item in enumerate(tqdm(test_list)):
+                image_path_from = test_image_folder + test_item + '.png'
+                mask_path_from = test_mask_folder + test_item + '.png'
+
+                image = cv2.imread(image_path_from)
+                mask = cv2.imread(mask_path_from)
+                image_h, image_w = image.shape[:2]
+
+                total_count = (image_h // imsize) * (image_w // imsize)
+                target_count = int(np.ceil(percentage * total_count / 100))
+                curr_count = 0
+
+                for h_chunk in range(image_h // imsize):
+                    for w_chunk in range(image_w // imsize):
+                        h = h_chunk * imsize
+                        w = w_chunk * imsize
+
+                        h_begin = max(h, 0)
+                        w_begin = max(w, 0)
+                        h_end = min(h + imsize, image_h)
+                        w_end = min(w + imsize, image_w)
+
+                        image_patch = image[h_begin:h_end, w_begin:w_end, :]
+                        mask_patch = mask[h_begin:h_end, w_begin:w_end]
+
+                        if curr_count < target_count:
+                            # 1. Save the image/mask pair to the train folder.
+                            image_path_to = target_folder + '/' + tumor_type + \
+                                '/img%d_train/images/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            mask_path_to = target_folder + '/' + tumor_type + \
+                                '/img%d_train/masks/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                            os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+
+                            cv2.imwrite(image_path_to, image_patch)
+                            cv2.imwrite(mask_path_to, mask_patch)
+
+                            # 2. Save an empty image/mask pair to the test folder.
+                            empty_image_patch = image_patch * 0
+                            empty_mask_patch = mask_patch * 0
+                            empty_image_path_to = target_folder + '/' + tumor_type + \
+                                '/img%d_test/images/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            empty_mask_path_to = target_folder + '/' + tumor_type + \
+                                '/img%d_test/masks/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            os.makedirs(os.path.dirname(empty_image_path_to), exist_ok=True)
+                            os.makedirs(os.path.dirname(empty_mask_path_to), exist_ok=True)
+
+                            cv2.imwrite(empty_image_path_to, empty_image_patch)
+                            cv2.imwrite(empty_mask_path_to, empty_mask_patch)
+
+                        else:
+                            # Save the image/mask pair to the test folder.
+                            image_path_to = target_folder + '/' + tumor_type + \
+                                '/img%d_test/images/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            mask_path_to = target_folder + '/' + tumor_type + \
+                                '/img%d_test/masks/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
+                            os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                            os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+
+                            cv2.imwrite(image_path_to, image_patch)
+                            cv2.imwrite(mask_path_to, mask_patch)
+
+                        curr_count += 1
     return
 
 if __name__ == '__main__':
     process_GLySAC_data()
     subset_GLySAC_data_by_tumor()
     subset_patchify_GLySAC_data_by_tumor(imsize=200)
+    subset_patchify_GLySAC_data_by_tumor_intraimage(imsize=200)
