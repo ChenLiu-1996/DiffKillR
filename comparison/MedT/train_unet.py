@@ -48,6 +48,7 @@ parser.add_argument('--crop', type=int, default=None)
 parser.add_argument('--imgsize', type=int, default=None)
 parser.add_argument('--device', default='cuda', type=str)
 parser.add_argument('--gray', default='no', type=str)
+parser.add_argument('--seed', type=int, default=1)
 
 args = parser.parse_args()
 gray_ = args.gray
@@ -55,6 +56,7 @@ aug = args.aug
 direc = args.direc
 modelname = args.modelname
 imgsize = args.imgsize
+seed = args.seed
 
 if gray_ == "yes":
     from utils_gray import JointTransform2D, ImageToImage2D, Image2D
@@ -105,7 +107,6 @@ optimizer = torch.optim.Adam(list(model.parameters()), lr=args.learning_rate,
 pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print("Total_params: {}".format(pytorch_total_params))
 
-seed = 3000
 np.random.seed(seed)
 torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)

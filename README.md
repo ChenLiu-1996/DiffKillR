@@ -70,8 +70,17 @@ python preprocess_tissuenet.py
 #### MoNuSeg
 ```
 cd external_data/MoNuSeg
+
+cd src/preprocessing
+python preprocess_MoNuSeg.py
 ```
 
+
+#### GLySAC
+```
+cd src/preprocessing
+python preprocess_GLySAC.py
+```
 
 ### Environment
 We developed the codebase in a miniconda environment.
