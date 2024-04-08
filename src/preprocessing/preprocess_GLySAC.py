@@ -304,7 +304,7 @@ def subset_patchify_GLySAC_data_by_tumor_intraimage(imsize: int):
                 'EGC1_new_normal_5',
             ]
 
-        for percentage in [5, 10, 20, 50]:
+        for percentage in [5, 20, 50]:
             target_folder = '../../external_data/GLySAC/GLySACByTumor_intraimage%dpct_%sx%s/' % (percentage, imsize, imsize)
 
             for test_item_count, test_item in enumerate(tqdm(test_list)):

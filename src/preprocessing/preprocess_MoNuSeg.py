@@ -338,7 +338,7 @@ def subset_patchify_MoNuSeg_data_by_cancer_intraimage(imsize: int):
                 'TCGA-HC-7209-01A-01-TS1'
             ]
 
-        for percentage in [5, 10, 20, 50]:
+        for percentage in [5, 20, 50]:
             target_folder = '../../external_data/MoNuSeg/MoNuSegByCancer_intraimage%dpct_%sx%s/' % (percentage, imsize, imsize)
 
             for test_item_count, test_item in enumerate(tqdm(test_list)):

@@ -66,11 +66,11 @@ def preProcess_train(x_fname_list, y_fname_list, args):
         x_path = args.data_train + '/images/' + x_fname
         y_path = args.data_train + '/masks/' + y_fname
         if args.mode in ('train_second_stage', 'generate_voronoi', 'train_final_stage'):
-            x_path = './data_%s/data_second_stage_train/' % args.dataset_name + x_fname
-            y_path = './data_%s/data_second_stage_train/' % args.dataset_name + y_fname
+            x_path = './data_%s/seed%d/data_second_stage_train/' % (args.dataset_name, args.seed) + x_fname
+            y_path = './data_%s/seed%d/data_second_stage_train/' % (args.dataset_name, args.seed) + y_fname
 
             if args.mode == 'train_final_stage':
-                path_edge = './data_%s/data_second_stage_train/' % args.dataset_name + y_fname.split('_')[-2] + '_vor.png'
+                path_edge = './data_%s/seed%d/data_second_stage_train/' % (args.dataset_name, args.seed) + y_fname.split('_')[-2] + '_vor.png'
 
         x_img = cv2.cvtColor(cv2.imread(x_path, cv2.IMREAD_COLOR), code=cv2.COLOR_BGR2RGB)
         y_img = cv2.imread(y_path, cv2.IMREAD_GRAYSCALE)
@@ -113,8 +113,8 @@ def preProcess_test(x_fname_list, y_fname_list, args):
         y_fname = y_fname_list[i]
         assert x_fname[:16] == y_fname[:16]
         if args.mode in ('train_second_stage', 'generate_voronoi', 'train_final_stage'):
-            x_path = './data_%s/data_second_stage_test/' % args.dataset_name + x_fname
-            y_path = './data_%s/data_second_stage_test/' % args.dataset_name + y_fname
+            x_path = './data_%s/seed%d/data_second_stage_test/' % (args.dataset_name, args.seed) + x_fname
+            y_path = './data_%s/seed%d/data_second_stage_test/' % (args.dataset_name, args.seed) + y_fname
         else:
             x_path = args.data_test + '/images/' + x_fname
             y_path = args.data_test + '/masks/' + y_fname
@@ -491,13 +491,14 @@ def test_stage(EPOCH, args, model):
                 img_save = cv2.cvtColor(img_save, cv2.COLOR_RGB2BGR)
                 label_save = cv2.cvtColor(label_save, cv2.COLOR_RGB2BGR)
                 input_save = cv2.cvtColor(np.uint8(x_test_img[i].permute(1, 2, 0).detach().cpu().numpy() * 255), cv2.COLOR_RGB2BGR)
-                os.makedirs('./data_%s/check_final_results/' % args.dataset_name, exist_ok=True)
-                cv2.imwrite('./data_%s/check_final_results/' % args.dataset_name + x_test_fname_list[i].replace('.png', '_pred.png'), img_save)
-                cv2.imwrite('./data_%s/check_final_results/' % args.dataset_name + x_test_fname_list[i].replace('.png', '_label.png'), label_save)
-                cv2.imwrite('./data_%s/check_final_results/' % args.dataset_name + x_test_fname_list[i].replace('.png', '_input.png'), input_save)
+
+                os.makedirs('./data_%s/seed%d/check_final_results/' % (args.dataset_name, args.seed), exist_ok=True)
+                cv2.imwrite('./data_%s/seed%d/check_final_results/' % (args.dataset_name, args.seed) + x_test_fname_list[i].replace('.png', '_pred.png'), img_save)
+                cv2.imwrite('./data_%s/seed%d/check_final_results/' % (args.dataset_name, args.seed) + x_test_fname_list[i].replace('.png', '_label.png'), label_save)
+                cv2.imwrite('./data_%s/seed%d/check_final_results/' % (args.dataset_name, args.seed) + x_test_fname_list[i].replace('.png', '_input.png'), input_save)
 
                 # NOTE: Change this path
-                save_dir = '../results/%s/PSM/' % args.dataset_name
+                save_dir = '../results/%s/PSM_seed%d/' % (args.dataset_name, args.seed)
                 os.makedirs(os.path.dirname(save_dir), exist_ok=True)
                 seg_result = pred[i].detach().cpu().numpy().astype(np.uint8)
                 cv2.imwrite(save_dir + x_test_fname_list[i], seg_result * 255)
@@ -527,9 +528,9 @@ def generate_voronoi_label( args, model):
 
             for i in range(pred.shape[0]):
                 if sub_loader == loader.test_loader:
-                    path = './data_%s/data_second_stage_test/' % args.dataset_name + y_fname_list[i]
+                    path = './data_%s/seed%d/data_second_stage_test/' % (args.dataset_name, args.seed) + y_fname_list[i]
                 else:
-                    path = './data_%s/data_second_stage_train/' % args.dataset_name + y_fname_list[i]
+                    path = './data_%s/seed%d/data_second_stage_train/' % (args.dataset_name, args.seed) + y_fname_list[i]
 
                 label = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
                 point_list, bp, prob = peak_point(prob_maps.detach().cpu()[i][1].numpy(), 20, 0.6)
@@ -544,9 +545,9 @@ def generate_voronoi_label( args, model):
                 voronoi_label = create_Voronoi_label(point_list, label.shape)
 
                 if sub_loader == loader.test_loader:
-                    cv2.imwrite('./data_%s/data_second_stage_test/' % args.dataset_name + x_fname_list[i].split('_')[-2] + '_vor.png', voronoi_label)
+                    cv2.imwrite('./data_%s/seed%d/data_second_stage_test/' % (args.dataset_name, args.seed) + x_fname_list[i].split('_')[-2] + '_vor.png', voronoi_label)
                 else:
-                    cv2.imwrite('./data_%s/data_second_stage_train/' % args.dataset_name + x_fname_list[i].split('_')[-2] + '_vor.png', voronoi_label)
+                    cv2.imwrite('./data_%s/seed%d/data_second_stage_train/' % (args.dataset_name, args.seed) + x_fname_list[i].split('_')[-2] + '_vor.png', voronoi_label)
 
                 fig_for_save = x_img[i].cpu().permute(1, 2, 0).contiguous().numpy()
                 for j in range(point_list.shape[0]):
@@ -555,11 +556,11 @@ def generate_voronoi_label( args, model):
                     cv2.line(fig_for_save, (point_list[j][1], point_list[j][0] - 3),
                              (point_list[j][1], point_list[j][0] + 3), color=(0, 0, 255), thickness=1)
 
-                if not os.path.exists('./data_%s/voronoi' % args.dataset_name):
-                    os.mkdir('./data_%s/voronoi' % args.dataset_name)
+                if not os.path.exists('./data_%s/seed%d/voronoi' % (args.dataset_name, args.seed)):
+                    os.mkdir('./data_%s/seed%d/voronoi' % (args.dataset_name, args.seed))
 
-                cv2.imwrite('./data_%s/voronoi/' % args.dataset_name + x_fname_list[i].split('_')[-2] + '_point.png', cv2.cvtColor(np.uint8(fig_for_save*255), cv2.COLOR_RGB2BGR))
-                cv2.imwrite('./data_%s/voronoi/' % args.dataset_name + x_fname_list[i].split('_')[-2] + '_prob.png', cv2.cvtColor(np.uint8(prob*255), cv2.COLOR_RGB2BGR))
+                cv2.imwrite('./data_%s/seed%d/voronoi/' % (args.dataset_name, args.seed) + x_fname_list[i].split('_')[-2] + '_point.png', cv2.cvtColor(np.uint8(fig_for_save*255), cv2.COLOR_RGB2BGR))
+                cv2.imwrite('./data_%s/seed%d/voronoi/' % (args.dataset_name, args.seed) + x_fname_list[i].split('_')[-2] + '_prob.png', cv2.cvtColor(np.uint8(prob*255), cv2.COLOR_RGB2BGR))
 
     print('end')
 
