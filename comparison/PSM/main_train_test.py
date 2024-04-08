@@ -162,11 +162,9 @@ def trainer_selfsupervised(EPOCH, args, model, loss_func, optimizer):
         loss_mean = loss_epoch / num_items
 
         if loss_mean < best_loss:
-            save_model(model.state_dict(), 'best', 'self_stage', folder='checkpoint_%s' % args.dataset_name)
+            save_model(model.state_dict(), 'best', 'self_stage', folder='checkpoint_%s/seed%d' % (args.dataset_name, args.seed))
 
         print(F'loss:{loss_mean}')
-        # if (epoch + 1) % args.test_interval == 0:
-        #     save_model(model.state_dict(), epoch, 'self_stage', folder='checkpoint_%s' % args.dataset_name)
 
 
 def trainer_selfsupervised_contrastive(EPOCH, args, model, loss_func, optimizer):
@@ -205,7 +203,7 @@ def trainer_selfsupervised_contrastive(EPOCH, args, model, loss_func, optimizer)
         print(F'loss:{loss_mean}')
 
         if (epoch + 1) % args.test_interval == 0:
-            save_model(model.state_dict(), epoch, args.model, folder='checkpoint_%s' % args.dataset_name)
+            save_model(model.state_dict(), epoch, args.model, folder='checkpoint_%s/seed%d' % (args.dataset_name, args.seed))
 
 def trainer_selfsupervised_random_rotate(EPOCH, args, model, loss_func, optimizer):
     for epoch in range(EPOCH):
@@ -233,7 +231,7 @@ def trainer_selfsupervised_random_rotate(EPOCH, args, model, loss_func, optimize
         loss_mean = sum(loss_list) / len(loss_list)
         print(F'loss:{loss_mean}')
         if (epoch + 1) % args.test_interval == 0:
-            save_model(model.state_dict(), epoch, args.model, folder='checkpoint_%s' % args.dataset_name)
+            save_model(model.state_dict(), epoch, args.model, folder='checkpoint_%s/seed%d' % (args.dataset_name, args.seed))
 
 def trainer_selfsupervised_simsiam(EPOCH, args, model, loss_func, optimizer):
     encoder = model
@@ -271,7 +269,7 @@ def trainer_selfsupervised_simsiam(EPOCH, args, model, loss_func, optimizer):
         loss_mean = sum(loss_list) / len(loss_list)
         print(F'loss:{loss_mean}')
         if (epoch + 1) % args.test_interval == 0:
-            save_model(model_whole.state_dict(), epoch, args.model, folder='checkpoint_%s' % args.dataset_name)
+            save_model(model_whole.state_dict(), epoch, args.model, folder='checkpoint_%s/seed%d' % (args.dataset_name, args.seed))
 
 def trainer_selfsupervised_mean_value(EPOCH, args, model, loss_func, optimizer):
     for epoch in range(EPOCH):
@@ -297,7 +295,7 @@ def trainer_selfsupervised_mean_value(EPOCH, args, model, loss_func, optimizer):
         loss_mean = sum(loss_list) / len(loss_list)
         print(F'loss:{loss_mean}')
         if (epoch + 1) % args.test_interval == 0:
-            save_model(model.state_dict(), epoch, args.model, folder='checkpoint_%s' % args.dataset_name)
+            save_model(model.state_dict(), epoch, args.model, folder='checkpoint_%s/seed%d' % (args.dataset_name, args.seed))
 
 
 def trainer_second_stage(EPOCH, args, model, loss_func, optimizer):
@@ -371,7 +369,7 @@ def trainer_second_stage(EPOCH, args, model, loss_func, optimizer):
                             best_model = copy.deepcopy(model.state_dict())
 
         optimizer.schedule()
-    save_model(best_model, 'best', 'second_stage', folder='checkpoint_%s' % args.dataset_name)
+    save_model(best_model, 'best', 'second_stage', folder='checkpoint_%s/seed%d' % (args.dataset_name, args.seed))
 
     print(f'best-epoch: {best_epoch}, aji: {best_aji}')
 
@@ -456,7 +454,7 @@ def trainer_final_stage(EPOCH, args, model, loss_func, optimizer):
                             best_model = copy.deepcopy(model.state_dict())
 
         optimizer.schedule()
-    save_model(best_model, 'best', 'final_stage', folder='checkpoint_%s' % args.dataset_name)
+    save_model(best_model, 'best', 'final_stage', folder='checkpoint_%s/seed%d' % (args.dataset_name, args.seed))
 
     print(f'best-epoch: {best_epoch}, aji: {best_aji}')
 
@@ -670,7 +668,7 @@ if __name__ == "__main__":
         print('-----------------------')
         model = timm.create_model('res2net101_26w_4s', num_classes=1, pretrained=True).to(device)
 
-        model.load_state_dict(torch.load('./checkpoint_%s/self_stage_best.pth' % args.dataset_name, map_location=device))
+        model.load_state_dict(torch.load('./checkpoint_%s/seed%d/self_stage_best.pth' % (args.dataset_name, args.seed), map_location=device))
         optimizer = make_optimizer(args, model)
 
         loader = data.get_dataset(0, args)
@@ -701,7 +699,7 @@ if __name__ == "__main__":
 
     elif args.mode == 'generate_voronoi':
         model = ResUNet34(pretrained=True).to(device)
-        model.load_state_dict(torch.load('./checkpoint_%s/second_stage_best.pth' % args.dataset_name, map_location=device))
+        model.load_state_dict(torch.load('./checkpoint_%s/seed%d/second_stage_best.pth' % (args.dataset_name, args.seed), map_location=device))
         generate_voronoi_label(args, model)
 
     elif args.mode == 'train_final_stage':
@@ -713,7 +711,7 @@ if __name__ == "__main__":
     elif args.mode == 'test':
         model = ResUNet34(pretrained=True).to(device)
         # Second stage gives better result than final stage.
-        best_path = './checkpoint_%s/second_stage_best.pth' % args.dataset_name
+        best_path = './checkpoint_%s/seed%d/second_stage_best.pth' % (args.dataset_name, args.seed)
         model.load_state_dict(torch.load(best_path, map_location=device))
         model.eval()
         test_stage(EPOCH, args, model)

@@ -34,7 +34,7 @@ do
         for pct in MoNuSegByCancer_intraimage5pct_200x200 MoNuSegByCancer_intraimage20pct_200x200 MoNuSegByCancer_intraimage50pct_200x200;
         do
             # Iterate over possible files. Please change the range to the max number of files.
-            for img_cnt in $(seq 0 10);
+            for img_cnt in $(seq 0 15);
             do
                 if [ -d "../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/" ]; then
                     time python main_train_test.py --seed $i --mode 'train_base' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
@@ -56,7 +56,7 @@ do
         for pct in GLySACByTumor_intraimage5pct_200x200 GLySACByTumor_intraimage20pct_200x200 GLySACByTumor_intraimage50pct_200x200;
         do
             # Iterate over possible files. Please change the range to the max number of files.
-            for img_cnt in $(seq 0 10);
+            for img_cnt in $(seq 0 15);
             do
                 if [ -d "../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_train/" ]; then
                     time python main_train_test.py --seed $i --mode 'train_base' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_test/

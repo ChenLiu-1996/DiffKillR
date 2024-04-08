@@ -25,13 +25,17 @@ class Data:
         self.val_loader = None
         self.test_loader = None
 
+        drop_last = True
+        if len(input_train) < args.batch_size:
+            drop_last = False
+
         self.train_loader = data.DataLoader(
             Dataset(input_train, label_train),
             batch_size=args.batch_size,
             shuffle=True,
             pin_memory=False,
             num_workers=args.n_threads,
-            drop_last=True,
+            drop_last=drop_last,
         )
 
         self.val_loader = data.DataLoader(
@@ -73,8 +77,7 @@ def get_dataset(epoch, args):
         label_test = sorted([item for item in test_list if item.endswith('.png')])
 
     if args.mode in('train_second_stage', 'generate_voronoi', 'train_final_stage'):
-
-        for i, j, k in os.walk('./data_%s/data_second_stage_train' % args.dataset_name):
+        for i, j, k in os.walk('./data_%s/seed%d/data_second_stage_train' % (args.dataset_name, args.seed)):
             list_all = sorted(k[:])
         image_list = sorted([item for item in list_all if item.endswith('_original.png')])
 
@@ -83,16 +86,19 @@ def get_dataset(epoch, args):
         else:
             anno_list = sorted([item for item in list_all if item.endswith('_pos.png')])
 
-        for i, j, k in os.walk('./data_%s/data_second_stage_test' % args.dataset_name):
+        for i, j, k in os.walk('./data_%s/seed%d/data_second_stage_test' % (args.dataset_name, args.seed)):
             test_list = k[:]
 
         input_test = sorted([item for item in test_list if item.endswith('_original.png')])
         label_test = sorted([item for item in test_list if item.endswith('_gt.png')])
 
-
-    input_train, input_val, label_train, label_val = train_test_split(image_list, anno_list,
-                                                                      train_size=int(0.9 * len(image_list)),
-                                                                      random_state=1)
+    if len(image_list) == 1:
+        input_train, label_train = image_list, anno_list
+        input_val, label_val = image_list, anno_list
+    else:
+        input_train, input_val, label_train, label_val = train_test_split(image_list, anno_list,
+                                                                          train_size=int(0.9 * len(image_list)),
+                                                                          random_state=1)
 
     o = Data(args, input_train, label_train, input_val, label_val, input_test, label_test)
 

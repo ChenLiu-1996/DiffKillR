@@ -19,43 +19,52 @@ if __name__ == '__main__':
 
     imsize = 200
 
-    for dataset in ['MoNuSegByCancer_200x200/breast',
-                    'MoNuSegByCancer_200x200/colon',
-                    'MoNuSegByCancer_200x200/prostate']:
+    for folder in [
+        'MoNuSegByCancer_200x200',
+        # 'MoNuSegByCancer_intraimage5pct_200x200',
+        # 'MoNuSegByCancer_intraimage20pct_200x200',
+        # 'MoNuSegByCancer_intraimage50pct_200x200',
+        'GLySACByTumor_200x200',
+        # 'GLySACByTumor_intraimage5pct_200x200',
+        # 'GLySACByTumor_intraimage20pct_200x200',
+        # 'GLySACByTumor_intraimage50pct_200x200',
+    ]:
 
-        for model in tqdm(['PSM', 'MedT', 'UNet', 'nnUNet']):
+        directory_list = sorted(glob('../results/%s/*/' % folder))
+        for directory in directory_list:
+            for model in tqdm(['PSM', 'MedT', 'UNet', 'nnUNet']):
+                for seed in range(1, 4):
+                    source_folder = '%s/%s_seed%d/' % (directory, model, seed)
+                    stitched_folder = '%s/%s_seed%d_stitched/' % (directory, model, seed)
+                    os.makedirs(stitched_folder, exist_ok=True)
 
-            folder = '../results/%s/%s/' % (dataset, model)
-            stitched_folder = '../results/%s/%s_stitched/' % (dataset, model)
-            os.makedirs(stitched_folder, exist_ok=True)
+                    mask_list = sorted(glob(source_folder + '*.png'))
 
-            mask_list = sorted(glob(folder + '*.png'))
+                    base_mask_list = []
+                    for mask_path in mask_list:
+                        h, w, h_w_string = extract_h_w(mask_path)
+                        base_mask_path = mask_path.replace('_' + h_w_string, '')
 
-            base_mask_list = []
-            for mask_path in mask_list:
-                h, w, h_w_string = extract_h_w(mask_path)
-                base_mask_path = mask_path.replace('_' + h_w_string, '')
+                        if base_mask_path not in base_mask_list:
+                            base_mask_list.append(base_mask_path)
 
-                if base_mask_path not in base_mask_list:
-                    base_mask_list.append(base_mask_path)
+                    for base_mask_path in base_mask_list:
+                        mask_patch_list = [item for item in mask_list if base_mask_path.replace('.png', '_') in item]
 
-            for base_mask_path in base_mask_list:
-                mask_patch_list = [item for item in mask_list if base_mask_path.replace('.png', '') in item]
+                        max_h, max_w = 0, 0
+                        for mask_patch_path in mask_patch_list:
+                            h, w, h_w_string = extract_h_w(mask_patch_path)
+                            max_h = max(h, max_h)
+                            max_w = max(w, max_w)
 
-                max_h, max_w = 0, 0
-                for mask_patch_path in mask_patch_list:
-                    h, w, h_w_string = extract_h_w(mask_patch_path)
-                    max_h = max(h, max_h)
-                    max_w = max(w, max_w)
+                        size_h, size_w = max_h + imsize, max_w + imsize
 
-                size_h, size_w = max_h + imsize, max_w + imsize
+                        mask_stitched = np.zeros((size_h, size_w))
+                        for mask_patch_path in mask_patch_list:
+                            h, w, h_w_string = extract_h_w(mask_patch_path)
+                            mask_patch = cv2.imread(mask_patch_path, cv2.IMREAD_GRAYSCALE)
+                            assert mask_stitched[h : h+imsize, w : w+imsize].sum() == 0
+                            mask_stitched[h : h+imsize, w : w+imsize] = mask_patch
 
-                mask_stitched = np.zeros((size_h, size_w))
-                for mask_patch_path in mask_patch_list:
-                    h, w, h_w_string = extract_h_w(mask_patch_path)
-                    mask_patch = cv2.imread(mask_patch_path, cv2.IMREAD_GRAYSCALE)
-                    assert mask_stitched[h : h+imsize, w : w+imsize].sum() == 0
-                    mask_stitched[h : h+imsize, w : w+imsize] = mask_patch
-
-                save_path = base_mask_path.replace(folder, stitched_folder)
-                cv2.imwrite(save_path, mask_stitched)
+                        save_path = base_mask_path.replace(source_folder, stitched_folder)
+                        cv2.imwrite(save_path, mask_stitched)
