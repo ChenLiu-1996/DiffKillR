@@ -1,30 +1,64 @@
 import cv2
 from glob import glob
 import metrics
+import pandas as pd
+
 
 if __name__ == '__main__':
 
-    for subset in ['breast', 'colon', 'prostate']:
+    results_list = []
 
-        for model in ['PSM', 'MedT', 'UNet', 'nnUNet', 'StarDist', 'LACSS']:
+    for folder in [
+        # 'MoNuSegByCancer_200x200',
+        'MoNuSegByCancer_intraimage5pct_200x200',
+        # 'MoNuSegByCancer_intraimage20pct_200x200',
+        # 'MoNuSegByCancer_intraimage50pct_200x200',
+    ]:
 
-            pred_folder = '../results/MoNuSegByCancer_200x200/%s/%s_stitched/' % (subset, model)
-            true_folder = '../../external_data/MoNuSeg/MoNuSegByCancer/%s/test/masks/' % subset
+        directory_list = sorted(glob('../results/%s/*/' % folder))
+        for directory in directory_list:
+            subset = directory.split('/')[-2]
 
-            pred_list = sorted(glob(pred_folder + '*.png'))
-            true_list = sorted(glob(true_folder + '*.png'))
-            assert len(pred_list) == len(true_list)
+            for model in ['UNet', 'nnUNet', 'MedT', 'LACSS', 'PSM']:
+                for seed in range(1, 4):
+                    pred_folder = '%s/%s_seed%d_stitched/' % (directory, model, seed)
 
-            metric_list = []
-            for pred_mask_path, true_mask_path in zip(pred_list, true_list):
-                pred_mask = cv2.imread(pred_mask_path, cv2.IMREAD_GRAYSCALE)
-                true_mask = cv2.imread(true_mask_path, cv2.IMREAD_GRAYSCALE)
-                assert pred_mask.shape == true_mask.shape
+                    if model == 'LACSS':
+                        if seed > 1:
+                            continue
+                        pred_folder = '%s/LACSS_stitched/' % directory
+                    pred_list = sorted(glob(pred_folder + '*.png'))
 
-                metric = metrics.compute_metrics(pred_mask, true_mask, ['p_F1', 'aji', 'iou'])
-                metric_list.append(metric)
+                    if 'intraimage' in folder:
+                        cancer_type, img_id = subset.split('_')
+                        true_folder = '../../external_data/MoNuSeg/%s/%s/%s_test/' % (folder, cancer_type, img_id)
+                        true_list = sorted(glob(true_folder + '*_effective_mask.png'))
+                    else:
+                        true_folder = '../../external_data/MoNuSeg/MoNuSegByCancer/%s/test/masks/' % subset
+                        true_list = sorted(glob(true_folder + '*.png'))
 
-            print('MoNuSeg subset: %s Model: %s' % (subset, model))
-            for key in metric_list[0].keys():
-                num = sum([i[key] for i in metric_list]) / len(metric_list)
-                print(F'{key}: {num}')
+                    assert len(pred_list) == len(true_list)
+
+                    print('MoNuSeg [%s] Model [%s] seed %d' % (directory, model, seed))
+
+                    metric_list = []
+                    for pred_mask_path, true_mask_path in zip(pred_list, true_list):
+                        pred_mask = cv2.imread(pred_mask_path, cv2.IMREAD_GRAYSCALE)
+                        true_mask = cv2.imread(true_mask_path, cv2.IMREAD_GRAYSCALE)
+                        assert pred_mask.shape == true_mask.shape
+
+                        metric = metrics.compute_metrics(pred_mask, true_mask, ['p_F1', 'aji', 'iou'])
+                        metric_list.append(metric)
+
+                    Dice = sum([i['dice'] for i in metric_list]) / len(metric_list)
+                    IoU = sum([i['iou'] for i in metric_list]) / len(metric_list)
+                    F1 = sum([i['p_F1'] for i in metric_list]) / len(metric_list)
+                    AJI = sum([i['aji'] for i in metric_list]) / len(metric_list)
+
+                    print('Dice: %.2f, IoU: %.2f, F1: %.2f, AJI: %.2f'
+                        % (Dice, IoU, F1, AJI))
+
+                    results_list.append([folder, subset, model, seed, true_folder, pred_folder, Dice, IoU, F1, AJI])
+
+    results_df = pd.DataFrame(results_list, columns=['folder', 'subset', 'model', 'seed', 'GT_folder', 'pred_folder', 'Dice', 'IoU', 'F1', 'AJI'])
+    results_df.to_csv('./results_monuseg.csv')

@@ -278,8 +278,8 @@ def subset_patchify_GLySAC_data_by_tumor_intraimage(imsize: int):
     test_image_folder = '../../external_data/GLySAC/Test/images/'
     test_mask_folder = '../../external_data/GLySAC/Test/masks/'
 
-    for tumor_type in ['tumor', 'normal']:
-        if tumor_type == 'tumor':
+    for cancer_type in ['tumor', 'normal']:
+        if cancer_type == 'tumor':
             test_list = [
                 'AGC1_tumor_2',
                 'AGC1_tumor_4',
@@ -296,7 +296,7 @@ def subset_patchify_GLySAC_data_by_tumor_intraimage(imsize: int):
                 'EGC1_new_tumor_10',
                 'EGC1_new_tumor_11',
             ]
-        if tumor_type == 'normal':
+        if cancer_type == 'normal':
             test_list = [
                 'DB-0001_normal_1',
                 'DB-0037_normal_1',
@@ -319,6 +319,10 @@ def subset_patchify_GLySAC_data_by_tumor_intraimage(imsize: int):
                 target_count = int(np.ceil(percentage * total_count / 100))
                 curr_count = 0
 
+                # Also track the "effective" image/mask pair for evaluation.
+                image_effective = np.zeros_like(image)
+                mask_effective = np.zeros_like(mask)
+
                 for h_chunk in range(image_h // imsize):
                     for w_chunk in range(image_w // imsize):
                         h = h_chunk * imsize
@@ -334,9 +338,9 @@ def subset_patchify_GLySAC_data_by_tumor_intraimage(imsize: int):
 
                         if curr_count < target_count:
                             # 1. Save the image/mask pair to the train folder.
-                            image_path_to = target_folder + '/' + tumor_type + \
+                            image_path_to = target_folder + '/' + cancer_type + \
                                 '/img%d_train/images/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
-                            mask_path_to = target_folder + '/' + tumor_type + \
+                            mask_path_to = target_folder + '/' + cancer_type + \
                                 '/img%d_train/masks/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
                             os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
                             os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
@@ -347,9 +351,9 @@ def subset_patchify_GLySAC_data_by_tumor_intraimage(imsize: int):
                             # 2. Save an empty image/mask pair to the test folder.
                             empty_image_patch = image_patch * 0
                             empty_mask_patch = mask_patch * 0
-                            empty_image_path_to = target_folder + '/' + tumor_type + \
+                            empty_image_path_to = target_folder + '/' + cancer_type + \
                                 '/img%d_test/images/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
-                            empty_mask_path_to = target_folder + '/' + tumor_type + \
+                            empty_mask_path_to = target_folder + '/' + cancer_type + \
                                 '/img%d_test/masks/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
                             os.makedirs(os.path.dirname(empty_image_path_to), exist_ok=True)
                             os.makedirs(os.path.dirname(empty_mask_path_to), exist_ok=True)
@@ -359,9 +363,9 @@ def subset_patchify_GLySAC_data_by_tumor_intraimage(imsize: int):
 
                         else:
                             # Save the image/mask pair to the test folder.
-                            image_path_to = target_folder + '/' + tumor_type + \
+                            image_path_to = target_folder + '/' + cancer_type + \
                                 '/img%d_test/images/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
-                            mask_path_to = target_folder + '/' + tumor_type + \
+                            mask_path_to = target_folder + '/' + cancer_type + \
                                 '/img%d_test/masks/' % test_item_count + test_item + '_H%sW%s.png' % (h, w)
                             os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
                             os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
@@ -369,7 +373,19 @@ def subset_patchify_GLySAC_data_by_tumor_intraimage(imsize: int):
                             cv2.imwrite(image_path_to, image_patch)
                             cv2.imwrite(mask_path_to, mask_patch)
 
+                            # Update the "effective" image/mask pair.
+                            image_effective[h_begin:h_end, w_begin:w_end, :] = image[h_begin:h_end, w_begin:w_end, :]
+                            mask_effective[h_begin:h_end, w_begin:w_end] = mask[h_begin:h_end, w_begin:w_end]
+
                         curr_count += 1
+
+                # Save the "effective" image/mask pair.
+                image_effective_path_to = target_folder + '/' + cancer_type + \
+                    '/img%d_test/' % test_item_count + test_item + '_effective_image.png'
+                mask_effective_path_to = target_folder + '/' + cancer_type + \
+                    '/img%d_test/' % test_item_count + test_item + '_effective_mask.png'
+                cv2.imwrite(image_effective_path_to, image_effective)
+                cv2.imwrite(mask_effective_path_to, mask_effective)
     return
 
 if __name__ == '__main__':

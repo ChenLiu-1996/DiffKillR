@@ -12,6 +12,7 @@ from glob import glob
 from skimage.draw import polygon2mask
 import skimage.measure
 
+
 def load_MoNuSeg_annotation(xml_path: str) -> list[np.ndarray]:
     '''
         Return a list of vertices for each polygon in the xml file
@@ -353,6 +354,10 @@ def subset_patchify_MoNuSeg_data_by_cancer_intraimage(imsize: int):
                 target_count = int(np.ceil(percentage * total_count / 100))
                 curr_count = 0
 
+                # Also track the "effective" image/mask pair for evaluation.
+                image_effective = np.zeros_like(image)
+                mask_effective = np.zeros_like(mask)
+
                 for h_chunk in range(image_h // imsize):
                     for w_chunk in range(image_w // imsize):
                         h = h_chunk * imsize
@@ -403,7 +408,20 @@ def subset_patchify_MoNuSeg_data_by_cancer_intraimage(imsize: int):
                             cv2.imwrite(image_path_to, image_patch)
                             cv2.imwrite(mask_path_to, mask_patch)
 
+                            # Update the "effective" image/mask pair.
+                            image_effective[h_begin:h_end, w_begin:w_end, :] = image[h_begin:h_end, w_begin:w_end, :]
+                            mask_effective[h_begin:h_end, w_begin:w_end] = mask[h_begin:h_end, w_begin:w_end]
+
                         curr_count += 1
+
+                # Save the "effective" image/mask pair.
+                image_effective_path_to = target_folder + '/' + cancer_type + \
+                    '/img%d_test/' % test_item_count + test_item + '_effective_image.png'
+                mask_effective_path_to = target_folder + '/' + cancer_type + \
+                    '/img%d_test/' % test_item_count + test_item + '_effective_mask.png'
+                cv2.imwrite(image_effective_path_to, image_effective)
+                cv2.imwrite(mask_effective_path_to, mask_effective)
+
     return
 
 
