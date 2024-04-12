@@ -8,10 +8,10 @@ import os
 if __name__ == '__main__':
 
     for folder in [
+        'GLySACByTumor_200x200',
         'GLySACByTumor_intraimage5pct_200x200',
         'GLySACByTumor_intraimage20pct_200x200',
         'GLySACByTumor_intraimage50pct_200x200',
-        'GLySACByTumor_200x200',
     ]:
 
         directory_list = sorted(glob('../results/%s/*/' % folder))

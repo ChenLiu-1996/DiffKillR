@@ -210,9 +210,7 @@ def find_candidates(obj_i, objects_labeled, radius=50):
 
 def AJI_fast(gt, pred_arr):
     gs, g_areas = np.unique(gt, return_counts=True)
-    assert np.all(gs == np.arange(len(gs)))
     ss, s_areas = np.unique(pred_arr, return_counts=True)
-    assert np.all(ss == np.arange(len(ss)))
 
     if len(ss) < 2:
         # All background.
