@@ -27,27 +27,27 @@ conda activate cellseg
 
 cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/CellSeg/comparison/PSM/
 
-for i in $(seq 1 3);
-do
-    for cancer in breast colon prostate;
-    do
-        for pct in MoNuSegByCancer_intraimage5pct_200x200 MoNuSegByCancer_intraimage20pct_200x200 MoNuSegByCancer_intraimage50pct_200x200;
-        do
-            # Iterate over possible files. Please change the range to the max number of files.
-            for img_cnt in $(seq 0 15);
-            do
-                if [ -d "../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/" ]; then
-                    time python main_train_test.py --seed $i --mode 'train_base' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
-                    time python main_train_test.py --seed $i --mode 'generate_label' --method 'gradcam' --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
-                    time python main_train_test.py --seed $i --mode 'train_second_stage' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
-                    time python main_train_test.py --seed $i --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
-                    time python main_train_test.py --seed $i --mode 'train_final_stage' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
-                    time python main_train_test.py --seed $i --mode 'test' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
-                fi
-            done
-        done
-    done
-done
+# for i in $(seq 1 3);
+# do
+#     for cancer in breast colon prostate;
+#     do
+#         for pct in MoNuSegByCancer_intraimage5pct_200x200 MoNuSegByCancer_intraimage20pct_200x200 MoNuSegByCancer_intraimage50pct_200x200;
+#         do
+#             # Iterate over possible files. Please change the range to the max number of files.
+#             for img_cnt in $(seq 0 15);
+#             do
+#                 if [ -d "../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/" ]; then
+#                     time python main_train_test.py --seed $i --mode 'train_base' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
+#                     time python main_train_test.py --seed $i --mode 'generate_label' --method 'gradcam' --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
+#                     time python main_train_test.py --seed $i --mode 'train_second_stage' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
+#                     time python main_train_test.py --seed $i --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
+#                     time python main_train_test.py --seed $i --mode 'train_final_stage' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
+#                     time python main_train_test.py --seed $i --mode 'test' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/MoNuSeg/$pct/$cancer/img${img_cnt}_test/
+#                 fi
+#             done
+#         done
+#     done
+# done
 
 for i in $(seq 1 3);
 do
@@ -62,8 +62,8 @@ do
                     time python main_train_test.py --seed $i --mode 'train_base' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_test/
                     time python main_train_test.py --seed $i --mode 'generate_label' --method 'gradcam' --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_test/
                     time python main_train_test.py --seed $i --mode 'train_second_stage' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_test/
-                    time python main_train_test.py --seed $i --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_test/
-                    time python main_train_test.py --seed $i --mode 'train_final_stage' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_test/
+                    # time python main_train_test.py --seed $i --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_test/
+                    # time python main_train_test.py --seed $i --mode 'train_final_stage' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_test/
                     time python main_train_test.py --seed $i --mode 'test' --crop_edge_size 200 --dataset_name $pct/${cancer}_img${img_cnt} --data_train ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_train/ --data_test ../../external_data/GLySAC/$pct/$cancer/img${img_cnt}_test/
                 fi
             done

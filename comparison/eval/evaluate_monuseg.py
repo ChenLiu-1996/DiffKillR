@@ -2,17 +2,16 @@ import cv2
 from glob import glob
 import metrics
 import pandas as pd
+import os
 
 
 if __name__ == '__main__':
 
-    results_list = []
-
     for folder in [
-        # 'MoNuSegByCancer_200x200',
+        'MoNuSegByCancer_200x200',
         'MoNuSegByCancer_intraimage5pct_200x200',
-        # 'MoNuSegByCancer_intraimage20pct_200x200',
-        # 'MoNuSegByCancer_intraimage50pct_200x200',
+        'MoNuSegByCancer_intraimage20pct_200x200',
+        'MoNuSegByCancer_intraimage50pct_200x200',
     ]:
 
         directory_list = sorted(glob('../results/%s/*/' % folder))
@@ -29,6 +28,8 @@ if __name__ == '__main__':
                         pred_folder = '%s/LACSS_stitched/' % directory
                     pred_list = sorted(glob(pred_folder + '*.png'))
 
+                    print('>>> Working on: MoNuSeg [%s] Model [%s] seed %d' % (directory, model, seed))
+
                     if 'intraimage' in folder:
                         cancer_type, img_id = subset.split('_')
                         true_folder = '../../external_data/MoNuSeg/%s/%s/%s_test/' % (folder, cancer_type, img_id)
@@ -39,7 +40,7 @@ if __name__ == '__main__':
 
                     assert len(pred_list) == len(true_list)
 
-                    print('MoNuSeg [%s] Model [%s] seed %d' % (directory, model, seed))
+                    print('> Found: MoNuSeg [%s] Model [%s] seed %d' % (directory, model, seed))
 
                     metric_list = []
                     for pred_mask_path, true_mask_path in zip(pred_list, true_list):
@@ -58,7 +59,10 @@ if __name__ == '__main__':
                     print('Dice: %.2f, IoU: %.2f, F1: %.2f, AJI: %.2f'
                         % (Dice, IoU, F1, AJI))
 
-                    results_list.append([folder, subset, model, seed, true_folder, pred_folder, Dice, IoU, F1, AJI])
+                    results_list = [[folder, subset, model, seed, true_folder, pred_folder, Dice, IoU, F1, AJI]]
+                    results_df = pd.DataFrame(results_list, columns=['folder', 'subset', 'model', 'seed', 'GT_folder', 'pred_folder', 'Dice', 'IoU', 'F1', 'AJI'])
 
-    results_df = pd.DataFrame(results_list, columns=['folder', 'subset', 'model', 'seed', 'GT_folder', 'pred_folder', 'Dice', 'IoU', 'F1', 'AJI'])
-    results_df.to_csv('./results_monuseg.csv')
+                    if os.path.isfile('./results_monuseg.csv'):
+                        results_df.to_csv('./results_monuseg.csv', mode='a', header=False)
+                    else:
+                        results_df.to_csv('./results_monuseg.csv')
