@@ -1,6 +1,9 @@
 import argparse
 import numpy as np
 import torch
+import sklearn.metrics
+import pandas as pd
+
 import os
 from glob import glob
 import yaml
@@ -8,6 +11,7 @@ from omegaconf import OmegaConf
 import wandb
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+
 
 from model.scheduler import LinearWarmupCosineAnnealingLR
 from model.autoencoder import AutoEncoder
@@ -21,6 +25,7 @@ from utils.early_stop import EarlyStopping
 from loss.supervised_contrastive import SupConLoss
 from loss.triplet_loss import TripletLoss, construct_triplet_batch
 from datasets.augmented_MoNuSeg import AugmentedMoNuSegDataset, load_image
+from datasets.augmented_GLySAC import AugmentedGLySACDataset
 
 def construct_batch_images_with_n_views(
         images,
@@ -74,7 +79,8 @@ def train(config: OmegaConf, wandb_run=None):
         prepare_dataset(config=config)
     
     # Set all paths.
-    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
+    dataste_name = config.dataset_name.split('_')[-1]
+    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_{dataste_name}_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
     log_dir = os.path.join(config.log_folder, model_name)
     model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
 
@@ -300,7 +306,8 @@ def generate_train_pairs(config: OmegaConf):
     model = model.to(device)
 
     # Set all paths.
-    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
+    dataset_name = config.dataset_name.split('_')[-1]
+    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_{dataset_name}_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
     model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
     model.load_weights(model_save_path, device=device)
     log('%s: Model weights successfully loaded.' % config.model,
@@ -373,10 +380,6 @@ def generate_train_pairs(config: OmegaConf):
     return
 
 
-import sklearn.metrics
-import pandas as pd
-
-
 @torch.no_grad()
 def test(config: OmegaConf):
     device = torch.device(
@@ -393,7 +396,8 @@ def test(config: OmegaConf):
     model = model.to(device)
 
     # e.g. 1.000_Colon_aug_m2_MoNuSeg_depth5_seed1_SimCLR.pty
-    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
+    dataset_name = config.dataset_name.split('_')[-1]
+    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_{dataset_name}_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
     model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
     output_save_path = os.path.join(config.output_save_root, model_name)
     os.makedirs(output_save_path, exist_ok=True)
@@ -541,7 +545,9 @@ def test(config: OmegaConf):
                 if embedding_patch_id_int[split][i] == embedding_patch_id_int[split][j]:
                     instance_adj[i, j] = 1
 
+        print('before yo=======!')
         log(f'Done constructing instance adjacency ({instance_adj.shape}) matrices.', to_console=True)
+        print('after yo=======!')
 
         ins_clustering_acc[split] = clustering_accuracy(embeddings[split],
                                                         embeddings['train'],
@@ -552,95 +558,96 @@ def test(config: OmegaConf):
         ins_topk_acc[split] = topk_accuracy(embeddings[split],
                                             instance_adj,
                                             distance_measure=distance_measure,
-                                            k=5)
+                                            k=3)
 
         ins_mAP[split] = embedding_mAP(embeddings[split],
                                        instance_adj,
                                        distance_op=distance_measure)
+        print('?===========')
+        print(ins_clustering_acc)
+        log(f'[{split}]Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
+        log(f'[{split}]Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
+        log(f'[{split}]Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
+
+    #Plot latent embeddings
+    # import phate
+    # import scprep
+    # import matplotlib.pyplot as plt
+
+    # plt.rcParams['font.family'] = 'sans-serif'
+
+    # fig_embedding = plt.figure(figsize=(10, 8 * 3))
+    # for split in ['train', 'val', 'test']:
+    #     phate_op = phate.PHATE(random_state=0,
+    #                              n_jobs=1,
+    #                              n_components=2,
+    #                              knn_dist='cosine',
+    #                              verbose=False)
+    #     data_phate = phate_op.fit_transform(embeddings[split])
+    #     print('Visualizing ', split, ' : ',  data_phate.shape)
+    #     ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
+    #     title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
+    #         Instance top-k acc: {ins_topk_acc[split]:.3f},\n \
+    #         Instance mAP: {ins_mAP[split]:.3f}"
         
-        log(f'Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
-        log(f'Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
-        log(f'Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
-
-    # Plot latent embeddings
-    import phate
-    import scprep
-    import matplotlib.pyplot as plt
-
-    plt.rcParams['font.family'] = 'sans-serif'
-
-    fig_embedding = plt.figure(figsize=(10, 8 * 3))
-    for split in ['train', 'val', 'test']:
-        phate_op = phate.PHATE(random_state=0,
-                                 n_jobs=1,
-                                 n_components=2,
-                                 knn_dist='cosine',
-                                 verbose=False)
-        data_phate = phate_op.fit_transform(embeddings[split])
-        print('Visualizing ', split, ' : ',  data_phate.shape)
-        ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
-        title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
-            Instance top-k acc: {ins_topk_acc[split]:.3f},\n \
-            Instance mAP: {ins_mAP[split]:.3f}"
-        
-        scprep.plot.scatter2d(data_phate,
-                              c=embedding_patch_id_int[split],
-                              ax=ax,
-                              title=title,
-                              xticks=False,
-                              yticks=False,
-                              label_prefix='PHATE',
-                              fontsize=10,
-                              s=5)
-    plt.tight_layout()
-    plt.savefig(save_path_fig_embeddings_inst)
-    plt.close(fig_embedding)
+    #     scprep.plot.scatter2d(data_phate,
+    #                           c=embedding_patch_id_int[split],
+    #                           ax=ax,
+    #                           title=title,
+    #                           xticks=False,
+    #                           yticks=False,
+    #                           label_prefix='PHATE',
+    #                           fontsize=10,
+    #                           s=5)
+    # plt.tight_layout()
+    # plt.savefig(save_path_fig_embeddings_inst)
+    # plt.close(fig_embedding)
 
 
-    # Visualize reconstruction
-    sample_n = 5
-    fig_reconstructed = plt.figure(figsize=(2 * sample_n * 3, 2 * 3))  # (W, H)
-    fig_reconstructed.suptitle('Reconstruction of canonical view', fontsize=10)
-    for split in ['train', 'val', 'test']:
-        for i in range(sample_n):
-            # Original Input
-            ax = fig_reconstructed.add_subplot(3, sample_n * 3,
-                                               ['train', 'val', 'test'].index(split) * sample_n * 3 + i * 3 + 1)
-            sample_idx = np.random.randint(low=0, high=len(reconstructed[split]))
-            img_display = og_inputs[split][sample_idx].transpose(1, 2, 0)  # (H, W, in_chan)
-            img_display = np.clip((img_display + 1) / 2, 0, 1)
-            ax.imshow(img_display)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            if i == 0:
-                ax.set_ylabel(split, fontsize=10)
-            ax.set_title('Original')
+    # # Visualize reconstruction
+    # sample_n = 5
+    # fig_reconstructed = plt.figure(figsize=(2 * sample_n * 3, 2 * 3))  # (W, H)
+    # fig_reconstructed.suptitle('Reconstruction of canonical view', fontsize=10)
+    # for split in ['train', 'val', 'test']:
+    #     for i in range(sample_n):
+    #         # Original Input
+    #         ax = fig_reconstructed.add_subplot(3, sample_n * 3,
+    #                                            ['train', 'val', 'test'].index(split) * sample_n * 3 + i * 3 + 1)
+    #         sample_idx = np.random.randint(low=0, high=len(reconstructed[split]))
+    #         img_display = og_inputs[split][sample_idx].transpose(1, 2, 0)  # (H, W, in_chan)
+    #         img_display = np.clip((img_display + 1) / 2, 0, 1)
+    #         ax.imshow(img_display)
+    #         ax.set_xticks([])
+    #         ax.set_yticks([])
+    #         if i == 0:
+    #             ax.set_ylabel(split, fontsize=10)
+    #         ax.set_title('Original')
 
-            # Canonical
-            ax = fig_reconstructed.add_subplot(3, sample_n * 3,
-                                               ['train', 'val', 'test'].index(split) * sample_n * 3 + i * 3 + 2)
-            img_display = canonical[split][sample_idx].transpose(1, 2, 0)  # (H, W, in_chan)
-            img_display = np.clip((img_display + 1) / 2, 0, 1)
-            ax.imshow(img_display)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            if i == 0:
-                ax.set_ylabel(split, fontsize=10)
-            ax.set_title('Canonical')
+    #         # Canonical
+    #         ax = fig_reconstructed.add_subplot(3, sample_n * 3,
+    #                                            ['train', 'val', 'test'].index(split) * sample_n * 3 + i * 3 + 2)
+    #         img_display = canonical[split][sample_idx].transpose(1, 2, 0)  # (H, W, in_chan)
+    #         img_display = np.clip((img_display + 1) / 2, 0, 1)
+    #         ax.imshow(img_display)
+    #         ax.set_xticks([])
+    #         ax.set_yticks([])
+    #         if i == 0:
+    #             ax.set_ylabel(split, fontsize=10)
+    #         ax.set_title('Canonical')
 
-            # Reconstructed
-            ax = fig_reconstructed.add_subplot(3, sample_n * 3,
-                                               ['train', 'val', 'test'].index(split) * sample_n * 3 + i * 3 + 3)
-            img_display = reconstructed[split][sample_idx].transpose(1, 2, 0)  # (H, W, in_chan)
-            img_display = np.clip((img_display + 1) / 2, 0, 1)
-            ax.imshow(img_display)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_title('Reconstructed')
+    #         # Reconstructed
+    #         ax = fig_reconstructed.add_subplot(3, sample_n * 3,
+    #                                            ['train', 'val', 'test'].index(split) * sample_n * 3 + i * 3 + 3)
+    #         img_display = reconstructed[split][sample_idx].transpose(1, 2, 0)  # (H, W, in_chan)
+    #         img_display = np.clip((img_display + 1) / 2, 0, 1)
+    #         ax.imshow(img_display)
+    #         ax.set_xticks([])
+    #         ax.set_yticks([])
+    #         ax.set_title('Reconstructed')
 
-    plt.tight_layout()
-    plt.savefig(save_path_fig_reconstructed)
-    plt.close(fig_reconstructed)
+    # plt.tight_layout()
+    # plt.savefig(save_path_fig_reconstructed)
+    # plt.close(fig_reconstructed)
 
 
     return
@@ -660,16 +667,25 @@ def infer(config: OmegaConf):
             - source (original or augmented)
     '''
     # Step 1: Load the model & generate embeddings for images in anchor bank.
-    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
+    dataset_name = config.dataset_name.split('_')[-1]
+    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_{dataset_name}_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
     model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
 
     # Load anchor bank data
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     aug_lists = config.aug_methods.split(',')
-    dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,
+    if dataset_name == 'MoNuSeg':
+        dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,
+                                            base_path=config.dataset_path,
+                                            target_dim=config.target_dim)
+    elif dataset_name == 'GLySAC':
+        dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists,
                                          base_path=config.dataset_path,
                                          target_dim=config.target_dim)
+    else:
+        raise ValueError('`dataset_name`: %s not supported.' % dataset_name)
+    
     dataloader = DataLoader(dataset=dataset,
                             batch_size=config.batch_size,
                             shuffle=False,
@@ -728,8 +744,13 @@ def infer(config: OmegaConf):
     test_img_folder = os.path.join(config.test_folder, 'image')
     test_img_files = sorted(glob(os.path.join(test_img_folder, '*.png')))
     # Filter out on organ type
-    from preprocessing.Metas import Organ2FileID
-    file_ids = Organ2FileID[config.organ]['test']
+    if dataset_name == 'MoNuSeg':
+        from preprocessing.Metas import Organ2FileID
+        file_ids = Organ2FileID[config.organ]['test']
+    elif dataset_name == 'GLySAC':
+        from preprocessing.Metas import GLySAC_Organ2FileID
+        file_ids = GLySAC_Organ2FileID[config.organ]['test']
+
     test_img_files = [x for x in test_img_files if any([f'{file_id}' in x for file_id in file_ids])]
 
     print('test_img_folder: ', test_img_folder)
@@ -818,7 +839,7 @@ if __name__ == '__main__':
         wandb_run = wandb.init(
             entity=WANDB_ENTITY,
             project="cellseg",
-            name="monuseg-simclr",
+            name=f"{config.organ}_m{config.multiplier}_{config.dataset_name}depth{config.depth}_seed{config.random_seed}_{config.latent_loss}",
             config=OmegaConf.to_container(config, resolve=True, throw_on_missing=True),
             reinit=True,
             settings=wandb.Settings(start_method="thread")

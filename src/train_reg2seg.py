@@ -132,7 +132,8 @@ def train(config: OmegaConf, wandb_run=None):
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     
     # Set all the paths.
-    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
+    dataset_name = config.dataset_name.split('_')[-1]
+    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_{dataset_name}_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
     matched_pair_path_root = os.path.join(config.output_save_root, model_name)
     config.log_dir = os.path.join(config.log_folder, model_name) # This is log file path.
     config.model_save_path = os.path.join(config.output_save_root, model_name, 'reg2seg.ckpt')
@@ -272,7 +273,7 @@ def train(config: OmegaConf, wandb_run=None):
             val_loss, val_loss_forward, val_loss_cyclic = 0, 0, 0
             val_dice_ref_list, val_dice_seg_list = [], []
             plot_freq = int(len(val_test_set) // config.n_plot_per_epoch)
-            print('yo: ', plot_freq, len(val_test_loader))
+            # print('yo: ', plot_freq, len(val_test_loader))
             for iter_idx, (unannotated_images, unannotated_masks, annotated_images, annotated_masks) in enumerate(tqdm(val_test_loader)):
                 shall_plot = iter_idx % plot_freq == plot_freq - 1
 
@@ -549,8 +550,7 @@ def stitch_patches(pred_mask_folder, stitched_size=(1000,1000)) -> Tuple[List[np
     return stitched_mask_list, stitched_folder
 
 import utils.metrics as metrics
-from preprocessing.Metas import Organ2FileID
-def eval_stitched(pred_folder, true_folder, organ='Colon') -> dict:
+def eval_stitched(pred_folder, true_folder, organ='Colon', dataset_name='MoNuSeg') -> dict:
     '''
         Evaluation on final stitched mask against the ground truth mask.
     
@@ -558,7 +558,12 @@ def eval_stitched(pred_folder, true_folder, organ='Colon') -> dict:
     pred_list = sorted(glob(os.path.join(pred_folder + '/*.png')))
     true_list = sorted(glob(os.path.join(true_folder + '/*.png')))
     # Filter out other organs
-    file_ids = Organ2FileID[organ]['test']
+    if dataset_name == 'MoNuSeg':
+        from preprocessing.Metas import Organ2FileID
+        file_ids = Organ2FileID[organ]['test']
+    elif dataset_name == 'GLySAC':
+        from preprocessing.Metas import GLySAC_Organ2FileID
+        file_ids = GLySAC_Organ2FileID[organ]['test']
     true_list = [x for x in true_list if any([f'{file_id}' in x for file_id in file_ids])]
     print('pred_folder: ', pred_folder, '\ntrue_folder: ', true_folder)
     print(len(pred_list), len(true_list))
@@ -600,15 +605,13 @@ def infer(config, wandb_run=None):
         test_mask = warper(closest_mask, flow=warp_field_forward)
     '''
     # NOTE: maybe we can even train on fly, for each pair.
-    import pandas as pd
-    from datasets.augmented_MoNuSeg import load_image, load_mask
-
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     _, _, _, test_set = prepare_dataset(config=config)
 
     # Set all the paths.
-    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
+    dataset_name = config.dataset_name.split('_')[-1]
+    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_{dataset_name}_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
     config.matched_pair_path_root = os.path.join(config.output_save_root, model_name)
     config.model_save_path = os.path.join(config.output_save_root, model_name, 'reg2seg.ckpt')
     config.log_dir = os.path.join(config.log_folder, model_name) # This is log file path.
@@ -695,7 +698,7 @@ def infer(config, wandb_run=None):
     # Stitch the masks together.
     stitched_mask_list, stitched_folder = stitch_patches(pred_mask_folder)
     test_mask_folder = config.groudtruth_folder
-    stitched_results = eval_stitched(stitched_folder, test_mask_folder, organ=config.organ)
+    stitched_results = eval_stitched(stitched_folder, test_mask_folder, organ=config.organ, dataset_name=dataset_name)
     
     for k, v in stitched_results.items():
         log(F'[Eval] Stitched {k}: {v}', filepath=config.log_dir, to_console=True) 
@@ -781,7 +784,7 @@ if __name__ == '__main__':
         wandb_run = wandb.init(
             entity=WANDB_ENTITY,
             project="cellseg",
-            name="monuseg-reg2seg",
+            name=f"Reg2Seg_{config.organ}_m{config.multiplier}_{config.dataset_name}_seed{config.random_seed}",
             config=OmegaConf.to_container(config, resolve=True, throw_on_missing=True),
             reinit=True,
             settings=wandb.Settings(start_method="thread")

@@ -3,6 +3,7 @@ from datasets.synthetic import SyntheticDataset
 from datasets.augmented import AugmentedDataset
 # from datasets.tissuenet import TissueNetDataset
 from datasets.augmented_MoNuSeg import AugmentedMoNuSegDataset
+from datasets.augmented_GLySAC import AugmentedGLySACDataset
 from utils.split import split_dataset
 from utils.attribute_hashmap import AttributeHashmap
 
@@ -25,6 +26,11 @@ def prepare_dataset(config: AttributeHashmap):
         dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,
                                          base_path=config.dataset_path,
                                          target_dim=config.target_dim)
+    elif config.dataset_name == 'GLySAC':
+        aug_lists = config.aug_methods.split(',')
+        dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists,
+                                        base_path=config.dataset_path,
+                                        target_dim=config.target_dim)
     else:
         raise ValueError(
             'Dataset not found. Check `dataset_name` in config yaml file.')

@@ -1,0 +1,12 @@
+dataset_name: GLySAC
+target_dim:
+- 32
+- 32
+dataset_path: ../data/0.100_Normal_m3_GLySACTrainData_augmented_patch_32x32/
+aug_methods: rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch
+test_folder: ../data/GLySACTestData_patch_32x32/
+groudtruth_folder: ../external_data/GLySAC/Test/masks
+log_folder: ../logs/
+percentage: 0.1
+organ: Normal
+multiplier: 3

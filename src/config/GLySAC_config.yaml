@@ -1,0 +1,14 @@
+data:
+  dataset_name: 'augmented_GLySAC'
+  train_name: 'GLySACTrainData'
+  test_name: 'GLySACTestData'
+  patch_size: [96, 96]
+  aug_patch_size: [32, 32]
+  sample_percent: 0.1
+  aug_multiplier: 3
+  organ_type: 'Normal'
+aiae:
+  num_workers: 1
+reg2seg:
+  train_pair: ['aug','non_mother_anchor'] # ['aug', 'mother'], []
+  optimize_test: False

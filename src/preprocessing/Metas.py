@@ -4,6 +4,59 @@ Meta stats for the datasets
 
 import pandas as pd
 
+GLySAC_Organ2FileID = {
+    'Normal': {
+        'train': [
+            'DB-0001_normal_2',
+            'DB-0003_normal_1',
+            'DB-0466_normal_1',
+            'DB-0466_normal_2',
+            'DB-0466_normal_3',
+            'EGC1_new_normal_1',
+            'EGC1_new_normal_3',
+        ],
+        'test': [
+            'DB-0001_normal_1',
+            'DB-0037_normal_1',
+            'EGC1_new_normal_2',
+            'EGC1_new_normal_5'
+        ],
+    },
+    'Tumor': {
+        'train': [
+            'AGC1_tumor_1',
+            'AGC1_tumor_3',
+            'AGC1_tumor_5',
+            'AGC1_tumor_7',
+            'AGC1_tumor_8',
+            'AGC1_tumor_9',
+            'AGC1_tumor_10',
+            'DB-0001_tumor_1',
+            'DB-0001_tumor_3',
+            'DB-0003_tumor_1',
+            'DB-0003_tumor_2',
+            'DB-0446_tumor_2',
+            'DB-0446_tumor_3'
+        ],
+        'test': [
+            'AGC1_tumor_2',
+            'AGC1_tumor_4',
+            'AGC1_tumor_11',
+            'DB-0001_tumor_2',
+            'DB-0466_tumor_1',
+            'EGC1_new_tumor_1',
+            'EGC1_new_tumor_2',
+            'EGC1_new_tumor_3',
+            'EGC1_new_tumor_4',
+            'EGC1_new_tumor_5',
+            'EGC1_new_tumor_6',
+            'EGC1_new_tumor_7',
+            'EGC1_new_tumor_10',
+            'EGC1_new_tumor_11',
+        ]
+    }
+}
+
 Organ2FileID = {
     'Colon': {
         'train': [
