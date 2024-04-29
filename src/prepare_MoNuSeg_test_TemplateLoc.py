@@ -13,6 +13,7 @@ from glob import glob
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 
+from model.autoencoder import AutoEncoder
 from datasets.augmented_MoNuSeg import AugmentedMoNuSegDataset
 
 
@@ -130,6 +131,19 @@ def patchify_and_save(image, image_id, centroid_list,
 
     return
 
+def feature_match_detect(templates, images, knn=1, threshold=0.6, window_size=32, stride=1):
+    '''
+    Match the features of the templates with the features of the images. and detect the nuclei.
+    Input:
+        - templates: a tensor of shape (N, D)
+        - images: a tensor of shape (n, D, H, W)
+    Return:
+        - all_nuclei_list: a list of list of nuclei coordinates; all_nuclei_list[i] is the list of coordinates for the i-th image.
+    '''
+
+    
+
+
 
 def process_MoNuSeg_Testdata(config, patch_size, device):
     folder = '../external_data/Chen_2024_MoNuSeg/MoNuSegTestData'
@@ -161,8 +175,8 @@ def process_MoNuSeg_Testdata(config, patch_size, device):
     anchor_only = True # if True, only use the original images as templates
     aug_lists = config.aug_methods.split(',')
     dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,
-                                         base_path=config.dataset_path,
-                                         target_dim=config.target_dim)
+                                        base_path=config.dataset_path,
+                                        target_dim=config.target_dim)
     dataloader = DataLoader(dataset=dataset,
                             batch_size=config.batch_size,
                             shuffle=False,
@@ -186,17 +200,91 @@ def process_MoNuSeg_Testdata(config, patch_size, device):
     anchor_bank['image'] = torch.stack(anchor_bank['image'], dim=0) # (N, C, H, W)
 
     templates = anchor_bank['image']
+    if config.detection == 'template':
+        # Match and detect the nuclei.
+        all_images = torch.tensor(all_images).permute(0, 3, 1, 2).float().to(device) # (n, C, H, W)
+        print(f'Matching {all_images.shape} images with {templates.shape} templates.')
+        all_nuclei_list = match_and_detect(images=all_images,
+                                        templates=templates.to(device),
+                                        pool='max',
+                                        window_size=patch_size,
+                                        stride=patch_size)
+        total = np.sum([len(nuclei_list) for nuclei_list in all_nuclei_list])
+    elif config.detection == 'encoder':
+        # Use the encoder to match & detect the nuclei.
+        # 1. output features for each template using encoder: (N, C, h, w) -> (N, D,)
+        # 2. convolve the images with the encoder: (n, C, H, W) -> (n, D, H, W), where D is the final feature dimension.
+        # 3. match the features and detect the nuclei.
+        device = torch.device('cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+        # Build the model
+        try:
+            model = globals()[config.model](num_filters=config.num_filters,
+                                            in_channels=3,
+                                            out_channels=3)
+        except:
+            raise ValueError('`config.model`: %s not supported.' % config.model)
+        model = model.to(device)
 
-    # Match and detect the nuclei.
-    all_images = torch.tensor(all_images).permute(0, 3, 1, 2).float().to(device)
-    print(f'Matching {all_images.shape} images with {templates.shape} templates.')
-    all_nuclei_list = match_and_detect(images=all_images,
-                                      templates=templates.to(device),
-                                      pool='max',
-                                      window_size=patch_size,
-                                      stride=patch_size)
-    total = np.sum([len(nuclei_list) for nuclei_list in all_nuclei_list])
+        dataset_name = config.dataset_name.split('_')[-1]
+        model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_{dataset_name}_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
+        model_save_path = os.path.join(config.output_save_root, model_name, 'aiae.ckpt')
+        if os.path.exists(model_save_path) is False:
+            raise ValueError('Model not found at %s' % model_save_path)
+        model.load_weights(model_save_path, device=device)
+        print('%s: Model weights successfully loaded.' % config.model)
+
+        model.eval()
+        with torch.no_grad():
+            # 1. output features for each template using encoder: (N, C, h, w) -> (N, D,)
+            template_features = model(templates.to(device))[1] # (N, D)
+            template_features = template_features.flatten(1) # (N, D)
+            print('Template features shape:', template_features.shape)
+
+            # 2. convolve the images with the encoder: (n, C, H, W) -> (n, D, H, W), where D is the final feature dimension.
+            all_images = torch.tensor(all_images).permute(0, 3, 1, 2).float().to(device) # (n, C, H, W)
+
+            # march and detect the nuclei.
+            window_size = patch_size
+            stride = patch_size
+            all_nuclei_list = [[] for _ in range(all_images.shape[0])]
+            for start_x in range(0, all_images.shape[-2], stride):
+                for start_y in range(0, all_images.shape[-1], stride):
+                    end_x = min(start_x + window_size, all_images.shape[-2])
+                    end_y = min(start_y + window_size, all_images.shape[-1])
+                    patch = all_images[:, :, start_x:end_x, start_y:end_y] # (n, C, patch_H, patch_W)
+                    if patch.shape[-2:] != (window_size, window_size):
+                        continue
+                    #print('Patch shape:', patch.shape)
+                    patch_feature = model(patch)[1] # (n, C, patch_H, patch_W)
+                    patch_feature = patch_feature.flatten(1)
+                    #print('Patch feature shape:', patch_feature.shape)
+
+                    # cosine similarity between the template features and the patch features
+                    from sklearn.metrics.pairwise import cosine_similarity
+
+                    similarity = cosine_similarity(template_features.cpu().numpy(), patch_feature.cpu().numpy()) # (N, n)
+
+                    # thresholding
+                    thresh = 0.70
+                    mask = similarity > thresh
+
+                    # take center of the patch as the coordinates of the nuclei
+                    for k in range(mask.shape[1]):
+                        if np.sum(mask[:, k]) > 10: # if there is at least one match
+                            all_nuclei_list[k].append([start_x + window_size // 2, start_y + window_size // 2])
+
+
+            total = np.sum([len(nuclei_list) for nuclei_list in all_nuclei_list])
+
+        pass
+
+        
     print(f'Done matching and detecting nuclei. Total {total} detected. ')
+    patches_folder = f'../data/MoNuSegTestData_{config.detection}Localization_patch_%dx%d/' % (patch_size, patch_size)
+    if os.path.exists(patches_folder):
+        os.system(f'rm -rf {patches_folder}')
+    os.makedirs(patches_folder)
+
     for i, annotation_file in enumerate(tqdm(annotation_files)):
         image_id = os.path.basename(annotation_file).split('.')[0]
         image_file = f'{folder}/{image_id}.tif'
@@ -207,8 +295,6 @@ def process_MoNuSeg_Testdata(config, patch_size, device):
 
         # Divide the image into patches.
         centroids_list = all_nuclei_list[i]
-        patches_folder = '../data/MoNuSegTestData_TemplateLocalization_patch_%dx%d/' % (patch_size, patch_size)
-        os.makedirs(patches_folder, exist_ok=True)
         patchify_and_save(image, image_id, centroids_list, patches_folder, patch_size)
 
     print('Done processing all images and annotations: annotated cells: %d' % total)
@@ -218,6 +304,7 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--detection', type=str, default='encoder', help='template or encoder')
     parser.add_argument('--aug_patch_size', type=int, default=32)
     args = parser.parse_args()
 
@@ -225,6 +312,7 @@ if __name__ == '__main__':
     data_config ='./config/MoNuSeg_data.yaml'
 
     config = OmegaConf.merge(OmegaConf.load(model_config), OmegaConf.load(data_config))
+    config.detection = args.detection
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

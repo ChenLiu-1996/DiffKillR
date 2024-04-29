@@ -587,6 +587,7 @@ def eval_stitched(pred_folder, true_folder, organ='Colon', dataset_name='MoNuSeg
     return eval_results
 
     
+import shutil
 
 @torch.no_grad()
 def infer(config, wandb_run=None):
@@ -617,7 +618,12 @@ def infer(config, wandb_run=None):
     config.log_dir = os.path.join(config.log_folder, model_name) # This is log file path.
     save_folder = os.path.join(config.output_save_root, model_name, 'reg2seg')
     pred_mask_folder = os.path.join(config.output_save_root, model_name, 'pred_patches')
-    os.makedirs(pred_mask_folder, exist_ok=True)
+    # delete pred_mask_folder
+    if os.path.exists(pred_mask_folder):
+        shutil.rmtree(pred_mask_folder)
+        os.makedirs(pred_mask_folder)
+    else:
+        os.makedirs(pred_mask_folder)
 
     # Build the model
     try:

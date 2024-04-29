@@ -190,6 +190,8 @@ def main():
         test_folder = f'../data/MoNuSegTestData_BlobLocalization_patch_{augmented_patch_size}x{augmented_patch_size}'
     elif args.detection == 'None':
         test_folder = f'../data/MoNuSeg2018TestData_patch_{augmented_patch_size}x{augmented_patch_size}/'
+    elif args.detection == 'encoder':
+        test_folder = f'../data/MoNuSegTestData_encoderLocalization_patch_{augmented_patch_size}x{augmented_patch_size}'
     else:
         raise ValueError('Detection method not found:', args.detection)
     

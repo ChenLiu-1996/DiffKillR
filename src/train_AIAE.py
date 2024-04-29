@@ -803,7 +803,12 @@ def infer(config: OmegaConf):
         'source': [anchor_bank['sources'][idx] for idx in closest_anchor_idxs],
     })
     output_save_path = os.path.join(config.output_save_root, model_name)
+
+    # overwriting the previous results
+    if os.path.exists(os.path.join(output_save_path, 'infer_pairs.csv')):
+        os.remove(os.path.join(output_save_path, 'infer_pairs.csv'))
     results_df.to_csv(os.path.join(output_save_path, 'infer_pairs.csv'), index=False)
+    
     print('Results saved to: ', os.path.join(output_save_path, 'infer_pairs.csv'))
 
     return
