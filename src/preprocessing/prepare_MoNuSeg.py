@@ -159,6 +159,49 @@ def patchify_and_save(image, image_id, label, centroid_list,
 
     return
 
+# def find_background_and_save(image, image_id, label, centroid_list,
+#                       patches_folder, patch_size):
+#     '''
+#     Find background patches and save them given non-background centroid list
+#     background patches are patches that do not intersect with any [c-h/2:c+h/2, c-w/2:c+w/2] for c in centroid_list
+
+#     image: original image.
+#     image_id: id of the image. This should be unique.
+#     label: binary image mask.
+#     centroid_list: list of centroids for each polygon/cell.
+#     '''
+#     # scan image pixel by pixel
+
+def find_background_and_save(stitched_label, stitched_image, image_id, patches_folder, patch_size):
+    '''
+    TODO: Find background given stitched label/mask of the image
+
+    stitched_label: np.array of shape (H, W) for binary stitched_label
+    stitched_image: np.array of shape (H, W, 3) for the original image
+    patch_folder: save folder
+    '''
+    # pixel by pixel scan
+    stride = 1
+    for h in range(0, stitched_label.shape[0], stride):
+        for w in range(0, stitched_label.shape[1], stride):
+            patch_label = stitched_label[h:h+patch_size, w:w+patch_size]
+            ch = h + patch_size // 2
+            cw = w + patch_size // 2
+
+            if np.sum(patch_label) == 0:
+                patch_label_path = '%s/label/%s_H%d_W%d_background.png' % (
+                    patches_folder, image_id, ch, cw)
+                os.makedirs(os.path.dirname(patch_label_path), exist_ok=True)
+                cv2.imwrite(patch_label_path, patch_label)
+                
+                patch_image = stitched_image[h:h+patch_size, w:w+patch_size]
+                patch_image_path = '%s/image/%s_H%d_W%d_background.png' % (
+                    patches_folder, image_id, ch, cw)
+                os.makedirs(os.path.dirname(patch_image_path), exist_ok=True)
+                cv2.imwrite(patch_image_path, patch_image)
+
+    
+
 def process_MoNuSeg_Traindata(patch_size=96):
     '''
         images are in .tif format, RGB, 1000x1000.
