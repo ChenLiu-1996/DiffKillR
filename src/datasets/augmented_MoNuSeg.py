@@ -8,14 +8,16 @@ import cv2
 import numpy as np
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
+from preprocessing.Metas import Organ2FileID
 
 from time import time
 
 class AugmentedMoNuSegDataset(Dataset):
     def __init__(self,
                  augmentation_methods: List[str],
-                 base_path: str = '../data/0.010_MoNuSeg2018TrainData_augmented_patch_32x32',
-                 target_dim: Tuple[int] = (32, 32)):
+                 base_path: str = '../data/0.100_Prostate_m3_MoNuSeg2018TrainData_augmented_patch_32x32',
+                 target_dim: Tuple[int] = (32, 32),
+                 use_background: bool = False):
 
         super().__init__()
 
@@ -65,6 +67,31 @@ class AugmentedMoNuSegDataset(Dataset):
                     self.all_label_paths.append(label_path)
         assert len(self.all_image_paths) == len(self.all_label_paths)
         
+        '''Background'''
+        '''TCGA-NH-A8F7-01A-01-TS1_H673_W415_background.png patch_id is TCGA-NH-A8F7-01A-01-TS1
+            since we are treating all background of the same picture as the same patch_id(instance)'''
+        self.use_background = use_background
+        if use_background == True:
+            organ = os.path.basename(base_path).split('_')[1]
+            self.organ = organ
+            # Subset background patches by image id
+            'TCGA-NH-A8F7-01A-01-TS1_H673_W415_background.png'
+            background_folder = '../data/MoNuSeg2018Background_patch_%dx%d/' % (target_dim[0], target_dim[1])
+            background_image_path_list = sorted(glob(background_folder + 'image/*.png'))
+            if organ in Organ2FileID:
+                file_ids = Organ2FileID[organ]['train']
+                background_image_path_list = [f for f in background_image_path_list if any(file_id in f for file_id in file_ids)]
+            self.background_image_paths = background_image_path_list
+            
+            for img_path in self.background_image_paths:
+                'TCGA-NH-A8F7-01A-01-TS1_H673_W415_background.png'
+                label_path = img_path.replace('image', 'label')
+                patch_id = os.path.basename(img_path).split('_')[0] # 'TCGA-NH-A8F7-01A-01-TS1'
+                if patch_id not in self.patch_id_to_canonical_pose_path.keys():
+                    self.patch_id_to_canonical_pose_path[patch_id] = img_path
+                self.all_image_paths.append(img_path)
+                self.all_label_paths.append(label_path)
+        
         patch_id_list = list(self.patch_id_to_canonical_pose_path.keys())
         for i in range(len(patch_id_list)):
             self.patch_id_to_patch_id_idx[patch_id_list[i]] = i
@@ -79,6 +106,8 @@ class AugmentedMoNuSegDataset(Dataset):
         self.all_labels = np.array([np.array(cv2.imread(label_path, cv2.IMREAD_UNCHANGED)) for label_path in self.all_label_paths])
 
         print(f'Finished. Images: {self.all_images.shape}; Labels: {self.all_labels.shape}\n')
+        if self.use_background:
+            print(f'Including background images: {len(self.background_image_paths)}\n')
 
         self.img_path_2_idx = {img_path: idx for idx, img_path in enumerate(self.all_image_paths)}
 
@@ -86,7 +115,11 @@ class AugmentedMoNuSegDataset(Dataset):
         return len(self.all_image_paths)
     
     def __str__(self) -> str:
-        return 'AugmentedMoNuSegDataset: %d images' % len(self)
+        if self.use_background == True:
+            return 'AugmentedMoNuSegDataset: %d images, including %d background .' % (len(self), 
+                                                                                    len(self.background_image_paths))
+        else:
+            return 'AugmentedMoNuSegDataset: %d images.' % len(self)
 
     def __getitem__(self, idx) -> Tuple[np.array, np.array, str]:
         image_path = self.all_image_paths[idx]
