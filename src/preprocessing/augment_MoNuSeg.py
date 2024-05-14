@@ -1,7 +1,7 @@
 '''
 Read the patches from the MoNuSeg2018TrainData_patch_96x96 folder.
 
-Perform augmentation and save the augmented patches to the 
+Perform augmentation and save the augmented patches to the
 MoNuSeg2018TrainData_augmented_patch_32x32 folder, for each augmentation method.
 
 '''
@@ -138,7 +138,7 @@ def main():
     percentage = args.percentage
     multiplier = args.multiplier
 
-    patches_folder = '../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size, 
+    patches_folder = '../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size,
                                                                        patch_size)
     image_path_list = sorted(glob(patches_folder + 'image/*.png'))
     label_path_list = sorted(glob(patches_folder + 'label/*.png'))
@@ -165,7 +165,7 @@ def main():
         if file_ids2cnt[file_id] < num_patches_per_image:
             subset_image_path_list.append(image_path_list[i])
             file_ids2cnt[file_id] += 1
-    
+
     if len(subset_image_path_list) < total_cnt:
         for image_path in image_path_list:
             if len(subset_image_path_list) >= total_cnt:
@@ -194,7 +194,7 @@ def main():
         test_folder = f'../data/MoNuSegTestData_encoderLocalization_patch_{augmented_patch_size}x{augmented_patch_size}'
     else:
         raise ValueError('Detection method not found:', args.detection)
-    
+
     conf = OmegaConf.create(
         {
             'dataset_name': 'MoNuSeg',
@@ -202,7 +202,7 @@ def main():
             'dataset_path': augmented_folder,
             'aug_methods': ",".join(augmentation_methods),
             'test_folder': test_folder,
-            'groudtruth_folder': '../external_data/Chen_2024_MoNuSeg/MoNuSegTestData/masks',
+            'groudtruth_folder': '../external_data/MoNuSeg/MoNuSegTestData/masks',
             'log_folder': '../logs/',
             'percentage': percentage,
             'organ': args.organ,
@@ -235,11 +235,11 @@ def main():
     for prefix, image_path, label_path in \
         zip(prefix_list, subset_image_path_list, subset_label_path_list):
         augmentation_tuple_list.append((prefix, image_path, label_path, multiplier))
-    
+
     for augmentation_method in augmentation_methods:
-        augment_and_save(augmentation_tuple_list, 
-                         augmented_patch_size, 
-                         augmented_folder, 
+        augment_and_save(augmentation_tuple_list,
+                         augmented_patch_size,
+                         augmented_folder,
                          augmentation_method)
 
     print('Done.')

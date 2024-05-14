@@ -100,6 +100,7 @@ conda install -c anaconda scikit-image scikit-learn pillow matplotlib seaborn tq
 python -m pip install antspyx
 # python -m pip install dipy
 python -m pip install opencv-python
+python -m pip install python-dotenv
 
 # MoNuSeg
 python -m pip install xmltodict

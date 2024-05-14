@@ -26,13 +26,13 @@ def convolve_template(images: torch.Tensor, templates: torch.Tensor, pool: str =
     - pool: pool func to apply on out channels of activation map (N, C, H, W) -> (N, H, W)
     Output:
     - activation_map: a numpy array of shape (n, H, W) # the same shape as the input image
-    
+
     """
     H, W = images.shape[-2:]
     N, C, patch_H, patch_W = templates.shape
 
     # TODO: Normalize the images and the templates to [0, 1]
-    
+
     # convolve the image with the templates -> convolution result is (n, N, H, W)
     # each template will produce an activation map (H, W) for each image
     activation_map = torch.nn.functional.conv2d(images,
@@ -50,8 +50,8 @@ def convolve_template(images: torch.Tensor, templates: torch.Tensor, pool: str =
         activation_map = torch.mean(activation_map, dim=1)
     else:
         raise ValueError('Invalid pool function. Use "max" or "mean".')
-    
-    
+
+
     return activation_map.cpu().numpy()
 
 def detect_from_actmap(binary_activation_map: np.ndarray, threshold: float = 0.5, patch_size: int = 32) -> np.ndarray:
@@ -65,7 +65,7 @@ def detect_from_actmap(binary_activation_map: np.ndarray, threshold: float = 0.5
     # check patch by patch, stride , padding patch_H//2, patch_W//2
     # if the value is larger than the threshold, then it is a nucleus
     # the coordinates of the nucleus is the center of the patch
-    
+
     # pad the activation map to avoid the edge
     pad_H = patch_size // 2
     pad_W = patch_size // 2
@@ -83,7 +83,7 @@ def detect_from_actmap(binary_activation_map: np.ndarray, threshold: float = 0.5
             area = np.mean(proposed_patch)
             if area > threshold:
                 nucleus_list.append([h, w])
-    
+
     return nucleus_list
 
 def overlay_nuclei(image: np.ndarray, nuclei_list: np.ndarray) -> np.ndarray:
@@ -123,7 +123,7 @@ if __name__ == '__main__':
                             batch_size=config.batch_size,
                             shuffle=False,
                             num_workers=config.num_workers)
-    
+
     anchor_bank = {'image': [], 'img_paths': [], 'sources': []}
     for iter_idx, (images, _, _, _, img_paths, cannoical_img_path) in enumerate(dataloader):
         images = images.float().to(device)
@@ -138,7 +138,7 @@ if __name__ == '__main__':
                 anchor_bank['image'].append(images[i])
                 anchor_bank['img_paths'].append(img_paths[i])
                 anchor_bank['sources'].append('original' if 'original' in img_paths[i] else 'augmented')
-    
+
     anchor_bank['image'] = torch.stack(anchor_bank['image'], dim=0) # (N, C, H, W)
 
     templates = anchor_bank['image']
@@ -148,7 +148,7 @@ if __name__ == '__main__':
     mask_path_list = [f'../external_data/Chen_2024_MoNuSeg/MoNuSegTestData/masks/{file_id}.png' for file_id in file_ids]
     image_list = [cv2.cvtColor(cv2.imread(image_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB) for image_path in img_path_list]
     mask_list = [cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE) for mask_path in mask_path_list]
-    
+
     test_patch_folder = os.path.join('/gpfs/gibbs/pi/krishnaswamy_smita/dl2282/CellSeg/data/MoNuSeg2018TestData_patch_32x32', 'label')
     test_patch_files = sorted(glob(os.path.join(test_patch_folder, '*.png')))
 
@@ -193,7 +193,7 @@ if __name__ == '__main__':
         ax.imshow(overlay)
         ax.set_axis_off()
         ax.set_title(f'Proposed nuclei: {len(nuclei_list)}')
-        
+
         # Groud truth mask
         filtered_patch_files = [x for x in test_patch_files if f'{file_ids[i]}' in x]
         print(f'Ground truth nuclei count: {len(filtered_patch_files)}')
@@ -202,7 +202,7 @@ if __name__ == '__main__':
         ax.set_axis_off()
         ax.set_title(f'GT nuclei: {len(filtered_patch_files)}')
 
-    
+
     fig.savefig('propose_nucleus.png')
 
 
