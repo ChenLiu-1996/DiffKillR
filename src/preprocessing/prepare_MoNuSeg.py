@@ -159,47 +159,46 @@ def patchify_and_save(image, image_id, label, centroid_list,
 
     return
 
-# def find_background_and_save(image, image_id, label, centroid_list,
-#                       patches_folder, patch_size):
-#     '''
-#     Find background patches and save them given non-background centroid list
-#     background patches are patches that do not intersect with any [c-h/2:c+h/2, c-w/2:c+w/2] for c in centroid_list
 
-#     image: original image.
-#     image_id: id of the image. This should be unique.
-#     label: binary image mask.
-#     centroid_list: list of centroids for each polygon/cell.
-#     '''
-#     # scan image pixel by pixel
-
-def find_background_and_save(stitched_label, stitched_image, image_id, patches_folder, patch_size):
+def find_background_and_save(label, image, image_id, patches_folder, patch_size):
     '''
     TODO: Find background given stitched label/mask of the image
 
-    stitched_label: np.array of shape (H, W) for binary stitched_label
-    stitched_image: np.array of shape (H, W, 3) for the original image
-    patch_folder: save folder
+    label: np.array of shape (H, W) for binary mask
+    image: np.array of shape (H, W, 3) for the original image
+    image_id: id of the image (e.g. TCGA-HE-7128-01Z-00-DX1)
+    patch_folder: save folder for the patches (e.g. ../data/MoNuSeg2018Background_patch_32x32/)
+    patch_size: size of the patch (e.g. 32)
     '''
     # pixel by pixel scan
+    cnts = 0
     stride = 1
-    for h in range(0, stitched_label.shape[0], stride):
-        for w in range(0, stitched_label.shape[1], stride):
-            patch_label = stitched_label[h:h+patch_size, w:w+patch_size]
+    for h in range(0, label.shape[0], stride):
+        for w in range(0, label.shape[1], stride):
+            patch_label = label[h:h+patch_size, w:w+patch_size]
             ch = h + patch_size // 2
             cw = w + patch_size // 2
 
-            if np.sum(patch_label) == 0:
+            # check if the patch intersects with any label patch
+            # !TODO: might allow some overlap
+            overlap_threshold = 0
+            if np.sum(patch_label) <= overlap_threshold:
+                cnts += 1
                 patch_label_path = '%s/label/%s_H%d_W%d_background.png' % (
                     patches_folder, image_id, ch, cw)
                 os.makedirs(os.path.dirname(patch_label_path), exist_ok=True)
                 cv2.imwrite(patch_label_path, patch_label)
                 
-                patch_image = stitched_image[h:h+patch_size, w:w+patch_size]
+                patch_image = image[h:h+patch_size, w:w+patch_size]
                 patch_image_path = '%s/image/%s_H%d_W%d_background.png' % (
                     patches_folder, image_id, ch, cw)
                 os.makedirs(os.path.dirname(patch_image_path), exist_ok=True)
+                patch_image = cv2.cvtColor(patch_image, cv2.COLOR_RGB2BGR)
                 cv2.imwrite(patch_image_path, patch_image)
-
+    
+    print('Background saved. Number of background patches: %d' % cnts)
+    
+    return
     
 
 def process_MoNuSeg_Traindata(patch_size=96):
@@ -242,6 +241,12 @@ def process_MoNuSeg_Traindata(patch_size=96):
         # Divide the image and label into patches.
         patches_folder = '../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size, patch_size)
         patchify_and_save(image, image_id, label, centroids_list, patches_folder, patch_size)
+
+        # Find background patches and save them.
+        background_patches_folder = '../data/MoNuSeg2018Background_patch_%dx%d/' % (aug_patch_size, 
+                                                                                    aug_patch_size)
+        find_background_and_save(label, image, image_id, 
+                                 background_patches_folder, aug_patch_size)
 
     print('Done processing all images and annotations: annotated cells: %d' % len(all_verts_list))
 
