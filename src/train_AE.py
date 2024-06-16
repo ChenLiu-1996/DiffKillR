@@ -168,6 +168,7 @@ def train(config: AttributeHashmap):
                                   percentage=False)
 
     best_val_loss = np.inf
+    print(model)
 
     for epoch_idx in tqdm(range(config.max_epochs)):
         train_loss, train_latent_loss, train_recon_loss = 0, 0, 0

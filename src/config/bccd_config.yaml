@@ -1,0 +1,24 @@
+dataset_name: 'BCCD'
+target_dim: (128, 128)
+dataset_path: '$ROOT/data/1.000_Colon_MoNuSeg2018TrainData_augmented_patch_32x32/'
+test_img_folder: '$ROOT/data/Colon_MoNuSeg2018TestData_patch_32x32/image/'
+model_save_path: '$ROOT/checkpoints/1.000_Colon_aug_MoNuSeg_depth5_seed1_SimCLR.pty'
+output_save_path: '$ROOT/results/1.000_Colon_aug_MoNuSeg_depth5_seed1_SimCLR/'
+matched_pair_path: '$ROOT/results/1.000_Colon_aug_MoNuSeg_depth5_seed1_SimCLR/AIAE_inference_results.csv'
+log_folder: '$ROOT/logs'
+learning_rate: 1e-3
+latent_loss: 'SimCLR'
+temp: 1.0
+base_temp: 1.0
+n_views: 2
+contrast_mode: 'one'
+aug_methods: 'rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch'
+max_epochs: 2
+patience: 50
+batch_size: 64
+model: 'AutoEncoder'
+num_filters: 32
+num_workers: 4
+random_seed: 1
+train_val_test_ratio: '6:2:2'
+wandb_entity: 'danqiliao'

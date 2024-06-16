@@ -4,6 +4,7 @@ from datasets.augmented import AugmentedDataset
 # from datasets.tissuenet import TissueNetDataset
 from datasets.augmented_MoNuSeg import AugmentedMoNuSegDataset
 from datasets.augmented_GLySAC import AugmentedGLySACDataset
+from datasets.BCCD_augmented import BCCD_augmentedDataset
 from utils.split import split_dataset
 from utils.attribute_hashmap import AttributeHashmap
 
@@ -31,6 +32,9 @@ def prepare_dataset(config: AttributeHashmap):
         dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists,
                                         base_path=config.dataset_path,
                                         target_dim=config.target_dim)
+    elif config.dataset_name == 'BCCD':
+        aug_lists = config.aug_methods.split(',')
+        dataset = BCCD_augmentedDataset(augmentation_methods=aug_lists)
     else:
         raise ValueError(
             'Dataset not found. Check `dataset_name` in config yaml file.')
