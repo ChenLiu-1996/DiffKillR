@@ -132,6 +132,9 @@ def construct_batch_images_with_n_views(
 def train(config: AttributeHashmap):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    # check apple metal 
+    # if torch.backends.mps.is_available():
+    #     device = "mps"
     dataset, train_set, val_set, _ = \
         prepare_dataset(config=config)
 
@@ -339,6 +342,10 @@ def train(config: AttributeHashmap):
 def test(config: AttributeHashmap):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    # # check apple metal 
+    # if torch.backends.mps.is_available():
+    #     device = "mps"
+        
     dataset, train_set, val_set, test_set = prepare_dataset(config=config)
 
     # Build the model
@@ -516,39 +523,42 @@ def test(config: AttributeHashmap):
         log(f'Done constructing class ({class_adj.shape}) and \
             instance adjacency ({instance_adj.shape}) matrices.', to_console=True)
 
-        ins_clustering_acc[split] = clustering_accuracy(embeddings[split],
-                                                        embeddings['train'],
-                                                        embedding_patch_id_int[split],
-                                                        embedding_patch_id_int['train'],
-                                                        distance_measure=distance_measure,
-                                                        voting_k=1)
+        # ins_clustering_acc[split] = clustering_accuracy(embeddings[split],
+        #                                                 embeddings['train'],
+        #                                                 embedding_patch_id_int[split],
+        #                                                 embedding_patch_id_int['train'],
+        #                                                 distance_measure=distance_measure,
+        #                                                 voting_k=1)
+        # ins_topk_acc[split] = topk_accuracy(embeddings[split],
+        #                                     instance_adj,
+        #                                     distance_measure=distance_measure,
+        #                                     k=5)
+        # ins_mAP[split] = embedding_mAP(embeddings[split],
+        #                                instance_adj,
+        #                                distance_op=distance_measure)
+        print('start class clustering accuracy...')
         class_clustering_acc[split] = clustering_accuracy(embeddings[split],
                                                         embeddings['train'],
                                                         embedding_labels_int[split],
                                                         embedding_labels_int['train'],
                                                         distance_measure=distance_measure,
                                                         voting_k=1)
-        ins_topk_acc[split] = topk_accuracy(embeddings[split],
-                                            instance_adj,
-                                            distance_measure=distance_measure,
-                                            k=5)
+        print('Done class clustering accuracy. Start class top-k accuracy...')
         class_topk_acc[split] = topk_accuracy(embeddings[split],
                                               class_adj,
                                               distance_measure=distance_measure,
-                                              k=5)
-        ins_mAP[split] = embedding_mAP(embeddings[split],
-                                       instance_adj,
-                                       distance_op=distance_measure)
-        class_mAP[split] = embedding_mAP(embeddings[split],
-                                         class_adj,
-                                         distance_op=distance_measure)
+                                              k=3)
+        # print('Done class top-k accuracy. Start class mAP...')
+        # class_mAP[split] = embedding_mAP(embeddings[split],
+        #                                  class_adj,
+        #                                  distance_op=distance_measure)
         
-        log(f'Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
+        #log(f'Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
+        #log(f'Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
+        #log(f'Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
         log(f'Class clustering accuracy: {class_clustering_acc[split]:.3f}', to_console=True)
-        log(f'Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
         log(f'Class top-k accuracy: {class_topk_acc[split]:.3f}', to_console=True)
-        log(f'Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
-        log(f'Class mAP: {class_mAP[split]:.3f}', to_console=True)
+        #log(f'Class mAP: {class_mAP[split]:.3f}', to_console=True)
 
 
     # Plot latent embeddings
@@ -568,8 +578,8 @@ def test(config: AttributeHashmap):
         data_phate = phate_op.fit_transform(embeddings[split])
         print('Visualizing ', split, ' : ',  data_phate.shape)
         ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
-        title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
-            Class clustering acc: {class_clustering_acc[split]:.3f}"
+        title = f"{split}: Class clustering acc: {class_clustering_acc[split]:.3f},\n \
+            Class top-k acc: {class_topk_acc[split]:.3f}"
         
         scprep.plot.scatter2d(data_phate,
                               c=embedding_labels[split],
@@ -595,12 +605,14 @@ def test(config: AttributeHashmap):
         data_phate = phate_op.fit_transform(embeddings[split])
         print('Visualizing ', split, ' : ',  data_phate.shape)
         ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
-        title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
-            Class clustering acc: {class_clustering_acc[split]:.3f},\n \
-            Instance top-k acc: {ins_topk_acc[split]:.3f},\n \
-            Class top-k acc: {class_topk_acc[split]:.3f},\n \
-            Instance mAP: {ins_mAP[split]:.3f},\n \
-            Class mAP: {class_mAP[split]:.3f}"
+        # title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
+        #     Class clustering acc: {class_clustering_acc[split]:.3f},\n \
+        #     Instance top-k acc: {ins_topk_acc[split]:.3f},\n \
+        #     Class top-k acc: {class_topk_acc[split]:.3f},\n \
+        #     Instance mAP: {ins_mAP[split]:.3f},\n \
+        #     Class mAP: {class_mAP[split]:.3f}"
+        title = f"{split}: Class clustering acc: {class_clustering_acc[split]:.3f},\n \
+            Class top-k acc: {class_topk_acc[split]:.3f}"
         
         scprep.plot.scatter2d(data_phate,
                               c=embedding_patch_id_int[split],

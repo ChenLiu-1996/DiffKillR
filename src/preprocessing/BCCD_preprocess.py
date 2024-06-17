@@ -111,6 +111,7 @@ if __name__ == '__main__':
 
     # Now we augment the training patches
     aug_patch_size = 128
+    resize_to = 32
     augmentation_methods = ['rotation',
                             'uniform_stretch',
                             'directional_stretch',
@@ -118,7 +119,7 @@ if __name__ == '__main__':
                             'partial_stretch']
     multipliers = 1 # number of augmented patches per original patch
     for aug_method in augmentation_methods:
-        save_dir = f'../../data/BCCD_patch_augmented_{aug_patch_size}x{aug_patch_size}/train/{aug_method}/image/'
+        save_dir = f'../../data/BCCD_patch_augmented_{resize_to}x{resize_to}/train/{aug_method}/image/'
         os.makedirs(save_dir, exist_ok=True)
 
         train_patches = glob(os.path.join(train_save_dir, '*.png'))
@@ -134,6 +135,8 @@ if __name__ == '__main__':
             image_name = os.path.basename(train_patch).split('.')[0] # 'BloodImage_00000_RBC_H0_W0'
             # TODO: center crop & save original patch
             cropped_orig_img = center_crop(image=image, label=None, output_size=aug_patch_size)
+            if resize_to != aug_patch_size:
+                cropped_orig_img = cv2.resize(cropped_orig_img, (resize_to, resize_to), interpolation=cv2.INTER_CUBIC)
             save_path = os.path.join(save_dir, f'{image_name}_original.png')
             cv2.imwrite(save_path, cropped_orig_img)
 
@@ -151,6 +154,8 @@ if __name__ == '__main__':
                 assert image_aug.shape[-1] == 3
 
                 save_path = os.path.join(save_dir, f'{image_name}_aug{aug_id}.png')
+                if resize_to != aug_patch_size:
+                    image_aug = cv2.resize(image_aug, (resize_to, resize_to), interpolation=cv2.INTER_CUBIC)
                 cv2.imwrite(save_path, image_aug)
         print(f'{aug_method} augmentation done!')
 

@@ -34,7 +34,9 @@ def prepare_dataset(config: AttributeHashmap):
                                         target_dim=config.target_dim)
     elif config.dataset_name == 'BCCD':
         aug_lists = config.aug_methods.split(',')
-        dataset = BCCD_augmentedDataset(augmentation_methods=aug_lists)
+        dataset = BCCD_augmentedDataset(augmentation_methods=aug_lists,
+                                        base_path=config.dataset_path,
+                                        target_dim=config.target_dim)
     else:
         raise ValueError(
             'Dataset not found. Check `dataset_name` in config yaml file.')

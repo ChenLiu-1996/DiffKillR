@@ -167,11 +167,11 @@ class AugmentedDataset(Dataset):
         return self.patch_id_to_patch_id_idx[patch_id]
     
     def get_celltype_id(self, cell_type) -> int:
-        cell_list = list(self.label_paths_by_celltype.keys())
+        cell_list = list(self.image_paths_by_celltype.keys())
         return cell_list.index(cell_type)
 
     def num_classes(self) -> int:
-        return len(self.label_paths_by_celltype.keys())
+        return len(self.image_paths_by_celltype.keys())
 
     def sample_views(self, split: str, patch_id: str, cnt: int = 1) -> Tuple[np.array, np.array]:
         '''

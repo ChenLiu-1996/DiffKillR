@@ -20,14 +20,18 @@ class BCCD_augmentedDataset(AugmentedDataset):
     def __init__(self,
                 augmentation_methods: List[str],
                 cell_types: List[str] = ['WBC', 'RBC', 'Platelets'],
-                base_path: str = '../data/BCCD_patch_augmented_128x128/train/',
-                target_dim: Tuple[int] = (128, 128),
+                base_path: str = '../data/BCCD_patch_augmented_32x32/train/',
+                target_dim: Tuple[int] = (32, 32),
                 has_labels: bool = False):
         super().__init__(augmentation_methods=augmentation_methods,
                         cell_types=cell_types,
                         base_path=base_path,
                         target_dim=target_dim,
                         has_labels=has_labels)
+        
+        # TODO: Store images/labels into np arrays for faster access.
+        
+
     
     def get_celltype(self, img_path) -> str:
         'BloodImage_00000_RBC_H0_W197_aug00000.png'
