@@ -18,7 +18,8 @@ def prepare_dataset(config: AttributeHashmap):
         aug_lists = config.aug_methods.split(',')
         dataset = AugmentedDataset(augmentation_methods=aug_lists,
                                    base_path=config.dataset_path,
-                                   target_dim=config.target_dim)
+                                   target_dim=config.target_dim,
+                                   has_labels=config.has_labels)
     # elif config.dataset_name == 'tissuenet':
     #     dataset = TissueNetDataset(base_path=config.dataset_path,
     #                                target_dim=config.target_dim)

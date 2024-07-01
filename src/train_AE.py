@@ -3,8 +3,11 @@ import numpy as np
 import torch
 import os
 import yaml
+import pandas as pd
+import scipy.stats
 from model.scheduler import LinearWarmupCosineAnnealingLR
 from tqdm import tqdm
+
 from model.autoencoder import AutoEncoder
 from utils.attribute_hashmap import AttributeHashmap
 from utils.prepare_dataset import prepare_dataset
@@ -15,6 +18,7 @@ from utils.seed import seed_everything
 from utils.early_stop import EarlyStopping
 from loss.supervised_contrastive import SupConLoss
 from loss.triplet_loss import TripletLoss
+from infer_AE import load_cell_bank, label_to_idx, idx_to_label, load_image
 
 def construct_triplet_batch(img_paths,
                             latent_features,
@@ -133,10 +137,13 @@ def train(config: AttributeHashmap):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     # check apple metal 
-    # if torch.backends.mps.is_available():
-    #     device = "mps"
-    dataset, train_set, val_set, _ = \
+    if torch.backends.mps.is_available():
+        device = "mps"
+    dataset, train_set, val_set, test_set = \
         prepare_dataset(config=config)
+    print('train_set:', train_set.dataset.__str__())
+    print('val_set:', val_set.dataset.__str__())
+    print('test_set:', test_set.dataset.__str__())
 
     # Build the model
     try:
@@ -171,7 +178,7 @@ def train(config: AttributeHashmap):
                                   percentage=False)
 
     best_val_loss = np.inf
-    print(model)
+    #print(model)
 
     for epoch_idx in tqdm(range(config.max_epochs)):
         train_loss, train_latent_loss, train_recon_loss = 0, 0, 0
@@ -201,6 +208,7 @@ def train(config: AttributeHashmap):
                                                                                     sampling_method,
                                                                                     'train',
                                                                                     device)
+                #import pdb; pdb.set_trace()
                 _, latent_features = model(batch_images) # (bsz * n_views, latent_dim)
                 latent_features = latent_features.contiguous().view(bsz, config.n_views, -1) # (bsz, n_views, latent_dim)
                 cell_type_labels = torch.tensor(cell_type_labels).to(device) # (bsz)
@@ -342,9 +350,9 @@ def train(config: AttributeHashmap):
 def test(config: AttributeHashmap):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    # # check apple metal 
-    # if torch.backends.mps.is_available():
-    #     device = "mps"
+    # check apple metal 
+    if torch.backends.mps.is_available():
+        device = "mps"
         
     dataset, train_set, val_set, test_set = prepare_dataset(config=config)
 
@@ -678,6 +686,92 @@ def test(config: AttributeHashmap):
     return
 
 
+@torch.no_grad()
+def infer(config: AttributeHashmap):
+    device = torch.device(
+        'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    # check apple metal 
+    if torch.backends.mps.is_available():
+        device = "mps"
+
+    # Build the model
+    try:
+        model = globals()[config.model](num_filters=config.num_filters,
+                                        in_channels=3,
+                                        out_channels=3)
+    except:
+        raise ValueError('`config.model`: %s not supported.' % config.model)
+
+    model = model.to(device)
+    model.load_weights(config.model_save_path, device=device)
+    log('%s: Model weights successfully loaded.' % config.model,
+        to_console=True)
+    
+    # Load references from cell bank.
+    aug_methods = config.aug_methods.split(',')
+    config.cell_bank_folders = [f'{config.dataset_path}/{aug_method}/image/' for aug_method in aug_methods]
+    print('Cell bank folders:', config.cell_bank_folders)
+
+    reference_images, reference_labels, reference_files = load_cell_bank(config.cell_bank_folders, 
+                                                                    orig_only=True,
+                                                                    celltype_pos=config.celltype_pos)
+    label2idx, idx2label = label_to_idx(reference_labels)
+    reference_labels = np.array([label2idx[label] for label in reference_labels]) # (N_ref,)
+    reference_images = torch.tensor(reference_images, dtype=torch.float32)
+    reference_loader = torch.utils.data.DataLoader(reference_images, batch_size=32, shuffle=False)
+    reference_embeddings = []
+    with torch.no_grad():
+        for i, data in enumerate(reference_loader):
+            data = data.to(device)
+            _, latent = model(data)
+            latent = torch.flatten(latent, start_dim=1)
+            reference_embeddings.append(latent.cpu().numpy())
+    reference_embeddings = np.concatenate(reference_embeddings, axis=0)
+    print('Done infering reference embeddings:', reference_embeddings.shape)
+
+    # Load test set.
+    from glob import glob
+    test_folder = f'{config.test_img_folder}/'
+    test_files = glob(f'{test_folder}/*.png')
+    test_images = [load_image(test_file, target_dim=config.target_dim) for test_file in test_files]
+    test_images = torch.tensor(test_images, dtype=torch.float32)
+    test_loader = torch.utils.data.DataLoader(test_images, batch_size=32, shuffle=False)
+    test_embeddings = []
+    with torch.no_grad():
+        for i, data in enumerate(test_loader):
+            data = data.to(device)
+            _, latent = model(data)
+            latent = torch.flatten(latent, start_dim=1)
+            test_embeddings.append(latent.cpu().numpy())
+    test_embeddings = np.concatenate(test_embeddings, axis=0)
+    print('Done infering test embeddings:', test_embeddings.shape)
+
+    # Compute similarity.
+    from sklearn.metrics.pairwise import cosine_similarity
+    similarity = cosine_similarity(test_embeddings, reference_embeddings) # (N_test, N_ref)
+    print('Similarity:', similarity.shape)
+
+    # Find top-k.
+    k = 1
+    topk_idx = np.argsort(similarity, axis=1)[:, -k:] # (N_test, k)
+    topk_labels = reference_labels[topk_idx] # (N_test, k)
+    topk_modes = scipy.stats.mode(topk_labels, axis=1)[0].flatten() # (N_test,)
+    top1_labels = [idx2label[mode] for mode in topk_modes]
+
+    # Matched reference file.
+    top1_idx = topk_idx[:, -1]
+    matching_reference_files = [reference_files[idx] for idx in top1_idx]
+
+    # Save results. cols: [test_file, matching_reference_file, matching_celltype]
+    save_path = f'{config.matched_pair_path}'
+    df = pd.DataFrame({'test_file': test_files,
+                          'matching_reference_file': matching_reference_files,
+                          'matching_celltype': top1_labels})
+    
+    df.to_csv(save_path, index=False)
+
+    print('Done saving matching results:', save_path)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
     parser.add_argument('--mode', help='`train` or `test`?', required=True)
@@ -696,7 +790,7 @@ if __name__ == '__main__':
     config.num_workers = args.num_workers
     config = parse_settings(config, log_settings=args.mode == 'train', run_count=args.run_count)
 
-    assert args.mode in ['train', 'test']
+    assert args.mode in ['train', 'test', 'infer']
 
     seed_everything(config.random_seed)
 
@@ -705,3 +799,5 @@ if __name__ == '__main__':
         test(config=config)
     elif args.mode == 'test':
         test(config=config)
+    elif args.mode == 'infer':
+        infer(config=config)

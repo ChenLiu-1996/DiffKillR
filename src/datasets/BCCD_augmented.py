@@ -30,7 +30,6 @@ class BCCD_augmentedDataset(AugmentedDataset):
                         has_labels=has_labels)
         
         # TODO: Store images/labels into np arrays for faster access.
-        
 
     
     def get_celltype(self, img_path) -> str:
