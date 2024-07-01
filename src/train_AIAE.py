@@ -75,6 +75,9 @@ def construct_batch_images_with_n_views(
 def train(config: OmegaConf, wandb_run=None):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    if torch.backends.mps.is_available():
+        device = "mps"
+
     dataset, train_set, val_set, _ = \
         prepare_dataset(config=config)
     
@@ -294,6 +297,8 @@ def generate_train_pairs(config: OmegaConf):
     '''
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    if torch.backends.mps.is_available():
+        device = "mps"
     dataset, train_set, val_set, test_set = prepare_dataset(config=config)
     
     # Build the model
@@ -384,6 +389,8 @@ def generate_train_pairs(config: OmegaConf):
 def test(config: OmegaConf):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    if torch.backends.mps.is_available():
+        device = "mps"
     dataset, train_set, val_set, test_set = prepare_dataset(config=config)
 
     # Build the model
@@ -674,6 +681,8 @@ def infer(config: OmegaConf):
     # Load anchor bank data
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    if torch.backends.mps.is_available():
+        device = "mps"
     aug_lists = config.aug_methods.split(',')
     if dataset_name == 'MoNuSeg':
         dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,

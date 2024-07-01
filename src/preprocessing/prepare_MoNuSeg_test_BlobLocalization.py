@@ -10,6 +10,7 @@ import numpy as np
 from tqdm import tqdm
 from glob import glob
 from simple_nuclei_detector import detect_nuclei
+#from simple_nuclei_detector_cl import detect_nuclei
 
 
 def patchify_and_save(image, image_id, centroid_list,
@@ -57,6 +58,13 @@ def process_MoNuSeg_Testdata(patch_size=32):
     annotation_files = sorted(glob(f'{folder}/*.xml'))
     image_files = sorted(glob(f'{folder}/*.tif'))
 
+    # delete the folder if it already exists
+    patch_size = 32 # NOTE: Should be the same as the aug patch data.
+    patches_folder = '../../data/MoNuSegTestData_BlobLocalization_patch_%dx%d/' % (patch_size, patch_size)
+    if os.path.exists(patches_folder):
+        os.system(f'rm -r {patches_folder}')
+    os.makedirs(patches_folder)
+
     all_centroids_list = []
     for i, annotation_file in enumerate(tqdm(annotation_files)):
         image_id = os.path.basename(annotation_file).split('.')[0]
@@ -75,8 +83,6 @@ def process_MoNuSeg_Testdata(patch_size=32):
         all_centroids_list.extend(centroids_list)
 
         # Divide the image into patches.
-        patch_size = 32 # NOTE: Should be the same as the aug patch data.
-        patches_folder = '../../data/MoNuSegTestData_BlobLocalization_patch_%dx%d/' % (patch_size, patch_size)
         patchify_and_save(image, image_id, centroids_list, patches_folder, patch_size)
 
     print('Done processing all images and annotations: annotated cells: %d' % len(all_centroids_list))

@@ -205,14 +205,15 @@ def process_MoNuSeg_Traindata(patch_size=96):
     '''
         images are in .tif format, RGB, 1000x1000.
     '''
-    image_folder = '../external_data/MoNuSeg/MoNuSegTrainData/Tissue Images'
-    annotation_folder = '../external_data/MoNuSeg/MoNuSegTrainData/Annotations'
+    image_folder = '../../external_data/MoNuSeg/MoNuSegTrainData/Tissue Images'
+    annotation_folder = '../../external_data/MoNuSeg/MoNuSegTrainData/Annotations'
 
     annotation_files = sorted(glob(f'{annotation_folder}/*.xml'))
     image_files = sorted(glob(f'{image_folder}/*.tif'))
     # import pdb; pdb.set_trace()
 
     all_verts_list = []
+    print('Number of images: %d' % len(annotation_files))
 
     for i, annotation_file in enumerate(tqdm(annotation_files)):
         image_id = os.path.basename(annotation_file).split('.')[0]
@@ -243,10 +244,10 @@ def process_MoNuSeg_Traindata(patch_size=96):
         patchify_and_save(image, image_id, label, centroids_list, patches_folder, patch_size)
 
         # Find background patches and save them.
-        background_patches_folder = '../data/MoNuSeg2018Background_patch_%dx%d/' % (aug_patch_size, 
-                                                                                    aug_patch_size)
-        find_background_and_save(label, image, image_id, 
-                                 background_patches_folder, aug_patch_size)
+        # background_patches_folder = '../data/MoNuSeg2018Background_patch_%dx%d/' % (aug_patch_size, 
+        #                                                                             aug_patch_size)
+        # find_background_and_save(label, image, image_id, 
+        #                          background_patches_folder, aug_patch_size)
 
     print('Done processing all images and annotations: annotated cells: %d' % len(all_verts_list))
 
@@ -295,7 +296,7 @@ def process_MoNuSeg_Traindata(patch_size=96):
     return
 
 def process_MoNuSeg_Testdata(patch_size=32):
-    folder = '../external_data/MoNuSeg/MoNuSegTestData'
+    folder = '../../external_data/MoNuSeg/MoNuSegTestData'
 
     annotation_files = sorted(glob(f'{folder}/*.xml'))
     image_files = sorted(glob(f'{folder}/*.tif'))

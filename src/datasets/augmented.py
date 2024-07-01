@@ -57,7 +57,7 @@ class AugmentedDataset(Dataset):
             img_paths = sorted(glob('%s/image/*.png' % (folder)))
             #label_paths = sorted(glob('%s/label/*.png' % (folder)))
             for img_path in img_paths:
-                print('img_path:', img_path)
+                #print('img_path:', img_path)
                 file_name = os.path.basename(img_path)
                 celltype = self.get_celltype(img_path=img_path)
                 patch_id = self.get_patch_id(img_path=img_path)
@@ -86,6 +86,7 @@ class AugmentedDataset(Dataset):
             self.patch_id_to_patch_id_idx[patch_id_list[i]] = i
 
         self.all_image_paths = list(itertools.chain.from_iterable(self.image_paths_by_celltype.values()))
+        print('Total images:', len(self.all_image_paths))
         if self.has_labels:
             self.all_label_paths = list(itertools.chain.from_iterable(self.label_paths_by_celltype.values()))
             assert len(self.all_image_paths) == len(self.all_label_paths)

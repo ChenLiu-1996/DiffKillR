@@ -131,6 +131,9 @@ def main():
     argparser.add_argument('--multiplier', type=int, default=2)
     argparser.add_argument('--organ', type=str, default='Colon')
     argparser.add_argument('--detection', type=str, default='None', help='None, BlobLocalization')
+    argparser.add_argument('--random_seed', type=int, default=1)
+    argparser.add_argument('--use_wandb', type=bool, default=True, help='Use wandb for logging.')
+
 
     args = argparser.parse_args()
     patch_size = args.patch_size
@@ -207,6 +210,8 @@ def main():
             'percentage': percentage,
             'organ': args.organ,
             'multiplier': multiplier,
+            'random_seed': args.random_seed,
+            'use_wandb': args.use_wandb,
         }
     )
     OmegaConf.save(conf, './config/MoNuSeg_data.yaml')
