@@ -71,6 +71,7 @@ def augment_partial_stretch(image: np.array,
         foreground_h = np.argwhere(image_rotFwd > 0)[:, 0]
         left_most_h = min(foreground_h)
         right_most_h = max(foreground_h)
+
     cut_percentile = np.random.uniform(50, 75)
     cut_h = int(np.percentile([left_most_h, right_most_h], cut_percentile))
 

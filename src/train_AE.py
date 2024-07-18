@@ -90,7 +90,7 @@ def construct_batch_images_with_n_views(
     '''
     if sampling_method not in ['supercontrast', 'SimCLR']:
         raise ValueError('`sampling_method`: %s not supported.' % sampling_method)
-    
+
     # Construct batch_images [bsz * n_views, in_chan, H, W].
     batch_images = None
     cell_type_labels = []
@@ -108,7 +108,7 @@ def construct_batch_images_with_n_views(
                 aug_images, _ = dataset.sample_views(split=split,
                                                      patch_id=patch_id,
                                                      cnt=n_views-1)
-                
+
             aug_images = torch.Tensor(aug_images).to(device) # (cnt, in_chan, H, W)
 
             image = torch.unsqueeze(image, dim=0) # (1, in_chan, H, W)
@@ -156,7 +156,7 @@ def train(config: AttributeHashmap):
     if config.latent_loss in ['supercontrast', 'SimCLR']:
         supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
-                                        contrast_mode=config.contrast_mode)
+                                        contrastive_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
         triplet_loss = TripletLoss(distance_measure='cosine',
                                    margin=config.margin,
@@ -361,7 +361,7 @@ def test(config: AttributeHashmap):
     if config.latent_loss in ['supercontrast', 'SimCLR']:
         supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
-                                        contrast_mode=config.contrast_mode)
+                                        contrastive_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
         triplet_loss = TripletLoss(distance_measure='cosine',
                                    margin=config.margin,
@@ -508,7 +508,7 @@ def test(config: AttributeHashmap):
             for j in range(len(embedding_labels[split])):
                 if embedding_labels_int[split][i] == embedding_labels_int[split][j]:
                     class_adj[i, j] = 1
-                
+
                 # same patch id means same instance
                 if embedding_patch_id_int[split][i] == embedding_patch_id_int[split][j]:
                     instance_adj[i, j] = 1
@@ -541,7 +541,7 @@ def test(config: AttributeHashmap):
         class_mAP[split] = embedding_mAP(embeddings[split],
                                          class_adj,
                                          distance_op=distance_measure)
-        
+
         log(f'Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
         log(f'Class clustering accuracy: {class_clustering_acc[split]:.3f}', to_console=True)
         log(f'Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
@@ -569,7 +569,7 @@ def test(config: AttributeHashmap):
         ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
         title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
             Class clustering acc: {class_clustering_acc[split]:.3f}"
-        
+
         scprep.plot.scatter2d(data_phate,
                               c=embedding_labels[split],
                               legend=dataset.cell_types,
@@ -600,7 +600,7 @@ def test(config: AttributeHashmap):
             Class top-k acc: {class_topk_acc[split]:.3f},\n \
             Instance mAP: {ins_mAP[split]:.3f},\n \
             Class mAP: {class_mAP[split]:.3f}"
-        
+
         scprep.plot.scatter2d(data_phate,
                               c=embedding_patch_id_int[split],
                               legend=dataset.cell_types,

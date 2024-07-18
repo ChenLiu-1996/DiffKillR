@@ -91,7 +91,7 @@ def construct_batch_images_with_n_views(
     '''
     if sampling_method not in ['SimCLR']:
         raise ValueError('`sampling_method`: %s not supported.' % sampling_method)
-    
+
     # Construct batch_images [bsz * n_views, in_chan, H, W].
     batch_images = None
     n_views = config.n_views
@@ -102,7 +102,7 @@ def construct_batch_images_with_n_views(
                 aug_images, _ = dataset.sample_views(split=split,
                                                      patch_id=patch_id,
                                                      cnt=n_views-1)
-                
+
             aug_images = torch.Tensor(aug_images).to(device) # (cnt, in_chan, H, W)
 
             image = torch.unsqueeze(image, dim=0) # (1, in_chan, H, W)
@@ -150,7 +150,7 @@ def train(config: AttributeHashmap, wandb_run=None):
     if config.latent_loss in ['SimCLR']:
         supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
-                                        contrast_mode=config.contrast_mode)
+                                        contrastive_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
         triplet_loss = TripletLoss(distance_measure='cosine',
                                    margin=config.margin,
@@ -158,7 +158,7 @@ def train(config: AttributeHashmap, wandb_run=None):
                                    num_neg=config.num_neg)
     else:
         raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
-    
+
     mse_loss = torch.nn.MSELoss()
     early_stopper = EarlyStopping(mode='min',
                                   patience=config.patience,
@@ -325,7 +325,7 @@ def train(config: AttributeHashmap, wandb_run=None):
                 filepath=config.log_dir,
                 to_console=True)
             break
-    
+
     if wandb_run is not None:
         wandb_run.finish()
 
@@ -358,7 +358,7 @@ def test(config: AttributeHashmap):
     if config.latent_loss in ['SimCLR']:
         supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
-                                        contrast_mode=config.contrast_mode)
+                                        contrastive_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
         triplet_loss = TripletLoss(distance_measure='cosine',
                                    margin=config.margin,
@@ -507,7 +507,7 @@ def test(config: AttributeHashmap):
         ins_mAP[split] = embedding_mAP(embeddings[split],
                                        instance_adj,
                                        distance_op=distance_measure)
-        
+
         log(f'Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
         log(f'Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
         log(f'Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
@@ -532,7 +532,7 @@ def test(config: AttributeHashmap):
         title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
             Instance top-k acc: {ins_topk_acc[split]:.3f},\n \
             Instance mAP: {ins_mAP[split]:.3f}"
-        
+
         scprep.plot.scatter2d(data_phate,
                               c=embedding_patch_id_int[split],
                               ax=ax,
@@ -597,11 +597,11 @@ def test(config: AttributeHashmap):
 
 def infer(config):
     '''
-        Inference mode. Given test image patch folder, load the model and 
+        Inference mode. Given test image patch folder, load the model and
         pair the test images with closest images in anchor bank.
         The anchor patch bank: training images from the original or augmented images.
         !TODO: we may only want to use the original images for the anchor bank,
-        !TODO: since the augmented images are not real instances. and the reg2seg 
+        !TODO: since the augmented images are not real instances. and the reg2seg
         !TODO: model is trained on the warping aug to original images.
         Output: a csv file with the following columns:
             - test_image_path
@@ -638,8 +638,8 @@ def infer(config):
     model.load_weights(config.model_save_path, device=device)
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)
-    
-    log('Generating embeddings for anchor bank. Total images: %d' % len(dataset), 
+
+    log('Generating embeddings for anchor bank. Total images: %d' % len(dataset),
         to_console=True)
     anchor_bank = {
         'embeddings': [],
@@ -658,7 +658,7 @@ def infer(config):
             anchor_bank['img_paths'].extend(img_paths)
             sources = ['original' if 'original' in img_path else 'augmented' for img_path in img_paths]
             anchor_bank['sources'].extend(sources)
-        
+
     anchor_bank['embeddings'] = np.concatenate(anchor_bank['embeddings'], axis=0) # (N, latent_dim)
     assert anchor_bank['embeddings'].shape[0] == len(anchor_bank['img_paths']) == len(anchor_bank['sources'])
     log(f'Anchor bank embeddings generated. shape:{anchor_bank["embeddings"].shape}', to_console=True)
@@ -701,7 +701,7 @@ def infer(config):
         distance_measure = 'cosine'
     else:
         raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
-    
+
     log('Computing pairwise distances...', to_console=True)
     print('test_img_bank[embeddings].shape: ', test_img_bank['embeddings'].shape)
     print('anchor_bank[embeddings].shape: ', anchor_bank['embeddings'].shape)

@@ -18,6 +18,7 @@ def augment_rotation(image: np.array,
 
     if random_seed is not None:
         np.random.seed(random_seed)
+
     angle = np.random.uniform(-180, 180)
     rotation_matrix = cv2.getRotationMatrix2D(
         (input_size / 2, input_size / 2), angle, 1)

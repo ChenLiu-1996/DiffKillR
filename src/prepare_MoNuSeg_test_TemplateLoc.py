@@ -105,8 +105,9 @@ def save_with_bbox_overlay(image, image_id, centroid_list, bbox_overlay_folder, 
         bbox_xmax = min(image.shape[0], centroid[0] + patch_size//2)
         bbox_ymin = max(0, centroid[1] - patch_size//2)
         bbox_ymax = min(image.shape[1], centroid[1] + patch_size//2)
+        random_color = (np.random.randint(0, 200), np.random.randint(200, 255), np.random.randint(0, 200))
         image = cv2.rectangle(image, (bbox_ymin, bbox_xmin), (bbox_ymax, bbox_xmax),
-                              color=(0, 255, 0), thickness=4)
+                              color=random_color, thickness=2)
 
     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     cv2.imwrite(image_path, image)
@@ -305,10 +306,10 @@ def process_MoNuSeg_Testdata(config, patch_size, device):
 
             # march and detect the nuclei.
             window_size = patch_size
-            stride = 1
+            stride = config.stride
             all_nuclei_list = [[] for _ in range(all_images.shape[0])]
 
-            for start_x in range(0, all_images.shape[-2], stride):
+            for start_x in tqdm(range(0, all_images.shape[-2], stride)):
                 for start_y in range(0, all_images.shape[-1], stride):
                     end_x = min(start_x + window_size, all_images.shape[-2])
                     end_y = min(start_y + window_size, all_images.shape[-1])
@@ -321,16 +322,16 @@ def process_MoNuSeg_Testdata(config, patch_size, device):
                     # cosine similarity between the template features and the patch features
                     similarity = cosine_similarity(template_features.cpu().numpy(), patch_feature.cpu().numpy()) # (N, n)
 
-                    # Max-pool along the template dimension.
-                    # Any match is a match.
-                    similarity = np.max(similarity, axis=0)
-                    assert len(similarity) == len(all_images)
+                    # Find average similarity of topk matches.
+                    neg_sim = -similarity
+                    neg_sim.sort(axis=0)
+                    neg_sim_mean_topk = neg_sim[:config.similarity_topk].mean(axis=0)
+                    sim_mean_topk = -neg_sim_mean_topk
 
-                    # thresholding
-                    thresh = 0.75
-
-                    for k in range(len(similarity)):
-                        if similarity[k] > thresh:
+                    assert len(sim_mean_topk) == len(all_images)
+                    for k in range(len(sim_mean_topk)):
+                        # thresholding
+                        if sim_mean_topk[k] > config.similarity_threshold:
                             all_nuclei_list[k].append([start_x + window_size // 2, start_y + window_size // 2])
 
             total = np.sum([len(nuclei_list) for nuclei_list in all_nuclei_list])
@@ -372,6 +373,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--detection', type=str, default='encoder', help='template or encoder')
     parser.add_argument('--aug_patch_size', type=int, default=32)
+    parser.add_argument('--stride', type=int, default=10)
+    parser.add_argument('--similarity_threshold', type=float, default=0.8)
+    parser.add_argument('--similarity_topk', type=int, default=2)  # to reduce outliers
     args = parser.parse_args()
 
     model_config ='./config/MoNuSeg_AIAE.yaml'
@@ -379,6 +383,9 @@ if __name__ == '__main__':
 
     config = OmegaConf.merge(OmegaConf.load(model_config), OmegaConf.load(data_config))
     config.detection = args.detection
+    config.stride = args.stride
+    config.similarity_threshold = args.similarity_threshold
+    config.similarity_topk = args.similarity_topk
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
