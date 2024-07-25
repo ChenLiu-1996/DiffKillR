@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Literal
 import argparse
 import numpy as np
 import torch
@@ -8,6 +8,7 @@ import os
 # from model.scheduler import LinearWarmupCosineAnnealingLR
 from tqdm import tqdm
 from matplotlib import pyplot as plt
+from functools import partial
 
 from model.autoencoder import AutoEncoder
 from model.unet import UNet
@@ -19,6 +20,7 @@ from utils.parse import parse_settings
 from utils.seed import seed_everything
 from utils.early_stop import EarlyStopping
 from utils.metrics import dice_coeff, IoU
+from utils.ncc import NCC
 
 
 def numpy_variables(*tensors: torch.Tensor) -> Tuple[np.array]:
@@ -39,7 +41,17 @@ def numpy_variables(*tensors: torch.Tensor) -> Tuple[np.array]:
     assert all([len(t.shape) == 3 for t in results])
     return results
 
-def plot_side_by_side(save_path, im_U, im_A, im_U2A_A2U, im_U2A, ma_U, ma_A, ma_A2U):
+def l1(im1, im2) -> float:
+    '''
+    Mean Absolute Error.
+    '''
+    return np.linalg.norm((im1.flatten() - im2.flatten()), ord=1)
+
+def plot_side_by_side(save_path,
+                      im_U, im_A,
+                      im_U2A_A2U, im_U2A,
+                      ma_U, ma_A, ma_A2U,
+                      metric_name, metric):
     plt.rcParams['font.family'] = 'serif'
     fig_sbs = plt.figure(figsize=(20, 8))
 
@@ -78,8 +90,8 @@ def plot_side_by_side(save_path, im_U, im_A, im_U2A_A2U, im_U2A, ma_U, ma_A, ma_
     ax.set_title('Projected label (A->U)')
     ax.set_axis_off()
 
-    fig_sbs.suptitle('IoU (label(U), label(A)) = %.3f, IoU (label(U), label(A->U)) = %.3f' % (
-        IoU(ma_U, ma_A), IoU(ma_U, ma_A2U)), fontsize=15)
+    fig_sbs.suptitle('%s (label(U), label(A)) = %.3f, %s (label(U), label(A->U)) = %.3f' % (
+        metric_name, metric(ma_U, ma_A), metric_name, metric(ma_U, ma_A2U)), fontsize=15)
     fig_sbs.tight_layout()
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig_sbs.savefig(save_path)
@@ -87,144 +99,68 @@ def plot_side_by_side(save_path, im_U, im_A, im_U2A_A2U, im_U2A, ma_U, ma_A, ma_
 
     return
 
-# @torch.no_grad()
-# def generate_matching_pairs(config):
-#     '''
-#         Generate training pairs for DiffeoMappingNet model.
-#         Given the trained DiffeoInvariantNet model, generate pairs of images from the training/val/test set.
-#         Generate pairing, match augmented images to its non-mother anchor.
-#         The anchor bank: training images from the original images.
-#     '''
+def flip_rot(image, fliplr: bool, rot_angle: Literal[0, 90, 180, 270]):
+    if fliplr:
+        image = torch.flip(image, dims=(2,))
 
-#     device = torch.device(
-#         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-#     dataset, train_set, val_set, test_set = prepare_dataset(config=config)
+    if rot_angle == 90:
+        image = torch.rot90(image, k=1, dims=(2, 3))
+    elif rot_angle == 180:
+        image = torch.rot90(image, k=2, dims=(2, 3))
+    elif rot_angle == 270:
+        image = torch.rot90(image, k=3, dims=(2, 3))
+    else:
+        assert rot_angle == 0
 
-#     # Build the model
-#     try:
-#         model = globals()[config.DiffeoInvariantNet_model](num_filters=config.num_filters,
-#                                                            in_channels=3,
-#                                                            out_channels=3)
-#     except:
-#         raise ValueError('`config.DiffeoInvariantNet_model`: %s not supported.' % config.DiffeoInvariantNet_model)
-#     model = model.to(device)
+    return image
 
-#     # Set all paths.
-#     model.load_weights(config.DiffeoInvariantNet_model_save_path, device=device)
-#     log('%s: Model weights successfully loaded.' % config.DiffeoInvariantNet_model,
-#         to_console=True)
-#     os.makedirs(config.output_save_path, exist_ok=True)
+def predict_flipping_rotation(image_fixed: torch.Tensor, image_moving: torch.Tensor):
+    '''
+    Predict the flipping and rotation transformation:
+    image_fixed \approx flipping_rotation_transform(image_moving).
 
-#     loader_map = {
-#         'train': train_set,
-#         'val': val_set,
-#         'test': test_set,
-#     }
+    This function does not perform deep learning.
+    It's purely iterating the 2x4=8 possibilities.
 
-#     import pdb; pdb.set_trace()
-#     for k, loader in loader_map.items():
+    This function assumes the images are of shape [batch_size, C, H, W]
+    '''
 
-#         log(f'Generating {k} embeddings pairs ...')
+    assert image_fixed.shape == image_moving.shape
 
-#         # Generate embeddings.
-#         to_be_matched_embeddings = []
-#         to_be_matched_paths = []
-#         bank_embeddings = []
-#         bank_paths = []
-#         pairing_save_path = os.path.join(config.output_save_path, f'{k}_pairs.csv')
+    cross_corr_op = NCC(image_fixed)
+    cross_corr_list = []
+    transform_forward_list, transform_reverse_list = [], []
 
-#         for iter_idx, (images, _, image_n_view, canonical_images, _) in enumerate(loader):
-#             images = images.float().to(device)  # [batch_size, C, H, W]
+    for fliplr_forward, fliplr_reverse in zip([False, True], [False, True]):
+        for rot_angle_forward, rot_angle_reverse in \
+            zip([0, 90, 180, 270], [0, 270, 180, 90]):
 
-#             # [batch_size, n_views, C, H, W] -> [batch_size * n_views, C, H, W]
-#             image_n_view = image_n_view.reshape(-1, image_n_view.shape[-3], image_n_view.shape[-2], image_n_view.shape[-1])
-#             image_n_view = image_n_view.float().to(device)
+            transform_func_forward = partial(flip_rot, fliplr=fliplr_forward, rot_angle=rot_angle_forward)
+            transform_func_reverse = partial(flip_rot, fliplr=fliplr_reverse, rot_angle=rot_angle_reverse)
 
-#             _, latent_features = model(images)
-#             latent_features = torch.flatten(latent_features, start_dim=1)
-#             latent_features = latent_features.cpu().numpy()
-#             for i in range(len(latent_features)):
-#                 if 'original' in img_paths[i]:
-#                     bank_embeddings.append(latent_features[i])
-#                     bank_paths.append(img_paths[i])
-#                 else:
-#                     to_be_matched_embeddings.append(latent_features[i])
-#                     to_be_matched_paths.append(img_paths[i])
+            transform_forward_list.append(transform_func_forward)
+            transform_reverse_list.append(transform_func_reverse)
+            transformed_image = transform_func_forward(image_moving)
 
-#         to_be_matched_embeddings = np.stack(to_be_matched_embeddings, axis=0) # (N1, latent_dim)
-#         bank_embeddings = np.stack(bank_embeddings, axis=0) # (N2, latent_dim)
-#         log(f'[{k}]Bank: {bank_embeddings.shape}, \
-#             To be matched: {to_be_matched_embeddings.shape}', to_console=True)
+            cross_corr_list.append(torch.max(torch.max(cross_corr_op(transformed_image), dim=1)[0], dim=1)[0])
 
-#         # Generate pairing, match augmented images to its non-mother anchor
-#         dist_matrix = sklearn.metrics.pairwise_distances(to_be_matched_embeddings,
-#                                             bank_embeddings,
-#                                             metric='cosine') # [N1, N2]
-#         closest_img_paths = []
-#         closest_dists = []
-#         for i in range(len(to_be_matched_embeddings)):
-#             patch_id = dataset.get_patch_id(to_be_matched_paths[i])
-#             mother = dataset.patch_id_to_canonical_pose_path[patch_id]
-#             sorted_idx = np.argsort(dist_matrix[i])
-#             # remove mother index from sorted_idx
-#             if mother in bank_paths: # mother may not be in the same split
-#                 mother_index = bank_paths.index(mother)
-#                 sorted_idx = sorted_idx[sorted_idx != mother_index]
+    cross_corr = torch.stack(cross_corr_list)
+    transform_arr_forward = np.array(transform_forward_list)
+    transform_arr_reverse = np.array(transform_reverse_list)
 
-#             # select the closest non-mother index
-#             closest_index = sorted_idx[0]
-#             closest_img_paths.append(bank_paths[closest_index])
-#             closest_dists.append(dist_matrix[i, closest_index]) # NOTE: this is wrong, but not affecting the result.
+    # Use cross correlation to decide which transformed image is the best match.
+    best_transform_indices = cross_corr.argmax(0)
 
-#         results_df = pd.DataFrame({
-#             'test_image_path': to_be_matched_paths,
-#             'closest_image_path': closest_img_paths,
-#             'distance': closest_dists,
-#             'source': ['original'] * len(to_be_matched_paths),
-#         })
-#         results_df.to_csv(pairing_save_path, index=False)
-#         log(f'[{k}] Pairing saved to {pairing_save_path}', to_console=True)
+    flip_rot_transform_forward = transform_arr_forward[best_transform_indices]
+    flip_rot_transform_reverse = transform_arr_reverse[best_transform_indices]
 
-#     return
+    return flip_rot_transform_forward, flip_rot_transform_reverse
 
-
-# def load_match_pairs(matched_pair_path_root: str, mode: str, config):
-#     '''
-#     Load the matched pairs from csv. file and return
-#         - unanotated_images
-#         - unannotated_labels
-#         - annotated_images
-#         - annotated_labels
-#         - unanonated_image_paths
-#     '''
-#     import pandas as pd
-#     from datasets.augmented_MoNuSeg import load_image, load_label
-
-#     matched_df = pd.read_csv(os.path.join(matched_pair_path_root, f'{mode}_pairs.csv'))
-#     unanotated_image_paths = matched_df['test_image_path'].tolist()
-#     annotated_image_paths = matched_df['closest_image_path'].tolist()
-#     annotated_label_paths = [x.replace('image', 'label') for x in annotated_image_paths]
-#     unannotated_label_paths = [x.replace('image', 'label') for x in unanotated_image_paths]
-
-#     unannotated_images = [torch.Tensor(load_image(p, config.target_dim)) for p in unanotated_image_paths]
-#     annotated_images = [torch.Tensor(load_image(p, config.target_dim)) for p in annotated_image_paths]
-#     annotated_labels = [torch.Tensor(load_label(p, config.target_dim)) for p in annotated_label_paths]
-#     if os.path.exists(unannotated_label_paths[0]):
-#         unannotated_labels = [torch.Tensor(load_label(p, config.target_dim)) for p in unannotated_label_paths]
-#     else:
-#         unannotated_labels = None
-
-#     unannotated_images = torch.stack(unannotated_images, dim=0) # (N, in_chan, H, W)
-#     annotated_images = torch.stack(annotated_images, dim=0) # (N, in_chan, H, W)
-#     annotated_labels = torch.stack(annotated_labels, dim=0) # (N, H, W)
-#     if unannotated_labels is not None:
-#         unannotated_labels = torch.stack(unannotated_labels, dim=0)
-
-#     assert len(unannotated_images) == len(annotated_images) == len(annotated_labels)
-#     print(f'Loaded {len(unannotated_images)} pairs of images and labels.')
-
-#     return unannotated_images, unannotated_labels, \
-#         annotated_images, annotated_labels, unanotated_image_paths
+def apply_flipping_rotation(transform, image):
+    transformed_image = torch.zeros_like(image)
+    for batch_idx in range(len(transform)):
+        transformed_image[batch_idx] = transform[batch_idx](image[batch_idx].unsqueeze(0)).squeeze(0)
+    return transformed_image
 
 # FIXME!: I think we can even use another cycle loss: AM -> UM -> AM
 # FIXME!: Also, if the augmented label is good, we can use it as a target for the forward cycle: UM -> AM.
@@ -260,7 +196,7 @@ def train(config, wandb_run=None):
     best_val_loss = np.inf
     for epoch_idx in tqdm(range(config.max_epochs)):
         train_loss, train_loss_forward, train_loss_cyclic = 0, 0, 0
-        train_dice_ref_list, train_dice_seg_list = [], []
+        train_metric_ref_list, train_metric_seg_list = [], []
 
         warp_predictor.train()
         plot_freq = int(len(train_loader) // config.n_plot_per_epoch)
@@ -285,25 +221,32 @@ def train(config, wandb_run=None):
                 annotated_images = image_n_view[permuted_idx][:, 1, ...]
                 annotated_labels = label_n_view[permuted_idx][:, 1, ...]
 
-
             if len(unannotated_labels.shape) == 3:
                 unannotated_labels = unannotated_labels[:, None, ...]
             if len(annotated_labels.shape) == 3:
                 annotated_labels = annotated_labels[:, None, ...]
+            label_is_binary = not torch.is_floating_point(annotated_labels)
 
             unannotated_images = unannotated_images.float().to(device) # (bsz, in_chan, H, W)
             annotated_images = annotated_images.float().to(device)
             unannotated_labels = unannotated_labels.float().to(device)
             annotated_labels = annotated_labels.float().to(device)
 
-            if torch.is_floating_point(annotated_labels):
-                annotated_labels = annotated_labels.float()
-                unannotated_labels = unannotated_labels.float()
-            else:
+            if label_is_binary:
                 # Only care about the binary label.
                 assert annotated_labels.max() in [0, 1]
                 annotated_labels = (annotated_labels > 0.5).float()
                 unannotated_labels = (unannotated_labels > 0.5).float()
+            else:
+                annotated_labels = annotated_labels.float()
+                unannotated_labels = unannotated_labels.float()
+
+            # # Predict flipping and rotation
+            # flip_rot_transform_forward, flip_rot_transform_reverse = predict_flipping_rotation(unannotated_images, annotated_images)
+
+            # # Apply flipping and rotation
+            # annotated_images_flip_rot = apply_flipping_rotation(flip_rot_transform_forward, annotated_images)
+            # annotated_labels_flip_rot = apply_flipping_rotation(flip_rot_transform_forward, annotated_images)
 
             # Predict the warping field.
             warp_predicted = warp_predictor(torch.cat([annotated_images, unannotated_images], dim=1))
@@ -317,49 +260,68 @@ def train(config, wandb_run=None):
             # print(labels_A2U.shape, unannotated_labels.shape, annotated_labels.shape)
             # print('check a few labels_A2U:', labels_A2U[0, ...], unannotated_labels[0, ...], annotated_labels[0, ...])
 
-            # Compute Dice Coeff.
+            import pdb; pdb.set_trace()
+
+            if label_is_binary:
+                labels_A2U = (labels_A2U > 0.5).float()
+
+            # Compute metric.
+            if label_is_binary:
+                metric_name = 'DSC'
+                metric = dice_coeff
+            else:
+                metric_name = 'L1'
+                metric = l1
             for i in range(len(labels_A2U)):
-                train_dice_ref_list.append(
-                    dice_coeff((annotated_labels[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0),
-                               (unannotated_labels[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0)))
-                train_dice_seg_list.append(
-                    dice_coeff((labels_A2U[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0),
-                               (unannotated_labels[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0)))
+                train_metric_ref_list.append(
+                    metric((annotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                           (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
+                train_metric_seg_list.append(
+                    metric((labels_A2U[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                           (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
 
             if shall_plot:
-                save_folder = os.path.join(config.output_save_root, model_name, 'DiffeoMappingNet')
                 save_path_fig_sbs = '%s/train/figure_log_epoch%s_sample%s.png' % (
-                    save_folder, str(epoch_idx).zfill(5), str(iter_idx).zfill(5))
-                plot_side_by_side(save_path_fig_sbs, *numpy_variables(
-                    unannotated_images[0], annotated_images[0],
-                    images_U2A_A2U[0], images_U2A[0],
-                    unannotated_labels[0] > 0.5, annotated_labels[0] > 0.5,
-                    labels_A2U[0] > 0.5))
+                    config.output_save_path, str(epoch_idx).zfill(5), str(iter_idx).zfill(5))
+
+                if label_is_binary:
+                    plot_side_by_side(save_path_fig_sbs, *numpy_variables(
+                        unannotated_images[0], annotated_images[0],
+                        images_U2A_A2U[0], images_U2A[0],
+                        unannotated_labels[0] > 0.5, annotated_labels[0] > 0.5,
+                        labels_A2U[0] > 0.5), 'DSC', dice_coeff)
+                else:
+                    plot_side_by_side(save_path_fig_sbs, *numpy_variables(
+                        unannotated_images[0], annotated_images[0],
+                        images_U2A_A2U[0], images_U2A[0],
+                        unannotated_labels[0], annotated_labels[0],
+                        labels_A2U[0]), 'L1', l1)
 
             loss_forward = mse_loss(annotated_images, images_U2A)
             loss_cyclic = mse_loss(unannotated_images, images_U2A_A2U)
-
             loss = loss_forward + loss_cyclic
-            train_loss += loss.item()
-            train_loss_forward += loss_forward.item()
-            train_loss_cyclic += loss_cyclic.item()
+
+            train_loss += loss.item() * curr_batch_size
+            train_loss_forward += loss_forward.item() * curr_batch_size
+            train_loss_cyclic += loss_cyclic.item() * curr_batch_size
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-        train_loss /= train_loader.dataest
-        train_loss_forward /= train_loader.dataest
-        train_loss_cyclic /= train_loader.dataest
+        train_loss /= len(train_loader.dataset)
+        train_loss_forward /= len(train_loader.dataset)
+        train_loss_cyclic /= len(train_loader.dataset)
 
         lr_scheduler.step()
 
-        log('Train [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f, Dice coeff (ref): %.3f \u00B1 %.3f, Dice coeff (seg): %.3f \u00B1 %.3f.'
+        log('Train [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f, %s (ref): %.3f \u00B1 %.3f, %s (seg): %.3f \u00B1 %.3f.'
             % (epoch_idx + 1, config.max_epochs, train_loss, train_loss_forward, train_loss_cyclic,
-               np.mean(train_dice_ref_list), np.std(train_dice_ref_list),
-               np.mean(train_dice_seg_list), np.std(train_dice_seg_list)),
-            filepath=config.log_dir,
+               metric_name, np.mean(train_metric_ref_list), np.std(train_metric_ref_list),
+               metric_name, np.mean(train_metric_seg_list), np.std(train_metric_seg_list)),
+            filepath=config.log_path,
             to_console=False)
+
         # if wandb_run is not None:
         #     wandb_run.log({'train/loss': train_loss,
         #                    'train/loss_forward': train_loss_forward,
@@ -373,27 +335,49 @@ def train(config, wandb_run=None):
         warp_predictor.eval()
         with torch.no_grad():
             val_loss, val_loss_forward, val_loss_cyclic = 0, 0, 0
-            val_dice_ref_list, val_dice_seg_list = [], []
-            plot_freq = int(len(val_test_set) // config.n_plot_per_epoch)
-            # print('yo: ', plot_freq, len(val_test_loader))
-            for iter_idx, (unannotated_images, unannotated_labels, annotated_images, annotated_labels) in enumerate(tqdm(val_test_loader)):
+            val_metric_ref_list, val_metric_seg_list = [], []
+
+            plot_freq = int(len(val_loader) // config.n_plot_per_epoch)
+            for iter_idx, (_, _, image_n_view, label_n_view, _, _) in enumerate(tqdm(val_loader)):
+
+                assert image_n_view.shape[1] == 2
+                curr_batch_size = image_n_view.shape[0]
                 shall_plot = iter_idx % plot_freq == plot_freq - 1
 
-                # NOTE: batch size is len(val_set) here.
-                # May need to change this if val_set is too large.
+                if not config.strong:
+                    # Weak mapping: map within the same cell (one augmented version to another).
+                    unannotated_images = image_n_view[:, 0, ...]
+                    unannotated_labels = label_n_view[:, 0, ...]
+                    annotated_images = image_n_view[:, 1, ...]
+                    annotated_labels = label_n_view[:, 1, ...]
+
+                else:
+                    # Strong mapping: map across different cells.
+                    permuted_idx = np.random.permutation(len(image_n_view))
+                    unannotated_images = image_n_view[:, 0, ...]
+                    unannotated_labels = label_n_view[:, 0, ...]
+                    annotated_images = image_n_view[permuted_idx][:, 1, ...]
+                    annotated_labels = label_n_view[permuted_idx][:, 1, ...]
 
                 if len(unannotated_labels.shape) == 3:
                     unannotated_labels = unannotated_labels[:, None, ...]
                 if len(annotated_labels.shape) == 3:
                     annotated_labels = annotated_labels[:, None, ...]
+                label_is_binary = not torch.is_floating_point(annotated_labels)
 
                 unannotated_images = unannotated_images.float().to(device) # (bsz, in_chan, H, W)
                 annotated_images = annotated_images.float().to(device)
                 unannotated_labels = unannotated_labels.float().to(device)
                 annotated_labels = annotated_labels.float().to(device)
-                # Only care about the binary label.
-                annotated_labels = (annotated_labels > 0.5).float()
-                unannotated_labels = (unannotated_labels > 0.5).float()
+
+                if label_is_binary:
+                    # Only care about the binary label.
+                    assert annotated_labels.max() in [0, 1]
+                    annotated_labels = (annotated_labels > 0.5).float()
+                    unannotated_labels = (unannotated_labels > 0.5).float()
+                else:
+                    annotated_labels = annotated_labels.float()
+                    unannotated_labels = unannotated_labels.float()
 
                 # Predict the warping field.
                 warp_predicted = warp_predictor(torch.cat([annotated_images, unannotated_images], dim=1))
@@ -405,42 +389,60 @@ def train(config, wandb_run=None):
                 images_U2A_A2U = warper(images_U2A, flow=warp_field_reverse)
                 labels_A2U = warper(annotated_labels, flow=warp_field_reverse)
 
-                # Compute Dice Coeff.
+                if label_is_binary:
+                    labels_A2U = (labels_A2U > 0.5).float()
+
+                # Compute metric.
+                if label_is_binary:
+                    metric_name = 'DSC'
+                    metric = dice_coeff
+                else:
+                    metric_name = 'L1'
+                    metric = l1
+
                 for i in range(len(labels_A2U)):
-                    val_dice_ref_list.append(
-                        dice_coeff((annotated_labels[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0),
-                                   (unannotated_labels[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0)))
-                    val_dice_seg_list.append(
-                        dice_coeff((labels_A2U[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0),
-                                   (unannotated_labels[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0)))
+                    val_metric_ref_list.append(
+                        metric((annotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                               (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
+                    val_metric_seg_list.append(
+                        metric((labels_A2U[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                               (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
+
 
                 if shall_plot:
-                    save_folder = os.path.join(config.output_save_root, model_name, 'DiffeoMappingNet')
                     save_path_fig_sbs = '%s/val/figure_log_epoch%s_sample%s.png' % (
-                        save_folder, str(epoch_idx).zfill(5), str(iter_idx).zfill(5))
-                    plot_side_by_side(save_path_fig_sbs, *numpy_variables(
-                        unannotated_images[0], annotated_images[0],
-                        images_U2A_A2U[0], images_U2A[0],
-                        unannotated_labels[0] > 0.5, annotated_labels[0] > 0.5,
-                        labels_A2U[0] > 0.5))
+                        config.output_save_path, str(epoch_idx).zfill(5), str(iter_idx).zfill(5))
+
+                    if label_is_binary:
+                        plot_side_by_side(save_path_fig_sbs, *numpy_variables(
+                            unannotated_images[0], annotated_images[0],
+                            images_U2A_A2U[0], images_U2A[0],
+                            unannotated_labels[0] > 0.5, annotated_labels[0] > 0.5,
+                            labels_A2U[0] > 0.5), 'IoU', IoU)
+                    else:
+                        plot_side_by_side(save_path_fig_sbs, *numpy_variables(
+                            unannotated_images[0], annotated_images[0],
+                            images_U2A_A2U[0], images_U2A[0],
+                            unannotated_labels[0], annotated_labels[0],
+                            labels_A2U[0]), 'L1', l1)
 
                 loss_forward = mse_loss(annotated_images, images_U2A)
                 loss_cyclic = mse_loss(unannotated_images, images_U2A_A2U)
                 loss = loss_forward + loss_cyclic
 
-                val_loss += loss.item()
-                val_loss_forward += loss_forward.item()
-                val_loss_cyclic += loss_cyclic.item()
+                val_loss += loss.item() * curr_batch_size
+                val_loss_forward += loss_forward.item() * curr_batch_size
+                val_loss_cyclic += loss_cyclic.item() * curr_batch_size
 
-        val_loss /= (iter_idx + 1)
-        val_loss_forward /= (iter_idx + 1)
-        val_loss_cyclic /= (iter_idx + 1)
+        val_loss /= len(val_loader.dataset)
+        val_loss_forward /= len(val_loader.dataset)
+        val_loss_cyclic /= len(val_loader.dataset)
 
-        log('Validation [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f, Dice coeff (ref): %.3f \u00B1 %.3f, Dice coeff (seg): %.3f \u00B1 %.3f.'
+        log('Validation [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f, %s (ref): %.3f \u00B1 %.3f, %s (seg): %.3f \u00B1 %.3f.'
             % (epoch_idx + 1, config.max_epochs, val_loss, val_loss_forward, val_loss_cyclic,
-               np.mean(val_dice_ref_list), np.std(val_dice_ref_list),
-               np.mean(val_dice_seg_list), np.std(val_dice_seg_list)),
-            filepath=config.log_dir,
+               metric_name, np.mean(val_metric_ref_list), np.std(val_metric_ref_list),
+               metric_name, np.mean(val_metric_seg_list), np.std(val_metric_seg_list)),
+            filepath=config.log_path,
             to_console=False)
 
         # if wandb_run is not None:
@@ -455,13 +457,13 @@ def train(config, wandb_run=None):
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             warp_predictor.save_weights(config.DiffeoMappingNet_model_save_path)
-            log('%s: Model weights successfully saved.' % config.model,
-                filepath=config.log_dir,
+            log('%s: Model weights successfully saved.' % config.DiffeoMappingNet_model,
+                filepath=config.log_path,
                 to_console=False)
 
         if early_stopper.step(val_loss):
             log('Early stopping criterion met. Ending training.',
-                filepath=config.log_dir,
+                filepath=config.log_path,
                 to_console=True)
             break
 
@@ -476,11 +478,11 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
 
     # Build the model
     try:
-        warp_predictor = globals()[config.model](num_filters=config.num_filters,
+        warp_predictor = globals()[config.DiffeoMappingNet_model](num_filters=config.num_filters,
                                                  in_channels=6,
                                                  out_channels=4)
     except:
-        raise ValueError('`config.model`: %s not supported.' % config.model)
+        raise ValueError('`config.DiffeoMappingNet_model`: %s not supported.' % config.DiffeoMappingNet_model)
 
     warp_predictor.load_weights(config.DiffeoMappingNet_model_save_path, device=device)
     warp_predictor = warp_predictor.to(device)
@@ -537,11 +539,19 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
         if shall_plot:
             save_path_fig_sbs = '%s/test/figure_log_sample%s.png' % (
                 config.save_folder, str(iter_idx).zfill(5))
-            plot_side_by_side(save_path_fig_sbs, *numpy_variables(
-                unannotated_images[0], annotated_images[0],
-                images_U2A_A2U[0], images_U2A[0],
-                unannotated_labels[0] > 0.5, annotated_labels[0] > 0.5,
-                labels_A2U[0] > 0.5))
+
+            if label_is_binary:
+                plot_side_by_side(save_path_fig_sbs, *numpy_variables(
+                    unannotated_images[0], annotated_images[0],
+                    images_U2A_A2U[0], images_U2A[0],
+                    unannotated_labels[0] > 0.5, annotated_labels[0] > 0.5,
+                    labels_A2U[0] > 0.5), 'IoU', IoU)
+            else:
+                plot_side_by_side(save_path_fig_sbs, *numpy_variables(
+                    unannotated_images[0], annotated_images[0],
+                    images_U2A_A2U[0], images_U2A[0],
+                    unannotated_labels[0], annotated_labels[0],
+                    labels_A2U[0]), 'L1', l1)
 
         loss_forward = mse_loss(annotated_images, images_U2A)
         loss_cyclic = mse_loss(unannotated_images, images_U2A_A2U)
@@ -559,7 +569,7 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
         % (test_loss, test_loss_forward, test_loss_cyclic,
            np.mean(test_dice_ref_list), np.std(test_dice_ref_list),
            np.mean(test_dice_seg_list), np.std(test_dice_seg_list)),
-        filepath=config.log_dir,
+        filepath=config.log_path,
         to_console=False)
 
     return
@@ -713,13 +723,6 @@ def infer(config, wandb_run=None):
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     _, _, _, test_set = prepare_dataset(config=config)
 
-    # Set all the paths.
-    # dataset_name = config.dataset_name.split('_')[-1]
-    # model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_{dataset_name}_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
-    # config.matched_pair_path_root = os.path.join(config.output_save_root, model_name)
-    # config.model_save_path = os.path.join(config.output_save_root, model_name, 'DiffeoMappingNet.ckpt')
-    # config.log_dir = os.path.join(config.log_folder, model_name) # This is log file path.
-    # save_folder = os.path.join(config.output_save_root, model_name, 'DiffeoMappingNet')
     pred_label_folder = os.path.join(config.output_save_root, model_name, 'pred_patches')
     # delete pred_label_folder
     if os.path.exists(pred_label_folder):
@@ -730,11 +733,11 @@ def infer(config, wandb_run=None):
 
     # Build the model
     try:
-        warp_predictor = globals()[config.model](num_filters=config.num_filters,
+        warp_predictor = globals()[config.DiffeoMappingNet_model](num_filters=config.num_filters,
                                                  in_channels=6,
                                                  out_channels=4)
     except:
-        raise ValueError('`config.model`: %s not supported.' % config.model)
+        raise ValueError('`config.DiffeoMappingNet_model`: %s not supported.' % config.DiffeoMappingNet_model)
 
     warp_predictor.load_weights(config.DiffeoMappingNet_model_save_path, device=device)
     warp_predictor = warp_predictor.to(device)
@@ -790,6 +793,7 @@ def infer(config, wandb_run=None):
         if shall_plot and test_labels is not None:
             save_path_fig_sbs = '%s/infer/figure_sample%s.png' % (
                 save_folder, str(iter_idx).zfill(5))
+
             plot_side_by_side(save_path_fig_sbs, *numpy_variables(
                 btest_images[0], bclosest_images[0],
                 images_U2A_A2U[0], images_U2A[0],
@@ -810,7 +814,7 @@ def infer(config, wandb_run=None):
     stitched_results = eval_stitched(stitched_folder, test_label_folder, organ=config.organ, dataset_name=dataset_name)
 
     for k, v in stitched_results.items():
-        log(F'[Eval] Stitched {k}: {v}', filepath=config.log_dir, to_console=True)
+        log(F'[Eval] Stitched {k}: {v}', filepath=config.log_path, to_console=True)
 
     # if wandb_run is not None:
     #     for k, v in stitched_results.items():
@@ -841,11 +845,11 @@ def infer(config, wandb_run=None):
 
         log('[Eval] Dice coeff (seg): %.3f \u00B1 %.3f.'
             % (np.mean(dice_list), np.std(dice_list)),
-            filepath=config.log_dir,
+            filepath=config.log_path,
             to_console=True)
         log('[Eval] IoU (seg): %.3f \u00B1 %.3f.'
             % (np.mean(iou_list), np.std(iou_list)),
-            filepath=config.log_dir,
+            filepath=config.log_path,
             to_console=True)
 
         # if wandb_run is not None:
