@@ -15,6 +15,9 @@ tools/_jupyter/.ipynb_checkpoints
 training
 validation
 testing
+bash/
+comparison/
+external_data/
 
 # Models
 **/*.pt
