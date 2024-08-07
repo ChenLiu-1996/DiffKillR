@@ -11,8 +11,12 @@ from matplotlib import pyplot as plt
 from functools import partial
 
 from model.autoencoder import AutoEncoder
-from model.unet import UNet
+# from model.unet import UNet
+
+from registration.unet import UNet
+from registration.voxelmorph import VxmDense as VoxelMorph
 from registration.spatial_transformer import SpatialTransformer as Warper
+
 from utils.attribute_hashmap import AttributeHashmap
 from utils.prepare_dataset import prepare_dataset
 from utils.log_util import log
@@ -45,13 +49,45 @@ def l1(im1, im2) -> float:
     '''
     Mean Absolute Error.
     '''
-    return np.linalg.norm((im1.flatten() - im2.flatten()), ord=1)
+    vec1 = im1.flatten()
+    vec2 = im2.flatten()
+    return np.linalg.norm((vec1 - vec2), ord=1) / len(vec1)
+
+def direction_from_gradient(gradient_image: np.array, thr: float = 0) -> float:
+    '''
+    Find the main axis direction from a gradient image.
+    '''
+    # Compute the gradient.
+    if gradient_image.shape[-1] == 1:
+        gradient_image = gradient_image.squeeze()
+    gradient_x, gradient_y = np.gradient(gradient_image)
+
+    # Mask out the zero values.
+    mask = gradient_image > thr
+    gradient_x = np.where(mask, gradient_x, 0)
+    gradient_y = np.where(mask, gradient_y, 0)
+
+    # Calculate the gradient direction.
+    gradient_direction = np.arctan2(gradient_y, gradient_x)
+    # Calculate the average direction.
+    avg_direction = np.arctan2(np.mean(np.sin(gradient_direction[mask])), np.mean(np.cos(gradient_direction[mask])))
+    # Convert the average direction from radians to degrees.
+    avg_direction_degrees = np.degrees(avg_direction)
+
+    return avg_direction_degrees
+
+def angular_diff(im1, im2) -> float:
+    direction1_deg = direction_from_gradient(im1, thr=-0.8)
+    direction2_deg = direction_from_gradient(im2, thr=-0.8)
+    difference = np.abs(direction1_deg - direction2_deg)
+    difference = np.where(difference > 180, 360 - difference, difference)
+    return difference
 
 def plot_side_by_side(save_path,
                       im_U, im_A,
                       im_U2A_A2U, im_U2A,
                       ma_U, ma_A, ma_A2U,
-                      metric_name, metric):
+                      metric_name_list, metric_list):
     plt.rcParams['font.family'] = 'serif'
     fig_sbs = plt.figure(figsize=(20, 8))
 
@@ -90,8 +126,11 @@ def plot_side_by_side(save_path,
     ax.set_title('Projected label (A->U)')
     ax.set_axis_off()
 
-    fig_sbs.suptitle('%s (label(U), label(A)) = %.3f, %s (label(U), label(A->U)) = %.3f' % (
-        metric_name, metric(ma_U, ma_A), metric_name, metric(ma_U, ma_A2U)), fontsize=15)
+    metric_str = ''
+    for metric_name, metric in zip(metric_name_list, metric_list):
+        metric_str += '%s (label(U), label(A)) = %.3f, %s (label(U), label(A->U)) = %.3f\n' % (
+        metric_name, metric(ma_U, ma_A), metric_name, metric(ma_U, ma_A2U))
+    fig_sbs.suptitle(metric_str, fontsize=15)
     fig_sbs.tight_layout()
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     fig_sbs.savefig(save_path)
@@ -149,7 +188,7 @@ def predict_flipping_rotation(image_fixed: torch.Tensor, image_moving: torch.Ten
     transform_arr_reverse = np.array(transform_reverse_list)
 
     # Use cross correlation to decide which transformed image is the best match.
-    best_transform_indices = cross_corr.argmax(0)
+    best_transform_indices = cross_corr.argmax(0).cpu().numpy()
 
     flip_rot_transform_forward = transform_arr_forward[best_transform_indices]
     flip_rot_transform_reverse = transform_arr_reverse[best_transform_indices]
@@ -172,12 +211,18 @@ def train(config, wandb_run=None):
     dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
 
     # Build the model
-    try:
-        warp_predictor = globals()[config.DiffeoMappingNet_model](
+    if config.DiffeoMappingNet_model == 'UNet':
+        warp_predictor = UNet(
             num_filters=config.num_filters,
             in_channels=6,
             out_channels=4)
-    except:
+    elif config.DiffeoMappingNet_model == 'VoxelMorph':
+        warp_predictor = VoxelMorph(
+            inshape=(32, 32),
+            src_feats=3,
+            trg_feats=3,
+            bidir=True)
+    else:
         raise ValueError('`config.DiffeoMappingNet_model`: %s not supported.' % config.DiffeoMappingNet_model)
 
     warp_predictor = warp_predictor.to(device)
@@ -195,8 +240,9 @@ def train(config, wandb_run=None):
 
     best_val_loss = np.inf
     for epoch_idx in tqdm(range(config.max_epochs)):
+        dataset.set_deterministic(False)
         train_loss, train_loss_forward, train_loss_cyclic = 0, 0, 0
-        train_metric_ref_list, train_metric_seg_list = [], []
+        train_metric_ref_dict, train_metric_fliprot_dict, train_metric_ours_dict = {}, {}, {}
 
         warp_predictor.train()
         plot_freq = int(len(train_loader) // config.n_plot_per_epoch)
@@ -241,44 +287,45 @@ def train(config, wandb_run=None):
                 annotated_labels = annotated_labels.float()
                 unannotated_labels = unannotated_labels.float()
 
-            # # Predict flipping and rotation
-            # flip_rot_transform_forward, flip_rot_transform_reverse = predict_flipping_rotation(unannotated_images, annotated_images)
+            # Predict flipping and rotation, and apply correction.
+            flip_rot_transform_forward, _ = predict_flipping_rotation(unannotated_images, annotated_images)
+            annotated_images_fliprot = apply_flipping_rotation(flip_rot_transform_forward, annotated_images)
+            annotated_labels_fliprot = apply_flipping_rotation(flip_rot_transform_forward, annotated_labels)
 
-            # # Apply flipping and rotation
-            # annotated_images_flip_rot = apply_flipping_rotation(flip_rot_transform_forward, annotated_images)
-            # annotated_labels_flip_rot = apply_flipping_rotation(flip_rot_transform_forward, annotated_images)
-
-            # Predict the warping field.
-            warp_predicted = warp_predictor(torch.cat([annotated_images, unannotated_images], dim=1))
-            warp_field_forward = warp_predicted[:, :2, ...]
-            warp_field_reverse = warp_predicted[:, 2:, ...]
+            warp_field_forward, warp_field_reverse = warp_predictor(source=unannotated_images, target=annotated_images_fliprot)
 
             # Apply the warping field.
             images_U2A = warper(unannotated_images, flow=warp_field_forward)
             images_U2A_A2U = warper(images_U2A, flow=warp_field_reverse)
-            labels_A2U = warper(annotated_labels, flow=warp_field_reverse)
-            # print(labels_A2U.shape, unannotated_labels.shape, annotated_labels.shape)
-            # print('check a few labels_A2U:', labels_A2U[0, ...], unannotated_labels[0, ...], annotated_labels[0, ...])
-
-            import pdb; pdb.set_trace()
+            labels_A2U = warper(annotated_labels_fliprot, flow=warp_field_reverse)
 
             if label_is_binary:
                 labels_A2U = (labels_A2U > 0.5).float()
 
             # Compute metric.
             if label_is_binary:
-                metric_name = 'DSC'
-                metric = dice_coeff
+                metric_name_list = ['DSC', 'IOU']
+                metric_list = [dice_coeff, IoU]
             else:
-                metric_name = 'L1'
-                metric = l1
+                metric_name_list = ['L1', 'AngularDiff']
+                metric_list = [l1, angular_diff]
+
             for i in range(len(labels_A2U)):
-                train_metric_ref_list.append(
-                    metric((annotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
-                           (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
-                train_metric_seg_list.append(
-                    metric((labels_A2U[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
-                           (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
+                for metric_name, metric in zip(metric_name_list, metric_list):
+                    if metric_name not in train_metric_ref_dict.keys():
+                        train_metric_ref_dict[metric_name] = []
+                        train_metric_fliprot_dict[metric_name] = []
+                        train_metric_ours_dict[metric_name] = []
+
+                    train_metric_ref_dict[metric_name].append(
+                        metric((annotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                            (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
+                    train_metric_fliprot_dict[metric_name].append(
+                        metric((annotated_labels_fliprot[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                            (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
+                    train_metric_ours_dict[metric_name].append(
+                        metric((labels_A2U[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                            (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
 
             if shall_plot:
                 save_path_fig_sbs = '%s/train/figure_log_epoch%s_sample%s.png' % (
@@ -289,13 +336,13 @@ def train(config, wandb_run=None):
                         unannotated_images[0], annotated_images[0],
                         images_U2A_A2U[0], images_U2A[0],
                         unannotated_labels[0] > 0.5, annotated_labels[0] > 0.5,
-                        labels_A2U[0] > 0.5), 'DSC', dice_coeff)
+                        labels_A2U[0] > 0.5), metric_name_list, metric_list)
                 else:
                     plot_side_by_side(save_path_fig_sbs, *numpy_variables(
                         unannotated_images[0], annotated_images[0],
                         images_U2A_A2U[0], images_U2A[0],
                         unannotated_labels[0], annotated_labels[0],
-                        labels_A2U[0]), 'L1', l1)
+                        labels_A2U[0]), metric_name_list, metric_list)
 
             loss_forward = mse_loss(annotated_images, images_U2A)
             loss_cyclic = mse_loss(unannotated_images, images_U2A_A2U)
@@ -315,10 +362,17 @@ def train(config, wandb_run=None):
 
         lr_scheduler.step()
 
-        log('Train [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f, %s (ref): %.3f \u00B1 %.3f, %s (seg): %.3f \u00B1 %.3f.'
-            % (epoch_idx + 1, config.max_epochs, train_loss, train_loss_forward, train_loss_cyclic,
-               metric_name, np.mean(train_metric_ref_list), np.std(train_metric_ref_list),
-               metric_name, np.mean(train_metric_seg_list), np.std(train_metric_seg_list)),
+        log_str = 'Train [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f. ' % (
+            epoch_idx + 1, config.max_epochs, train_loss, train_loss_forward, train_loss_cyclic)
+
+        for metric_name in metric_name_list:
+            log_str += '%s (ref): %.3f \u00B1 %.3f, %s (flip+rot): %.3f \u00B1 %.3f, %s (ours): %.3f \u00B1 %.3f. ' % (
+                metric_name, np.mean(train_metric_ref_dict[metric_name]), np.std(train_metric_ref_dict[metric_name]),
+                metric_name, np.mean(train_metric_fliprot_dict[metric_name]), np.std(train_metric_fliprot_dict[metric_name]),
+                metric_name, np.mean(train_metric_ours_dict[metric_name]), np.std(train_metric_ours_dict[metric_name]),
+            )
+
+        log(log_str,
             filepath=config.log_path,
             to_console=False)
 
@@ -332,10 +386,11 @@ def train(config, wandb_run=None):
         #                    'train/dice_seg_std': np.std(train_dice_seg_list)})
 
         # Validation.
+        dataset.set_deterministic(True)
         warp_predictor.eval()
         with torch.no_grad():
             val_loss, val_loss_forward, val_loss_cyclic = 0, 0, 0
-            val_metric_ref_list, val_metric_seg_list = [], []
+            val_metric_ref_dict, val_metric_fliprot_dict, val_metric_ours_dict = {}, {}, {}
 
             plot_freq = int(len(val_loader) // config.n_plot_per_epoch)
             for iter_idx, (_, _, image_n_view, label_n_view, _, _) in enumerate(tqdm(val_loader)):
@@ -344,20 +399,12 @@ def train(config, wandb_run=None):
                 curr_batch_size = image_n_view.shape[0]
                 shall_plot = iter_idx % plot_freq == plot_freq - 1
 
-                if not config.strong:
-                    # Weak mapping: map within the same cell (one augmented version to another).
-                    unannotated_images = image_n_view[:, 0, ...]
-                    unannotated_labels = label_n_view[:, 0, ...]
-                    annotated_images = image_n_view[:, 1, ...]
-                    annotated_labels = label_n_view[:, 1, ...]
-
-                else:
-                    # Strong mapping: map across different cells.
-                    permuted_idx = np.random.permutation(len(image_n_view))
-                    unannotated_images = image_n_view[:, 0, ...]
-                    unannotated_labels = label_n_view[:, 0, ...]
-                    annotated_images = image_n_view[permuted_idx][:, 1, ...]
-                    annotated_labels = label_n_view[permuted_idx][:, 1, ...]
+                # Strong or Weak mapping only relevant to training.
+                # For val and test we always use the same cell.
+                unannotated_images = image_n_view[:, 0, ...]
+                unannotated_labels = label_n_view[:, 0, ...]
+                annotated_images = image_n_view[:, 1, ...]
+                annotated_labels = label_n_view[:, 1, ...]
 
                 if len(unannotated_labels.shape) == 3:
                     unannotated_labels = unannotated_labels[:, None, ...]
@@ -379,34 +426,45 @@ def train(config, wandb_run=None):
                     annotated_labels = annotated_labels.float()
                     unannotated_labels = unannotated_labels.float()
 
-                # Predict the warping field.
-                warp_predicted = warp_predictor(torch.cat([annotated_images, unannotated_images], dim=1))
-                warp_field_forward = warp_predicted[:, :2, ...]
-                warp_field_reverse = warp_predicted[:, 2:, ...]
+                # Predict flipping and rotation, and apply correction.
+                flip_rot_transform_forward, _ = predict_flipping_rotation(unannotated_images, annotated_images)
+                annotated_images_fliprot = apply_flipping_rotation(flip_rot_transform_forward, annotated_images)
+                annotated_labels_fliprot = apply_flipping_rotation(flip_rot_transform_forward, annotated_labels)
+
+                warp_field_forward, warp_field_reverse = warp_predictor(source=unannotated_images, target=annotated_images_fliprot)
 
                 # Apply the warping field.
                 images_U2A = warper(unannotated_images, flow=warp_field_forward)
                 images_U2A_A2U = warper(images_U2A, flow=warp_field_reverse)
-                labels_A2U = warper(annotated_labels, flow=warp_field_reverse)
+                labels_A2U = warper(annotated_labels_fliprot, flow=warp_field_reverse)
 
                 if label_is_binary:
                     labels_A2U = (labels_A2U > 0.5).float()
 
                 # Compute metric.
                 if label_is_binary:
-                    metric_name = 'DSC'
-                    metric = dice_coeff
+                    metric_name_list = ['DSC', 'IOU']
+                    metric_list = [dice_coeff, IoU]
                 else:
-                    metric_name = 'L1'
-                    metric = l1
+                    metric_name_list = ['L1', 'AngularDiff']
+                    metric_list = [l1, angular_diff]
 
                 for i in range(len(labels_A2U)):
-                    val_metric_ref_list.append(
-                        metric((annotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
-                               (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
-                    val_metric_seg_list.append(
-                        metric((labels_A2U[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
-                               (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
+                    for metric_name, metric in zip(metric_name_list, metric_list):
+                        if metric_name not in val_metric_ref_dict.keys():
+                            val_metric_ref_dict[metric_name] = []
+                            val_metric_fliprot_dict[metric_name] = []
+                            val_metric_ours_dict[metric_name] = []
+
+                        val_metric_ref_dict[metric_name].append(
+                            metric((annotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                                   (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
+                        val_metric_fliprot_dict[metric_name].append(
+                            metric((annotated_labels_fliprot[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                                   (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
+                        val_metric_ours_dict[metric_name].append(
+                            metric((labels_A2U[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                                   (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
 
 
                 if shall_plot:
@@ -418,13 +476,13 @@ def train(config, wandb_run=None):
                             unannotated_images[0], annotated_images[0],
                             images_U2A_A2U[0], images_U2A[0],
                             unannotated_labels[0] > 0.5, annotated_labels[0] > 0.5,
-                            labels_A2U[0] > 0.5), 'IoU', IoU)
+                            labels_A2U[0] > 0.5), metric_name_list, metric_list)
                     else:
                         plot_side_by_side(save_path_fig_sbs, *numpy_variables(
                             unannotated_images[0], annotated_images[0],
                             images_U2A_A2U[0], images_U2A[0],
                             unannotated_labels[0], annotated_labels[0],
-                            labels_A2U[0]), 'L1', l1)
+                            labels_A2U[0]), metric_name_list, metric_list)
 
                 loss_forward = mse_loss(annotated_images, images_U2A)
                 loss_cyclic = mse_loss(unannotated_images, images_U2A_A2U)
@@ -438,10 +496,17 @@ def train(config, wandb_run=None):
         val_loss_forward /= len(val_loader.dataset)
         val_loss_cyclic /= len(val_loader.dataset)
 
-        log('Validation [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f, %s (ref): %.3f \u00B1 %.3f, %s (seg): %.3f \u00B1 %.3f.'
-            % (epoch_idx + 1, config.max_epochs, val_loss, val_loss_forward, val_loss_cyclic,
-               metric_name, np.mean(val_metric_ref_list), np.std(val_metric_ref_list),
-               metric_name, np.mean(val_metric_seg_list), np.std(val_metric_seg_list)),
+        log_str = 'Validation [%s/%s] loss: %.3f, forward: %.3f, cyclic: %.3f. ' % (
+            epoch_idx + 1, config.max_epochs, val_loss, val_loss_forward, val_loss_cyclic)
+
+        for metric_name in metric_name_list:
+            log_str += '%s (ref): %.3f \u00B1 %.3f, %s (flip+rot): %.3f \u00B1 %.3f, %s (ours): %.3f \u00B1 %.3f. ' % (
+                metric_name, np.mean(val_metric_ref_dict[metric_name]), np.std(val_metric_ref_dict[metric_name]),
+                metric_name, np.mean(val_metric_fliprot_dict[metric_name]), np.std(val_metric_fliprot_dict[metric_name]),
+                metric_name, np.mean(val_metric_ours_dict[metric_name]), np.std(val_metric_ours_dict[metric_name]),
+            )
+
+        log(log_str,
             filepath=config.log_path,
             to_console=False)
 
@@ -476,12 +541,21 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     _, _, _, test_set = prepare_dataset(config=config)
 
+    dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
+
     # Build the model
-    try:
-        warp_predictor = globals()[config.DiffeoMappingNet_model](num_filters=config.num_filters,
-                                                 in_channels=6,
-                                                 out_channels=4)
-    except:
+    if config.DiffeoMappingNet_model == 'UNet':
+        warp_predictor = UNet(
+            num_filters=config.num_filters,
+            in_channels=6,
+            out_channels=4)
+    elif config.DiffeoMappingNet_model == 'VoxelMorph':
+        warp_predictor = VoxelMorph(
+            inshape=(32, 32),
+            src_feats=3,
+            trg_feats=3,
+            bidir=True)
+    else:
         raise ValueError('`config.DiffeoMappingNet_model`: %s not supported.' % config.DiffeoMappingNet_model)
 
     warp_predictor.load_weights(config.DiffeoMappingNet_model_save_path, device=device)
@@ -492,83 +566,143 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
 
     mse_loss = torch.nn.MSELoss()
 
-    test_loss, test_loss_forward, test_loss_cyclic = 0, 0, 0
-    test_dice_ref_list, test_dice_seg_list = [], []
-
+    dataset.set_deterministic(True)
     warp_predictor.eval()
     if n_plot_per_epoch is not None:
         plot_freq = int(len(test_set) // n_plot_per_epoch)
     else:
         plot_freq = 1
 
-    for iter_idx, (unannotated_images, unannotated_labels, annotated_images, annotated_labels, _, _) in enumerate(tqdm(test_set)):
+    test_loss, test_loss_forward, test_loss_cyclic = 0, 0, 0
+    test_metric_ref_dict, test_metric_fliprot_dict, test_metric_ours_dict = {}, {}, {}
+
+    plot_freq = int(len(test_loader) // config.n_plot_per_epoch)
+    for iter_idx, (_, _, image_n_view, label_n_view, _, _) in enumerate(tqdm(test_loader)):
+
+        assert image_n_view.shape[1] == 2
+        curr_batch_size = image_n_view.shape[0]
         shall_plot = iter_idx % plot_freq == plot_freq - 1
+
+        # Strong or Weak mapping only relevant to training.
+        # For val and test we always use the same cell.
+        unannotated_images = image_n_view[:, 0, ...]
+        unannotated_labels = label_n_view[:, 0, ...]
+        annotated_images = image_n_view[:, 1, ...]
+        annotated_labels = label_n_view[:, 1, ...]
 
         if len(unannotated_labels.shape) == 3:
             unannotated_labels = unannotated_labels[:, None, ...]
         if len(annotated_labels.shape) == 3:
             annotated_labels = annotated_labels[:, None, ...]
+        label_is_binary = not torch.is_floating_point(annotated_labels)
 
         unannotated_images = unannotated_images.float().to(device) # (bsz, in_chan, H, W)
         annotated_images = annotated_images.float().to(device)
         unannotated_labels = unannotated_labels.float().to(device)
         annotated_labels = annotated_labels.float().to(device)
-        # Only care about the binary label.
-        annotated_labels = (annotated_labels > 0.5).float()
-        unannotated_labels = (unannotated_labels > 0.5).float()
 
-        # Predict the warping field.
-        warp_predicted = warp_predictor(torch.cat([annotated_images, unannotated_images], dim=1))
-        warp_field_forward = warp_predicted[:, :2, ...]
-        warp_field_reverse = warp_predicted[:, 2:, ...]
+        if label_is_binary:
+            # Only care about the binary label.
+            assert annotated_labels.max() in [0, 1]
+            annotated_labels = (annotated_labels > 0.5).float()
+            unannotated_labels = (unannotated_labels > 0.5).float()
+        else:
+            annotated_labels = annotated_labels.float()
+            unannotated_labels = unannotated_labels.float()
+
+        # Predict flipping and rotation, and apply correction.
+        flip_rot_transform_forward, _ = predict_flipping_rotation(unannotated_images, annotated_images)
+        annotated_images_fliprot = apply_flipping_rotation(flip_rot_transform_forward, annotated_images)
+        annotated_labels_fliprot = apply_flipping_rotation(flip_rot_transform_forward, annotated_labels)
+
+        # # Predict flipping and rotation
+        # flip_rot_transform_forward, _ = predict_flipping_rotation(unannotated_images,
+        #                                                           annotated_images)
+
+        # # Apply flipping and rotation
+        # annotated_images = apply_flipping_rotation(flip_rot_transform_forward, annotated_images)
+        # annotated_labels = apply_flipping_rotation(flip_rot_transform_forward, annotated_labels)
+
+        # # Predict the warping field.
+        # warp_predicted = warp_predictor(torch.cat([annotated_images, unannotated_images], dim=1))
+        # warp_field_forward = warp_predicted[:, :2, ...]
+        # warp_field_reverse = warp_predicted[:, 2:, ...]
+
+        warp_field_forward, warp_field_reverse = warp_predictor(source=unannotated_images, target=annotated_images_fliprot)
 
         # Apply the warping field.
         images_U2A = warper(unannotated_images, flow=warp_field_forward)
         images_U2A_A2U = warper(images_U2A, flow=warp_field_reverse)
-        labels_A2U = warper(annotated_labels, flow=warp_field_reverse)
+        labels_A2U = warper(annotated_labels_fliprot, flow=warp_field_reverse)
 
-        # Compute Dice Coeff.
+        if label_is_binary:
+            labels_A2U = (labels_A2U > 0.5).float()
+
+        # Compute metric.
+        if label_is_binary:
+            metric_name_list = ['DSC', 'IOU']
+            metric_list = [dice_coeff, IoU]
+        else:
+            metric_name_list = ['L1', 'AngularDiff']
+            metric_list = [l1, angular_diff]
+
         for i in range(len(labels_A2U)):
-            test_dice_ref_list.append(
-                dice_coeff((annotated_labels[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0),
-                           (unannotated_labels[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0)))
-            test_dice_seg_list.append(
-                dice_coeff((labels_A2U[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0),
-                           (unannotated_labels[i, ...] > 0.5).cpu().detach().numpy().transpose(1, 2, 0)))
+            for metric_name, metric in zip(metric_name_list, metric_list):
+                if metric_name not in test_metric_ref_dict.keys():
+                    test_metric_ref_dict[metric_name] = []
+                    test_metric_fliprot_dict[metric_name] = []
+                    test_metric_ours_dict[metric_name] = []
+
+                test_metric_ref_dict[metric_name].append(
+                    metric((annotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                           (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
+                test_metric_fliprot_dict[metric_name].append(
+                    metric((annotated_labels_fliprot[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                           (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
+                test_metric_ours_dict[metric_name].append(
+                    metric((labels_A2U[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
+                           (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
 
         if shall_plot:
             save_path_fig_sbs = '%s/test/figure_log_sample%s.png' % (
-                config.save_folder, str(iter_idx).zfill(5))
+                config.output_save_path, str(iter_idx).zfill(5))
 
             if label_is_binary:
                 plot_side_by_side(save_path_fig_sbs, *numpy_variables(
                     unannotated_images[0], annotated_images[0],
                     images_U2A_A2U[0], images_U2A[0],
                     unannotated_labels[0] > 0.5, annotated_labels[0] > 0.5,
-                    labels_A2U[0] > 0.5), 'IoU', IoU)
+                    labels_A2U[0] > 0.5), metric_name_list, metric_list)
             else:
                 plot_side_by_side(save_path_fig_sbs, *numpy_variables(
                     unannotated_images[0], annotated_images[0],
                     images_U2A_A2U[0], images_U2A[0],
                     unannotated_labels[0], annotated_labels[0],
-                    labels_A2U[0]), 'L1', l1)
+                    labels_A2U[0]), metric_name_list, metric_list)
 
         loss_forward = mse_loss(annotated_images, images_U2A)
         loss_cyclic = mse_loss(unannotated_images, images_U2A_A2U)
-
         loss = loss_forward + loss_cyclic
-        test_loss += loss.item()
-        test_loss_forward += loss_forward.item()
-        test_loss_cyclic += loss_cyclic.item()
 
-    test_loss /= (iter_idx + 1)
-    test_loss_forward /= (iter_idx + 1)
-    test_loss_cyclic /= (iter_idx + 1)
+        test_loss += loss.item() * curr_batch_size
+        test_loss_forward += loss_forward.item() * curr_batch_size
+        test_loss_cyclic += loss_cyclic.item() * curr_batch_size
 
-    log('Test loss: %.3f, forward: %.3f, cyclic: %.3f, Dice coeff (ref): %.3f \u00B1 %.3f, Dice coeff (seg): %.3f \u00B1 %.3f.'
-        % (test_loss, test_loss_forward, test_loss_cyclic,
-           np.mean(test_dice_ref_list), np.std(test_dice_ref_list),
-           np.mean(test_dice_seg_list), np.std(test_dice_seg_list)),
+    test_loss /= len(test_loader.dataset)
+    test_loss_forward /= len(test_loader.dataset)
+    test_loss_cyclic /= len(test_loader.dataset)
+
+    log_str = 'Test loss: %.3f, forward: %.3f, cyclic: %.3f. ' % (
+        test_loss, test_loss_forward, test_loss_cyclic)
+
+    for metric_name in metric_name_list:
+        log_str += '%s (ref): %.3f \u00B1 %.3f, %s (flip+rot): %.3f \u00B1 %.3f, %s (ours): %.3f \u00B1 %.3f. ' % (
+            metric_name, np.mean(test_metric_ref_dict[metric_name]), np.std(test_metric_ref_dict[metric_name]),
+            metric_name, np.mean(test_metric_fliprot_dict[metric_name]), np.std(test_metric_fliprot_dict[metric_name]),
+            metric_name, np.mean(test_metric_ours_dict[metric_name]), np.std(test_metric_ours_dict[metric_name]),
+        )
+
+    log(log_str,
         filepath=config.log_path,
         to_console=False)
 
@@ -732,11 +866,18 @@ def infer(config, wandb_run=None):
         os.makedirs(pred_label_folder)
 
     # Build the model
-    try:
-        warp_predictor = globals()[config.DiffeoMappingNet_model](num_filters=config.num_filters,
-                                                 in_channels=6,
-                                                 out_channels=4)
-    except:
+    if config.DiffeoMappingNet_model == 'UNet':
+        warp_predictor = UNet(
+            num_filters=config.num_filters,
+            in_channels=6,
+            out_channels=4)
+    elif config.DiffeoMappingNet_model == 'VoxelMorph':
+        warp_predictor = VoxelMorph(
+            inshape=(32, 32),
+            src_feats=3,
+            trg_feats=3,
+            bidir=True)
+    else:
         raise ValueError('`config.DiffeoMappingNet_model`: %s not supported.' % config.DiffeoMappingNet_model)
 
     warp_predictor.load_weights(config.DiffeoMappingNet_model_save_path, device=device)
@@ -843,11 +984,11 @@ def infer(config, wandb_run=None):
                 IoU((np.expand_dims(test_labels[i], 0) > 0.5).transpose(1, 2, 0),
                         (pred_label_list[i] > 0.5).transpose(1, 2, 0)))
 
-        log('[Eval] Dice coeff (seg): %.3f \u00B1 %.3f.'
+        log('[Eval] Dice coeff (ours): %.3f \u00B1 %.3f.'
             % (np.mean(dice_list), np.std(dice_list)),
             filepath=config.log_path,
             to_console=True)
-        log('[Eval] IoU (seg): %.3f \u00B1 %.3f.'
+        log('[Eval] IoU (ours): %.3f \u00B1 %.3f.'
             % (np.mean(iou_list), np.std(iou_list)),
             filepath=config.log_path,
             to_console=True)
@@ -893,7 +1034,7 @@ if __name__ == '__main__':
     parser.add_argument('--patience', default=50, type=int)
     parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
     parser.add_argument('--max-epochs', default=50, type=int)
-    parser.add_argument('--batch-size', default=8, type=int)
+    parser.add_argument('--batch-size', default=16, type=int)
     parser.add_argument('--num-filters', default=32, type=int)
     parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
     parser.add_argument('--n-plot-per-epoch', default=2, type=int)
@@ -908,17 +1049,18 @@ if __name__ == '__main__':
         if type(getattr(config, key)) == str and '$ROOT' in getattr(config, key):
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
-    model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}_depth-{config.depth}_latentLoss-{config.latent_loss}_seed{config.random_seed}'
-    config.DiffeoInvariantNet_model_save_path = os.path.join(config.model_save_folder, model_name, 'DiffeoInvariantNet.ckpt')
-    config.DiffeoMappingNet_model_save_path = os.path.join(config.model_save_folder, model_name, 'DiffeoMappingNet.ckpt')
+    model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
+    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_seed{config.random_seed}'
+    DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_strong-{config.strong}_seed{config.random_seed}'
+    config.DiffeoInvariantNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoInvariantNet_str + '.ckpt')
+    config.DiffeoMappingNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoMappingNet_str + '.ckpt')
 
-    config.output_save_path = os.path.join(config.output_save_folder, model_name, 'DiffeoMappingNet', '')
-    config.log_path = os.path.join(config.output_save_folder, model_name, 'DiffeoMappingNet_log.txt')
+    config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, '')
+    config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, 'log.txt')
 
     # `config.n_views` set to 2 for DiffeoMappingNet training.
     config.n_views = 2
 
-    print(config)
     seed_everything(config.random_seed)
 
     # wandb_run = None
@@ -942,11 +1084,10 @@ if __name__ == '__main__':
         log(log_str, filepath=config.log_path, to_console=True)
 
         train(config=config)
-        #test(config=config)
-        infer(config=config)
+        test(config=config)
+        # infer(config=config)
     elif config.mode == 'test':
-        pass
-        #test(config=config)
+        test(config=config)
     elif config.mode == 'infer':
         infer(config=config)
 

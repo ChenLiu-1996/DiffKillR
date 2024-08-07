@@ -7,6 +7,7 @@ from datasets.augmented_MoNuSeg import AugmentedMoNuSegDataset
 from datasets.augmented_GLySAC import AugmentedGLySACDataset
 from utils.split import split_dataset
 from utils.attribute_hashmap import AttributeHashmap
+from utils.extend import ExtendedDataset
 
 
 def prepare_dataset(config: AttributeHashmap):
@@ -48,6 +49,13 @@ def prepare_dataset(config: AttributeHashmap):
     ratios = tuple([c / sum(ratios) for c in ratios])
     train_set, val_set, test_set = split_dataset(
         dataset=dataset, splits=ratios, random_seed=config.random_seed)
+
+    if len(train_set) < 50 * config.batch_size:
+        train_set = ExtendedDataset(train_set, desired_len=50 * config.batch_size)
+    if len(val_set) < config.batch_size:
+        val_set = ExtendedDataset(val_set, desired_len=2 * config.batch_size)
+    if len(test_set) < config.batch_size:
+        test_set = ExtendedDataset(test_set, desired_len=2 * config.batch_size)
 
     train_loader = DataLoader(dataset=train_set,
                               batch_size=config.batch_size,
