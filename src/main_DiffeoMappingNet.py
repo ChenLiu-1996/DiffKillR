@@ -1021,7 +1021,7 @@ if __name__ == '__main__':
     parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
     parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
 
-    parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
+    # parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
     parser.add_argument('--DiffeoMappingNet-model', default='UNet', type=str)
     parser.add_argument('--dataset-name', default='A28+axis', type=str)
     parser.add_argument('--percentage', default=100, type=float)
@@ -1050,11 +1050,8 @@ if __name__ == '__main__':
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
-    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_seed{config.random_seed}'
     DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_strong-{config.strong}_seed{config.random_seed}'
-    config.DiffeoInvariantNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoInvariantNet_str + '.ckpt')
     config.DiffeoMappingNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoMappingNet_str + '.ckpt')
-
     config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, '')
     config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, 'log.txt')
 

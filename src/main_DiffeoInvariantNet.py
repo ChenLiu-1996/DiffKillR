@@ -38,12 +38,12 @@ def train(config, wandb_run=None):
 
     # Build the model
     try:
-        model = globals()[config.model](num_filters=config.num_filters,
-                                        depth=config.depth,
-                                        in_channels=3,
-                                        out_channels=3)
+        model = globals()[config.DiffeoInvariantNet_model](num_filters=config.num_filters,
+                                                           depth=config.depth,
+                                                           in_channels=3,
+                                                           out_channels=3)
     except:
-        raise ValueError('`config.model`: %s not supported.' % config.model)
+        raise ValueError('`config.DiffeoInvariantNet_model`: %s not supported.' % config.DiffeoInvariantNet_model)
 
     model = model.to(device)
 
@@ -99,21 +99,23 @@ def train(config, wandb_run=None):
 
             latent_loss = None
             if config.latent_loss == 'supcontrast' or config.latent_loss == 'SimCLR':
-                _, latent_features = model(image_n_view) # (batch_size * n_views, latent_dim)
+                _, latent_features = model(image_n_view) # (batch_size * n_views, C_dim, H_dim, W_dim)
                 latent_features = latent_features.contiguous().view(batch_size, config.n_views, -1) # (batch_size, n_views, latent_dim)
 
                 # Both `labels` and `mask` are None, perform SimCLR unsupervised loss:
                 latent_loss = supcontrast_loss(features=latent_features)
 
             elif config.latent_loss == 'triplet':
-                raise NotImplementedError
 
-                pos_features = pos_features.contiguous().view(batch_size, config.num_pos, -1) # (batch_size, num_pos, latent_dim)
-                neg_features = neg_features.contiguous().view(batch_size, config.num_neg, -1) # (batch_size, num_neg, latent_dim)
+                _, anchor_features = model(images) # (batch_size, C_dim, H_dim, W_dim)
+                _, other_features = model(image_n_view) # (batch_size * n_views, C_dim, H_dim, W_dim)
 
-                latent_loss = triplet_loss(anchor=latent_features,
-                                           positive=pos_features,
-                                           negative=neg_features)
+                anchor_features = anchor_features.contiguous().view(batch_size, -1) # (batch_size, latent_dim)
+                pos_neg_features = other_features.contiguous().view(batch_size, config.num_pos + config.num_neg, -1)
+                pos_features = pos_neg_features[:, :config.num_pos, :] # (batch_size, num_pos, latent_dim)
+                neg_features = pos_neg_features[:, config.num_pos:, :] # (batch_size, num_neg, latent_dim)
+
+                latent_loss = triplet_loss(anchor=anchor_features, positive=pos_features, negative=neg_features)
 
             else:
                 raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
@@ -172,13 +174,15 @@ def train(config, wandb_run=None):
                     latent_loss = supcontrast_loss(features=latent_features)
 
                 elif config.latent_loss == 'triplet':
-                    raise NotImplementedError
-                    pos_features = pos_features.contiguous().view(batch_size, config.num_pos, -1) # (batch_size, num_pos, latent_dim)
-                    neg_features = neg_features.contiguous().view(batch_size, config.num_neg, -1) # (batch_size, num_neg, latent_dim)
+                    _, anchor_features = model(images) # (batch_size, C_dim, H_dim, W_dim)
+                    _, other_features = model(image_n_view) # (batch_size * n_views, C_dim, H_dim, W_dim)
 
-                    latent_loss = triplet_loss(anchor=latent_features,
-                                            positive=pos_features,
-                                            negative=neg_features)
+                    anchor_features = anchor_features.contiguous().view(batch_size, -1) # (batch_size, latent_dim)
+                    pos_neg_features = other_features.contiguous().view(batch_size, config.num_pos + config.num_neg, -1)
+                    pos_features = pos_neg_features[:, :config.num_pos, :] # (batch_size, num_pos, latent_dim)
+                    neg_features = pos_neg_features[:, config.num_pos:, :] # (batch_size, num_neg, latent_dim)
+
+                    latent_loss = triplet_loss(anchor=anchor_features, positive=pos_features, negative=neg_features)
                 else:
                     raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
 
@@ -201,8 +205,8 @@ def train(config, wandb_run=None):
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            model.save_weights(config.model_save_path)
-            log('%s: Model weights successfully saved.' % config.model,
+            model.save_weights(config.DiffeoInvariantNet_model_save_path)
+            log('%s: Model weights successfully saved.' % config.DiffeoInvariantNet_model,
                 filepath=config.log_path,
                 to_console=True)
 
@@ -215,103 +219,6 @@ def train(config, wandb_run=None):
     return
 
 @torch.no_grad()
-def generate_train_pairs(config):
-    '''
-        Generate training pairs for DiffeoMappingNet model.
-        Given the trained DiffeoInvariantNet model, generate pairs of images from the training/val/test set.
-        Generate pairing, match augmented images to its non-mother anchor.
-        The anchor bank: training images from the original images.
-    '''
-    device = torch.device(
-        'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    dataset, train_set, val_set, test_set = prepare_dataset(config=config)
-
-    # Build the model
-    try:
-        model = globals()[config.model](num_filters=config.num_filters,
-                                        in_channels=3,
-                                        out_channels=3)
-    except:
-        raise ValueError('`config.model`: %s not supported.' % config.model)
-    model = model.to(device)
-
-    # Set all paths.
-    model.load_weights(config.model_save_path, device=device)
-    log('%s: Model weights successfully loaded.' % config.model,
-        to_console=True)
-    os.makedirs(config.output_save_path, exist_ok=True)
-
-    loader_map = {
-        'train': train_set,
-        'val': val_set,
-        'test': test_set,
-    }
-    for k, loader in loader_map.items():
-        log(f'Generating {k} embeddings pairs ...')
-
-        # Generate embeddings.
-        to_be_matched_embeddings = []
-        to_be_matched_paths = []
-        bank_embeddings = []
-        bank_paths = []
-        pairing_save_path = os.path.join(config.output_save_path, f'{k}_pairs.csv')
-
-        for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(loader):
-            images = images.float().to(device)  # [batch_size, C, H, W]
-
-            # [batch_size, n_views, C, H, W] -> [batch_size * n_views, C, H, W]
-            image_n_view = image_n_view.reshape(-1, image_n_view.shape[-3], image_n_view.shape[-2], image_n_view.shape[-1])
-            image_n_view = image_n_view.float().to(device)
-
-            _, latent_features = model(images)
-            latent_features = torch.flatten(latent_features, start_dim=1)
-            latent_features = latent_features.cpu().numpy()
-            for i in range(len(latent_features)):
-                if 'original' in img_paths[i]:
-                    bank_embeddings.append(latent_features[i])
-                    bank_paths.append(img_paths[i])
-                else:
-                    to_be_matched_embeddings.append(latent_features[i])
-                    to_be_matched_paths.append(img_paths[i])
-
-        to_be_matched_embeddings = np.stack(to_be_matched_embeddings, axis=0) # (N1, latent_dim)
-        bank_embeddings = np.stack(bank_embeddings, axis=0) # (N2, latent_dim)
-        log(f'[{k}]Bank: {bank_embeddings.shape}, \
-            To be matched: {to_be_matched_embeddings.shape}', to_console=True)
-
-        # Generate pairing, match augmented images to its non-mother anchor
-        dist_matrix = sklearn.metrics.pairwise_distances(to_be_matched_embeddings,
-                                            bank_embeddings,
-                                            metric='cosine') # [N1, N2]
-        closest_img_paths = []
-        closest_dists = []
-        for i in range(len(to_be_matched_embeddings)):
-            patch_id = dataset.get_patch_id(to_be_matched_paths[i])
-            mother = dataset.patch_id_to_canonical_pose_path[patch_id]
-            sorted_idx = np.argsort(dist_matrix[i])
-            # remove mother index from sorted_idx
-            if mother in bank_paths: # mother may not be in the same split
-                mother_index = bank_paths.index(mother)
-                sorted_idx = sorted_idx[sorted_idx != mother_index]
-
-            # select the closest non-mother index
-            closest_index = sorted_idx[0]
-            closest_img_paths.append(bank_paths[closest_index])
-            closest_dists.append(dist_matrix[i, closest_index]) # NOTE: this is wrong, but not affecting the result.
-
-        results_df = pd.DataFrame({
-            'test_image_path': to_be_matched_paths,
-            'closest_image_path': closest_img_paths,
-            'distance': closest_dists,
-            'source': ['original'] * len(to_be_matched_paths),
-        })
-        results_df.to_csv(pairing_save_path, index=False)
-        log(f'[{k}] Pairing saved to {pairing_save_path}', to_console=True)
-
-    return
-
-
-@torch.no_grad()
 def test(config):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
@@ -319,25 +226,25 @@ def test(config):
 
     # Build the model
     try:
-        model = globals()[config.model](num_filters=config.num_filters,
-                                        in_channels=3,
-                                        out_channels=3)
+        model = globals()[config.DiffeoInvariantNet_model](num_filters=config.num_filters,
+                                                           in_channels=3,
+                                                           out_channels=3)
     except:
-        raise ValueError('`config.model`: %s not supported.' % config.model)
+        raise ValueError('`config.DiffeoInvariantNet_model`: %s not supported.' % config.DiffeoInvariantNet_model)
     model = model.to(device)
 
     os.makedirs(config.output_save_path, exist_ok=True)
     save_path_fig_embeddings_inst = '%s/embeddings_inst.png' % config.output_save_path
     save_path_fig_reconstructed = '%s/reconstructed.png' % config.output_save_path
 
-    model.load_weights(config.model_save_path, device=device)
-    log('%s: Model weights successfully loaded.' % config.model,
+    model.load_weights(config.DiffeoInvariantNet_model_save_path, device=device)
+    log('%s: Model weights successfully loaded.' % config.DiffeoInvariantNet_model,
         to_console=True)
 
     if config.latent_loss in ['SimCLR']:
-        supcontrast_loss = SupConLoss(temperature=config.temp,
-                                        base_temperature=config.base_temp,
-                                        contrastive_mode=config.contrastive_mode)
+        contrastive_loss = SupConLoss(temperature=config.temp,
+                                      base_temperature=config.base_temp,
+                                      contrastive_mode=config.contrastive_mode)
     elif config.latent_loss == 'triplet':
         triplet_loss = TripletLoss(distance_measure='cosine',
                                    margin=config.margin,
@@ -371,16 +278,19 @@ def test(config):
                 latent_features = latent_features.contiguous().view(batch_size, config.n_views, -1) # (batch_size, n_views, latent_dim)
 
                 # Both `labels` and `mask` are None, perform SimCLR unsupervised loss:
-                latent_loss = supcontrast_loss(features=latent_features)
+                latent_loss = contrastive_loss(features=latent_features)
+
             elif config.latent_loss == 'triplet':
-                _, latent_features = model(image_n_view) # (batch_size * n_views, latent_dim)
+                _, anchor_features = model(images) # (batch_size, C_dim, H_dim, W_dim)
+                _, other_features = model(image_n_view) # (batch_size * n_views, C_dim, H_dim, W_dim)
 
-                pos_features = pos_features.contiguous().view(batch_size, config.num_pos, -1) # (batch_size, num_pos, latent_dim)
-                neg_features = neg_features.contiguous().view(batch_size, config.num_neg, -1) # (batch_size, num_neg, latent_dim)
+                anchor_features = anchor_features.contiguous().view(batch_size, -1) # (batch_size, latent_dim)
+                pos_neg_features = other_features.contiguous().view(batch_size, config.num_pos + config.num_neg, -1)
+                pos_features = pos_neg_features[:, :config.num_pos, :] # (batch_size, num_pos, latent_dim)
+                neg_features = pos_neg_features[:, config.num_pos:, :] # (batch_size, num_neg, latent_dim)
 
-                latent_loss = triplet_loss(anchor=latent_features,
-                                           positive=pos_features,
-                                           negative=neg_features)
+                latent_loss = triplet_loss(anchor=anchor_features, positive=pos_features, negative=neg_features)
+
             else:
                 raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
 
@@ -488,162 +398,162 @@ def test(config):
 
     return
 
-def infer(config):
-    '''
-        Inference mode. Given test image patch folder, load the model and
-        pair the test images with closest images in anchor bank.
-        The anchor patch bank: training images from the original or augmented images.
-        !TODO: we may only want to use the original images for the anchor bank,
-        !TODO: since the augmented images are not real instances. and the DiffeoMappingNet
-        !TODO: model is trained on the warping aug to original images.
-        Output: a csv file with the following columns:
-            - test_image_path
-            - closest_image_path
-            - distance
-            - source (original or augmented)
-    '''
-    # Step 1: Load the model & generate embeddings for images in anchor bank.
+# def infer(config):
+#     '''
+#         Inference mode. Given test image patch folder, load the model and
+#         pair the test images with closest images in anchor bank.
+#         The anchor patch bank: training images from the original or augmented images.
+#         !TODO: we may only want to use the original images for the anchor bank,
+#         !TODO: since the augmented images are not real instances. and the DiffeoMappingNet
+#         !TODO: model is trained on the warping aug to original images.
+#         Output: a csv file with the following columns:
+#             - test_image_path
+#             - closest_image_path
+#             - distance
+#             - source (original or augmented)
+#     '''
+#     # Step 1: Load the model & generate embeddings for images in anchor bank.
 
-    # Load anchor bank data
-    device = torch.device(
-        'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    aug_lists = config.aug_methods.split(',')
-    if config.dataset_name == 'MoNuSeg':
-        dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,
-                                            base_path=config.dataset_path,
-                                            target_dim=config.target_dim)
-    elif config.dataset_name == 'GLySAC':
-        dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists,
-                                         base_path=config.dataset_path,
-                                         target_dim=config.target_dim)
-    else:
-        raise ValueError('`dataset_name`: %s not supported.' % config.dataset_name)
+#     # Load anchor bank data
+#     device = torch.device(
+#         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+#     aug_lists = config.aug_methods.split(',')
+#     if config.dataset_name == 'MoNuSeg':
+#         dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,
+#                                             base_path=config.dataset_path,
+#                                             target_dim=config.target_dim)
+#     elif config.dataset_name == 'GLySAC':
+#         dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists,
+#                                          base_path=config.dataset_path,
+#                                          target_dim=config.target_dim)
+#     else:
+#         raise ValueError('`dataset_name`: %s not supported.' % config.dataset_name)
 
-    dataloader = DataLoader(dataset=dataset,
-                            batch_size=config.batch_size,
-                            shuffle=False,
-                            num_workers=config.num_workers)
+#     dataloader = DataLoader(dataset=dataset,
+#                             batch_size=config.batch_size,
+#                             shuffle=False,
+#                             num_workers=config.num_workers)
 
-    # Build the model
-    try:
-        model = globals()[config.model](num_filters=config.num_filters,
-                                        in_channels=3,
-                                        out_channels=3)
-    except:
-        raise ValueError('`config.model`: %s not supported.' % config.model)
-    model = model.to(device)
-    model.load_weights(config.model_save_path, device=device)
-    log('%s: Model weights successfully loaded.' % config.model,
-        to_console=True)
+#     # Build the model
+#     try:
+#         model = globals()[config.DiffeoInvariantNet_model](num_filters=config.num_filters,
+#                                                            in_channels=3,
+#                                                            out_channels=3)
+#     except:
+#         raise ValueError('`config.DiffeoInvariantNet_model`: %s not supported.' % config.DiffeoInvariantNet_model)
+#     model = model.to(device)
+#     model.load_weights(config.DiffeoInvariantNet_model_save_path, device=device)
+#     log('%s: Model weights successfully loaded.' % config.DiffeoInvariantNet_model,
+#         to_console=True)
 
-    # Generate embeddings for anchor bank
-    log('Generating embeddings for anchor bank. Total images: %d' % len(dataset),
-        to_console=True)
-    anchor_bank = {
-        'embeddings': [],
-        'img_paths': [],
-        'sources': [],
-    }
-    log('Inferring ...', to_console=True)
+#     # Generate embeddings for anchor bank
+#     log('Generating embeddings for anchor bank. Total images: %d' % len(dataset),
+#         to_console=True)
+#     anchor_bank = {
+#         'embeddings': [],
+#         'img_paths': [],
+#         'sources': [],
+#     }
+#     log('Inferring ...', to_console=True)
 
-    model.eval()
-    config.anchor_only = False # !FIXME: add as param
-    with torch.no_grad():
-        for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(dataloader):
-            images = images.float().to(device)
-            _, latent_features = model(images)
-            latent_features = torch.flatten(latent_features, start_dim=1)
-            #print('latent_features.shape: ', latent_features.shape) # (batch_size, latent_dim)
+#     model.eval()
+#     config.anchor_only = False # !FIXME: add as param
+#     with torch.no_grad():
+#         for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(dataloader):
+#             images = images.float().to(device)
+#             _, latent_features = model(images)
+#             latent_features = torch.flatten(latent_features, start_dim=1)
+#             #print('latent_features.shape: ', latent_features.shape) # (batch_size, latent_dim)
 
-            for i in range(len(latent_features)):
-                if config.anchor_only:
-                    if 'original' in img_paths[i]:
-                        anchor_bank['embeddings'].append(latent_features[i].cpu().numpy())
-                        anchor_bank['img_paths'].append(img_paths[i])
-                        anchor_bank['sources'].append('original')
-                else:
-                    anchor_bank['embeddings'].append(latent_features[i].cpu().numpy())
-                    anchor_bank['img_paths'].append(img_paths[i])
-                    anchor_bank['sources'].append('original' if 'original' in img_paths[i] else 'augmented')
+#             for i in range(len(latent_features)):
+#                 if config.anchor_only:
+#                     if 'original' in img_paths[i]:
+#                         anchor_bank['embeddings'].append(latent_features[i].cpu().numpy())
+#                         anchor_bank['img_paths'].append(img_paths[i])
+#                         anchor_bank['sources'].append('original')
+#                 else:
+#                     anchor_bank['embeddings'].append(latent_features[i].cpu().numpy())
+#                     anchor_bank['img_paths'].append(img_paths[i])
+#                     anchor_bank['sources'].append('original' if 'original' in img_paths[i] else 'augmented')
 
-    anchor_bank['embeddings'] = np.concatenate([anchor_bank['embeddings']], axis=0) # (N, latent_dim)
-    print('anchor_bank[embeddings].shape: ', anchor_bank['embeddings'].shape)
-    print('len(anchor_bank[img_paths]): ', len(anchor_bank['img_paths']))
-    print('len(anchor_bank[sources]): ', len(anchor_bank['sources']))
-    assert anchor_bank['embeddings'].shape[0] == len(anchor_bank['img_paths']) == len(anchor_bank['sources'])
-    log(f'Anchor bank embeddings generated. shape:{anchor_bank["embeddings"].shape}', to_console=True)
+#     anchor_bank['embeddings'] = np.concatenate([anchor_bank['embeddings']], axis=0) # (N, latent_dim)
+#     print('anchor_bank[embeddings].shape: ', anchor_bank['embeddings'].shape)
+#     print('len(anchor_bank[img_paths]): ', len(anchor_bank['img_paths']))
+#     print('len(anchor_bank[sources]): ', len(anchor_bank['sources']))
+#     assert anchor_bank['embeddings'].shape[0] == len(anchor_bank['img_paths']) == len(anchor_bank['sources'])
+#     log(f'Anchor bank embeddings generated. shape:{anchor_bank["embeddings"].shape}', to_console=True)
 
-    # Step 2: Generate embeddings for test images.
-    test_img_folder = os.path.join(config.test_folder, 'image')
-    test_img_files = sorted(glob(os.path.join(test_img_folder, '*.png')))
-    # Filter out on organ type
-    if config.dataset_name == 'MoNuSeg':
-        from preprocessing.Metas import Organ2FileID
-        file_ids = Organ2FileID[config.organ]['test']
-    elif config.dataset_name == 'GLySAC':
-        from preprocessing.Metas import GLySAC_Organ2FileID
-        file_ids = GLySAC_Organ2FileID[config.organ]['test']
+#     # Step 2: Generate embeddings for test images.
+#     test_img_folder = os.path.join(config.test_folder, 'image')
+#     test_img_files = sorted(glob(os.path.join(test_img_folder, '*.png')))
+#     # Filter out on organ type
+#     if config.dataset_name == 'MoNuSeg':
+#         from preprocessing.Metas import Organ2FileID
+#         file_ids = Organ2FileID[config.organ]['test']
+#     elif config.dataset_name == 'GLySAC':
+#         from preprocessing.Metas import GLySAC_Organ2FileID
+#         file_ids = GLySAC_Organ2FileID[config.organ]['test']
 
-    test_img_files = [x for x in test_img_files if any([f'{file_id}' in x for file_id in file_ids])]
+#     test_img_files = [x for x in test_img_files if any([f'{file_id}' in x for file_id in file_ids])]
 
-    print('test_img_folder: ', test_img_folder)
-    test_img_bank = {
-        'embeddings': [],
-    }
-    test_images = [torch.Tensor(load_image(img_path, config.target_dim)) for img_path in test_img_files]
-    test_images = torch.stack(test_images, dim=0) # (N, in_chan, H, W)
-    log(f'Done loading test images, shape: {test_images.shape}', to_console=True)
+#     print('test_img_folder: ', test_img_folder)
+#     test_img_bank = {
+#         'embeddings': [],
+#     }
+#     test_images = [torch.Tensor(load_image(img_path, config.target_dim)) for img_path in test_img_files]
+#     test_images = torch.stack(test_images, dim=0) # (N, in_chan, H, W)
+#     log(f'Done loading test images, shape: {test_images.shape}', to_console=True)
 
-    test_dataset = torch.utils.data.TensorDataset(test_images)
-    test_loader = DataLoader(dataset=test_dataset,
-                             batch_size=config.batch_size,
-                             shuffle=False, # No shuffle since we're using the indices
-                             num_workers=config.num_workers)
+#     test_dataset = torch.utils.data.TensorDataset(test_images)
+#     test_loader = DataLoader(dataset=test_dataset,
+#                              batch_size=config.batch_size,
+#                              shuffle=False, # No shuffle since we're using the indices
+#                              num_workers=config.num_workers)
 
-    with torch.no_grad():
-        for iter_idx, (images,) in enumerate(test_loader):
-            images = images.float().to(device)
-            _, latent_features = model(images)
-            latent_features = torch.flatten(latent_features, start_dim=1)
-            test_img_bank['embeddings'].extend([latent_features.cpu().numpy()])
+#     with torch.no_grad():
+#         for iter_idx, (images,) in enumerate(test_loader):
+#             images = images.float().to(device)
+#             _, latent_features = model(images)
+#             latent_features = torch.flatten(latent_features, start_dim=1)
+#             test_img_bank['embeddings'].extend([latent_features.cpu().numpy()])
 
-    test_img_bank['embeddings'] = np.concatenate(test_img_bank['embeddings'], axis=0) # (N, latent_dim)
-    log(f"test_img_bank[embeddings].shape: {test_img_bank['embeddings'].shape}", to_console=True)
-    log('Done generating embeddings for test images.', to_console=True)
+#     test_img_bank['embeddings'] = np.concatenate(test_img_bank['embeddings'], axis=0) # (N, latent_dim)
+#     log(f"test_img_bank[embeddings].shape: {test_img_bank['embeddings'].shape}", to_console=True)
+#     log('Done generating embeddings for test images.', to_console=True)
 
-    # Step 3: Pair the test images with closest images in anchor bank.
-    if config.latent_loss == 'triplet':
-        distance_measure = 'cosine'
-    elif config.latent_loss == 'SimCLR':
-        distance_measure = 'cosine'
-    else:
-        raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
+#     # Step 3: Pair the test images with closest images in anchor bank.
+#     if config.latent_loss == 'triplet':
+#         distance_measure = 'cosine'
+#     elif config.latent_loss == 'SimCLR':
+#         distance_measure = 'cosine'
+#     else:
+#         raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
 
-    log('Computing pairwise distances...', to_console=True)
-    print('test_img_bank[embeddings].shape: ', test_img_bank['embeddings'].shape)
-    print('anchor_bank[embeddings].shape: ', anchor_bank['embeddings'].shape)
-    dist_matrix = sklearn.metrics.pairwise_distances(test_img_bank['embeddings'],
-                                        anchor_bank['embeddings'],
-                                        metric=distance_measure) # [N, M]
-    closest_anchor_idxs = list(np.argmin(dist_matrix, axis=1, keepdims=False)) # [N]
-    closest_img_paths = [anchor_bank['img_paths'][idx] for idx in closest_anchor_idxs] # [N]
+#     log('Computing pairwise distances...', to_console=True)
+#     print('test_img_bank[embeddings].shape: ', test_img_bank['embeddings'].shape)
+#     print('anchor_bank[embeddings].shape: ', anchor_bank['embeddings'].shape)
+#     dist_matrix = sklearn.metrics.pairwise_distances(test_img_bank['embeddings'],
+#                                         anchor_bank['embeddings'],
+#                                         metric=distance_measure) # [N, M]
+#     closest_anchor_idxs = list(np.argmin(dist_matrix, axis=1, keepdims=False)) # [N]
+#     closest_img_paths = [anchor_bank['img_paths'][idx] for idx in closest_anchor_idxs] # [N]
 
-    # Step 4: Save the results to a csv file.
-    results_df = pd.DataFrame({
-        'test_image_path': test_img_files,
-        'closest_image_path': closest_img_paths,
-        'distance': np.min(dist_matrix, axis=1, keepdims=False),
-        'source': [anchor_bank['sources'][idx] for idx in closest_anchor_idxs],
-    })
+#     # Step 4: Save the results to a csv file.
+#     results_df = pd.DataFrame({
+#         'test_image_path': test_img_files,
+#         'closest_image_path': closest_img_paths,
+#         'distance': np.min(dist_matrix, axis=1, keepdims=False),
+#         'source': [anchor_bank['sources'][idx] for idx in closest_anchor_idxs],
+#     })
 
-    # overwriting the previous results
-    if os.path.exists(os.path.join(config.output_save_path, 'infer_pairs.csv')):
-        os.remove(os.path.join(config.output_save_path, 'infer_pairs.csv'))
-    results_df.to_csv(os.path.join(config.output_save_path, 'infer_pairs.csv'), index=False)
+#     # overwriting the previous results
+#     if os.path.exists(os.path.join(config.output_save_path, 'infer_pairs.csv')):
+#         os.remove(os.path.join(config.output_save_path, 'infer_pairs.csv'))
+#     results_df.to_csv(os.path.join(config.output_save_path, 'infer_pairs.csv'), index=False)
 
-    print('Results saved to: ', os.path.join(config.output_save_path, 'infer_pairs.csv'))
+#     print('Results saved to: ', os.path.join(config.output_save_path, 'infer_pairs.csv'))
 
-    return
+#     return
 
 
 if __name__ == '__main__':
@@ -659,15 +569,16 @@ if __name__ == '__main__':
     parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
     parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
 
-    parser.add_argument('--model', default='AutoEncoder', type=str)
+    parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
     parser.add_argument('--dataset-name', default='A28+axis', type=str)
     parser.add_argument('--percentage', default=100, type=float)
     parser.add_argument('--organ', default=None, type=str)
 
-    parser.add_argument('--depth', default=4, type=int)
-    parser.add_argument('--latent-loss', default='SimCLR', type=str)
     parser.add_argument('--learning-rate', default=1e-3, type=float)
     parser.add_argument('--patience', default=50, type=int)
+    parser.add_argument('--depth', default=4, type=int)
+    parser.add_argument('--latent-loss', default='SimCLR', type=str)
+    parser.add_argument('--margin', default=0.2, type=float, help='Only relevant if latent-loss is `triplet`.')
     parser.add_argument('--temp', default=1.0, type=float)
     parser.add_argument('--base-temp', default=1.0, type=float)
     parser.add_argument('--n-views', default=2, type=int)
@@ -683,6 +594,11 @@ if __name__ == '__main__':
     config = parser.parse_args()
     assert config.mode in ['train', 'test', 'infer']
 
+    # handle edge cases.
+    if config.latent_loss == 'triplet':
+        config.n_views = config.num_pos + config.num_neg
+        print('Setting `n_views` as `num_pos` + `num_neg` since we are using Triplet loss.')
+
     # fix path issues
     ROOT = '/'.join(
         os.path.dirname(os.path.abspath(__file__)).split('/')[:-1])
@@ -690,10 +606,11 @@ if __name__ == '__main__':
         if type(getattr(config, key)) == str and '$ROOT' in getattr(config, key):
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
-    model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}_depth-{config.depth}_latentLoss-{config.latent_loss}_seed{config.random_seed}'
-    config.model_save_path = os.path.join(config.model_save_folder, model_name, 'DiffeoInvariantNet.ckpt')
-    config.output_save_path = os.path.join(config.output_save_folder, model_name, 'DiffeoInvariantNet', '')
-    config.log_path = os.path.join(config.output_save_folder, model_name, 'DiffeoInvariantNet_log.txt')
+    model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
+    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_seed{config.random_seed}'
+    config.DiffeoInvariantNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoInvariantNet_str + '.ckpt')
+    config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str, '')
+    config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str + 'log.txt')
 
     print(config)
 
@@ -712,7 +629,6 @@ if __name__ == '__main__':
     elif config.mode == 'test':
         test(config=config)
     elif config.mode == 'infer':
-        generate_train_pairs(config=config)
         infer(config=config)
 
     print('Done.\n')
