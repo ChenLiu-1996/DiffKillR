@@ -130,7 +130,8 @@ def load_match_pairs(matched_pair_path_root: str, mode: str, config):
 def train(config: OmegaConf, wandb_run=None):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    
+    # if torch.backends.mps.is_available():
+    #     device = "mps"
     # Set all the paths.
     dataset_name = config.dataset_name.split('_')[-1]
     model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_{dataset_name}_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
@@ -369,6 +370,8 @@ def train(config: OmegaConf, wandb_run=None):
 def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    # if torch.backends.mps.is_available():
+    #     device = "mps"
     _, _, _, test_set = prepare_dataset(config=config)
 
     # Build the model
@@ -576,7 +579,7 @@ def eval_stitched(pred_folder, true_folder, organ='Colon', dataset_name='MoNuSeg
         true_mask = cv2.imread(true_mask_path, cv2.IMREAD_GRAYSCALE)
         assert pred_mask.shape == true_mask.shape
 
-        metric = metrics.compute_metrics(pred_mask, true_mask, ['p_F1', 'aji', 'iou'])
+        metric = metrics.compute_metrics(pred_mask, true_mask, ['iou','p_F1', 'aji'])
         metric_list.append(metric)
 
     eval_results = {}
@@ -608,6 +611,8 @@ def infer(config, wandb_run=None):
     # NOTE: maybe we can even train on fly, for each pair.
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    # if torch.backends.mps.is_available():
+    #     device = "mps"
     _, _, _, test_set = prepare_dataset(config=config)
 
     # Set all the paths.

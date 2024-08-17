@@ -36,6 +36,9 @@ class SupConLoss(nn.Module):
         device = (torch.device('cuda')
                   if features.is_cuda
                   else torch.device('cpu'))
+        # check MPS is available or not
+        if torch.backends.mps.is_available():
+            device = "mps"
 
         if len(features.shape) < 3:
             raise ValueError('`features` needs to be [bsz, n_views, ...],'

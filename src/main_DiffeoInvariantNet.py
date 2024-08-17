@@ -416,6 +416,11 @@ def test(config):
 
         log(f'Done constructing instance adjacency ({instance_adj.shape}) matrices.', to_console=True)
 
+        # TODO: [to Danqi, from Chen]
+        # I have not checked your latest logic for computing the
+        # class vs. instance acc and top-k. Please fix as needed.
+        # Note that I would suggest keeping a few different values of `k`.
+
         ins_clustering_acc[split] = clustering_accuracy(embeddings[split],
                                                         embeddings['train'],
                                                         embedding_patch_id_int[split],

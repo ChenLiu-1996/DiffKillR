@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import skimage.feature
 import skimage.segmentation
+from skimage import io, exposure, filters, morphology
 
 
 def detect_nuclei(img: np.array, return_overlay: bool = False):
@@ -9,6 +10,12 @@ def detect_nuclei(img: np.array, return_overlay: bool = False):
         # (H, W, 1) to (H, W, 3)
         img = np.repeat(img, 3, axis=-1)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # # Apply adaptive histogram equalization for better contrast
+    # gray = exposure.equalize_adapthist(gray)
+
+    # # Apply Gaussian blur to reduce noise
+    # gray = cv2.GaussianBlur(gray, (5, 5), 0)
 
     # Pad white the image to avoid border effects
     gray = cv2.copyMakeBorder(gray, 5, 5, 5, 5, cv2.BORDER_CONSTANT, value=[255, 255, 255])
@@ -22,6 +29,7 @@ def detect_nuclei(img: np.array, return_overlay: bool = False):
 
     params.minThreshold = 5
     params.maxThreshold = 220
+    params.thresholdStep = 2
 
     # params.filterByArea = True
     params.minArea = 150
@@ -31,7 +39,7 @@ def detect_nuclei(img: np.array, return_overlay: bool = False):
     # params.filterByConvexity = False
     # params.filterByInertia = False
     params.minConvexity = 0.8 #0.9499
-    params.minDistBetweenBlobs = 1
+    params.minDistBetweenBlobs = 0.5
 
     # # Create a detector with the parameters
     # detector = cv2.SimpleBlobDetector_create(params)
@@ -85,7 +93,7 @@ from Metas import Organ2FileID
 from matplotlib import pyplot as plt
 
 if __name__ == '__main__':
-    organ = 'Breast'
+    organ = 'Colon'
     print('Organ:', organ)
     file_ids = Organ2FileID[organ]['test']
 
@@ -94,7 +102,7 @@ if __name__ == '__main__':
     image_list = [cv2.cvtColor(cv2.imread(image_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB) for image_path in img_path_list]
     mask_list = [cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE) for mask_path in mask_path_list]
 
-    test_patch_folder = os.path.join('/gpfs/gibbs/pi/krishnaswamy_smita/dl2282/CellSeg/data/MoNuSeg2018TestData_patch_32x32', 'label')
+    test_patch_folder = os.path.join('../../data/MoNuSeg2018TestData_patch_32x32', 'label')
     test_patch_files = sorted(glob(os.path.join(test_patch_folder, '*.png')))
 
     n = len(image_list)

@@ -83,22 +83,30 @@ class AutoEncoder(BaseNetwork):
 
         for d in range(self.depth):
             x = self.down_list[d](x)
+            #print(x.shape)
             x = self.non_linearity(self.down_conn_list[d](x))
+            #print(x.shape)
             x = nn.functional.interpolate(x,
                                           scale_factor=0.5,
                                           mode='bilinear',
                                           align_corners=False)
+            #print(x.shape)
 
         x = self.bottleneck(x)
         latent = torch.clone(x)
+        #print('latent: ', x.shape)
 
         for d in range(self.depth):
             x = nn.functional.interpolate(x,
                                           scale_factor=2,
                                           mode='bilinear',
                                           align_corners=False)
+            #print(x.shape)
             x = self.non_linearity(self.up_conn_list[d](x))
+            #print(x.shape)
+
             x = self.up_list[d](x)
+            #print(x.shape)
 
         output = self.out_layer(x)
 
