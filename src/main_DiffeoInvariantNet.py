@@ -108,14 +108,18 @@ def train(config, wandb_run=None):
                 latent_loss = supcontrast_loss(features=latent_features)
 
             elif config.latent_loss == 'triplet':
+                # For triplet loss, `n_views` is set to be `num_pos` + `num_neg`.
 
                 _, anchor_features = model(images) # (batch_size, C_dim, H_dim, W_dim)
                 _, other_features = model(image_n_view) # (batch_size * n_views, C_dim, H_dim, W_dim)
 
                 anchor_features = anchor_features.contiguous().view(batch_size, -1) # (batch_size, latent_dim)
-                pos_neg_features = other_features.contiguous().view(batch_size, config.num_pos + config.num_neg, -1)
+                pos_neg_features = other_features.contiguous().view(batch_size, config.num_pos + config.num_neg, -1) # (batch_size, n_views, latent_dim)
                 pos_features = pos_neg_features[:, :config.num_pos, :] # (batch_size, num_pos, latent_dim)
                 neg_features = pos_neg_features[:, config.num_pos:, :] # (batch_size, num_neg, latent_dim)
+                # Permute the neg features along batch to make them negative samples.
+                permuted_idx = np.random.permutation(len(neg_features))
+                neg_features = neg_features[permuted_idx, ...]
 
                 latent_loss = triplet_loss(anchor=anchor_features, positive=pos_features, negative=neg_features)
 
@@ -181,9 +185,12 @@ def train(config, wandb_run=None):
                     _, other_features = model(image_n_view) # (batch_size * n_views, C_dim, H_dim, W_dim)
 
                     anchor_features = anchor_features.contiguous().view(batch_size, -1) # (batch_size, latent_dim)
-                    pos_neg_features = other_features.contiguous().view(batch_size, config.num_pos + config.num_neg, -1)
+                    pos_neg_features = other_features.contiguous().view(batch_size, config.num_pos + config.num_neg, -1) # (batch_size, n_views, latent_dim)
                     pos_features = pos_neg_features[:, :config.num_pos, :] # (batch_size, num_pos, latent_dim)
                     neg_features = pos_neg_features[:, config.num_pos:, :] # (batch_size, num_neg, latent_dim)
+                    # Permute the neg features along batch to make them negative samples.
+                    permuted_idx = np.random.permutation(len(neg_features))
+                    neg_features = neg_features[permuted_idx, ...]
 
                     latent_loss = triplet_loss(anchor=anchor_features, positive=pos_features, negative=neg_features)
                 else:
@@ -289,9 +296,12 @@ def test(config):
                 _, other_features = model(image_n_view) # (batch_size * n_views, C_dim, H_dim, W_dim)
 
                 anchor_features = anchor_features.contiguous().view(batch_size, -1) # (batch_size, latent_dim)
-                pos_neg_features = other_features.contiguous().view(batch_size, config.num_pos + config.num_neg, -1)
+                pos_neg_features = other_features.contiguous().view(batch_size, config.num_pos + config.num_neg, -1) # (batch_size, n_views, latent_dim)
                 pos_features = pos_neg_features[:, :config.num_pos, :] # (batch_size, num_pos, latent_dim)
                 neg_features = pos_neg_features[:, config.num_pos:, :] # (batch_size, num_neg, latent_dim)
+                # Permute the neg features along batch to make them negative samples.
+                permuted_idx = np.random.permutation(len(neg_features))
+                neg_features = neg_features[permuted_idx, ...]
 
                 latent_loss = triplet_loss(anchor=anchor_features, positive=pos_features, negative=neg_features)
 
@@ -339,11 +349,12 @@ def test(config):
             shuffle=False)
 
         for split, split_set in zip(['train', 'val', 'test'], [train_loader_no_shuffle, val_loader, test_loader]):
-            # Repeat for 5 random augmentations.
+            # NOTE (quite arbitrary): Repeat for 5 random augmentations.
             for _ in range(5):
                 for iter_idx, (images, _, _, _, canonical_images, _) in enumerate(split_set):
-                    # Limit the computation.
-                    if iter_idx > 400:
+                    # NOTE (quite arbitrary): Limit the computation.
+                    batch_size = images.shape[0]
+                    if iter_idx * batch_size > 400:
                         break
 
                     images = images.float().to(device)  # [batch_size, C, H, W]
@@ -387,7 +398,7 @@ def test(config):
 
     # Quantify latent embedding quality.
     ins_clustering_acc = {}
-    ins_topk_acc, ins_mAP = {}, {}
+    ins_top1_acc, ins_top3_acc, ins_top5_acc, ins_mAP = {}, {}, {}, {}
 
     for split in ['train', 'val', 'test']:
         if config.latent_loss == 'triplet':
@@ -412,17 +423,29 @@ def test(config):
                                                         distance_measure=distance_measure,
                                                         voting_k=1)
 
-        ins_topk_acc[split] = topk_accuracy(embeddings[split],
+        ins_top1_acc[split] = topk_accuracy(embeddings[split],
+                                            instance_adj,
+                                            distance_measure=distance_measure,
+                                            k=1)
+
+        ins_top3_acc[split] = topk_accuracy(embeddings[split],
                                             instance_adj,
                                             distance_measure=distance_measure,
                                             k=3)
+
+        ins_top5_acc[split] = topk_accuracy(embeddings[split],
+                                            instance_adj,
+                                            distance_measure=distance_measure,
+                                            k=5)
 
         ins_mAP[split] = embedding_mAP(embeddings[split],
                                        instance_adj,
                                        distance_op=distance_measure)
 
         log(f'[{split}]Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
-        log(f'[{split}]Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
+        log(f'[{split}]Instance top-1 accuracy: {ins_top1_acc[split]:.3f}', to_console=True)
+        log(f'[{split}]Instance top-3 accuracy: {ins_top3_acc[split]:.3f}', to_console=True)
+        log(f'[{split}]Instance top-5 accuracy: {ins_top5_acc[split]:.3f}', to_console=True)
         log(f'[{split}]Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
 
     return
@@ -441,8 +464,8 @@ if __name__ == '__main__':
     parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
 
     parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
-    parser.add_argument('--dataset-name', default='A28+axis', type=str)
-    parser.add_argument('--dataset-path', default='$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_axis_patch_96x96/', type=str)
+    parser.add_argument('--dataset-name', default='A28', type=str)
+    parser.add_argument('--dataset-path', default='$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_patch_96x96/', type=str)
     parser.add_argument('--percentage', default=100, type=float)
     parser.add_argument('--organ', default=None, type=str)
 

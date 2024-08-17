@@ -61,11 +61,6 @@ class AugmentedA28AxisDataset(Dataset):
             self.image_paths_by_celltype[celltype].append(img_path)
             self.label_paths_by_celltype[celltype].append(label_path)
 
-        # Will be set in prepare_dataset.py when train/val/test split is done.
-        # self.img_path_to_split = None
-        # self.img_path_by_celltype_and_split = None
-        # self.img_path_by_patch_id_and_split = None
-
     def __len__(self) -> int:
         return len(self.img_paths)
 
@@ -122,7 +117,7 @@ class AugmentedA28AxisDataset(Dataset):
 
         # [1, C, H, W]
         image_aug = fix_channel_dimension(normalize_image(image_aug))
-        label_aug = fix_channel_dimension(normalize_image(label_aug)) # axis image, need to be normalized.
+        label_aug = fix_channel_dimension(normalize_image(label_aug)) # axis label, need to be normalized.
 
         image_n_view, label_n_view = None, None
         if self.n_views is not None:

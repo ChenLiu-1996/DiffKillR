@@ -1,6 +1,7 @@
 from torch.utils.data import DataLoader
 from datasets.synthetic import SyntheticDataset
 from datasets.augmented import AugmentedDataset
+from datasets.A28 import AugmentedA28Dataset
 from datasets.A28Axis import AugmentedA28AxisDataset
 # from datasets.tissuenet import TissueNetDataset
 from datasets.augmented_MoNuSeg import AugmentedMoNuSegDataset
@@ -15,6 +16,14 @@ def prepare_dataset(config: AttributeHashmap):
     if config.dataset_name == 'synthetic':
         dataset = SyntheticDataset(base_path=config.dataset_path,
                                    target_dim=config.target_dim)
+
+    elif config.dataset_name == 'A28':
+        aug_lists = config.aug_methods.split(',')
+        dataset = AugmentedA28Dataset(augmentation_methods=aug_lists,
+                                      base_path=config.dataset_path,
+                                      target_dim=config.target_dim,
+                                      n_views=config.n_views)
+
     elif config.dataset_name == 'A28+axis':
         aug_lists = config.aug_methods.split(',')
         dataset = AugmentedA28AxisDataset(augmentation_methods=aug_lists,

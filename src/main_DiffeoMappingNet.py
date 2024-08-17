@@ -625,19 +625,6 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
         annotated_images_fliprot = apply_flipping_rotation(flip_rot_transform_forward, annotated_images)
         annotated_labels_fliprot = apply_flipping_rotation(flip_rot_transform_forward, annotated_labels)
 
-        # # Predict flipping and rotation
-        # flip_rot_transform_forward, _ = predict_flipping_rotation(unannotated_images,
-        #                                                           annotated_images)
-
-        # # Apply flipping and rotation
-        # annotated_images = apply_flipping_rotation(flip_rot_transform_forward, annotated_images)
-        # annotated_labels = apply_flipping_rotation(flip_rot_transform_forward, annotated_labels)
-
-        # # Predict the warping field.
-        # warp_predicted = warp_predictor(torch.cat([annotated_images, unannotated_images], dim=1))
-        # warp_field_forward = warp_predicted[:, :2, ...]
-        # warp_field_reverse = warp_predicted[:, 2:, ...]
-
         warp_field_forward, warp_field_reverse = warp_predictor(source=unannotated_images, target=annotated_images_fliprot)
 
         # Apply the warping field.
@@ -1026,8 +1013,8 @@ if __name__ == '__main__':
     parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
 
     parser.add_argument('--DiffeoMappingNet-model', default='UNet', type=str)
-    parser.add_argument('--dataset-name', default='A28+axis', type=str)
-    parser.add_argument('--dataset-path', default='$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_axis_patch_96x96/', type=str)
+    parser.add_argument('--dataset-name', default='A28', type=str)
+    parser.add_argument('--dataset-path', default='$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_patch_96x96/', type=str)
     parser.add_argument('--percentage', default=100, type=float)
     parser.add_argument('--organ', default=None, type=str)
     parser.add_argument('--depth', default=4, type=int)
