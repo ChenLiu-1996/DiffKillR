@@ -9,9 +9,7 @@ import os
 from tqdm import tqdm
 from matplotlib import pyplot as plt
 from functools import partial
-
-from model.autoencoder import AutoEncoder
-# from model.unet import UNet
+import wandb
 
 from registration.unet import UNet
 from registration.voxelmorph import VxmDense as VoxelMorph
@@ -376,14 +374,20 @@ def train(config, wandb_run=None):
             filepath=config.log_path,
             to_console=False)
 
-        # if wandb_run is not None:
-        #     wandb_run.log({'train/loss': train_loss,
-        #                    'train/loss_forward': train_loss_forward,
-        #                    'train/loss_cyclic': train_loss_cyclic,
-        #                    'train/dice_ref_mean': np.mean(train_dice_ref_list),
-        #                    'train/dice_ref_std': np.std(train_dice_ref_list),
-        #                    'train/dice_seg_mean': np.mean(train_dice_seg_list),
-        #                    'train/dice_seg_std': np.std(train_dice_seg_list)})
+        if wandb_run is not None:
+            log_dict = {
+                'train/loss': train_loss,
+                'train/loss_forward': train_loss_forward,
+                'train/loss_cyclic': train_loss_cyclic,
+            }
+            for metric_name in metric_name_list:
+                log_dict[f'train/{metric_name}_ref_mean'] = np.mean(train_metric_ref_dict[metric_name])
+                log_dict[f'train/{metric_name}_ref_std'] = np.std(train_metric_ref_dict[metric_name])
+                log_dict[f'train/{metric_name}_fliprot_mean'] = np.mean(train_metric_fliprot_dict[metric_name])
+                log_dict[f'train/{metric_name}_fliprot_std'] = np.std(train_metric_fliprot_dict[metric_name])
+                log_dict[f'train/{metric_name}_ours_mean'] = np.mean(train_metric_ours_dict[metric_name])
+                log_dict[f'train/{metric_name}_ours_std'] = np.std(train_metric_ours_dict[metric_name])
+            wandb_run.log(log_dict)
 
         # Validation.
         dataset.set_deterministic(True)
@@ -510,14 +514,20 @@ def train(config, wandb_run=None):
             filepath=config.log_path,
             to_console=False)
 
-        # if wandb_run is not None:
-        #     wandb_run.log({'val/loss': val_loss,
-        #                    'val/loss_forward': val_loss_forward,
-        #                    'val/loss_cyclic': val_loss_cyclic,
-        #                    'val/dice_ref_mean': np.mean(val_dice_ref_list),
-        #                    'val/dice_ref_std': np.std(val_dice_ref_list),
-        #                    'val/dice_seg_mean': np.mean(val_dice_seg_list),
-        #                    'val/dice_seg_std': np.std(val_dice_seg_list)})
+        if wandb_run is not None:
+            log_dict = {
+                'val/loss': val_loss,
+                'val/loss_forward': val_loss_forward,
+                'val/loss_cyclic': val_loss_cyclic
+            }
+            for metric_name in metric_name_list:
+                log_dict[f'val/{metric_name}_ref_mean'] = np.mean(val_metric_ref_dict[metric_name])
+                log_dict[f'val/{metric_name}_ref_std'] = np.std(val_metric_ref_dict[metric_name])
+                log_dict[f'val/{metric_name}_fliprot_mean'] = np.mean(val_metric_fliprot_dict[metric_name])
+                log_dict[f'val/{metric_name}_fliprot_std'] = np.std(val_metric_fliprot_dict[metric_name])
+                log_dict[f'val/{metric_name}_ours_mean'] = np.mean(val_metric_ours_dict[metric_name])
+                log_dict[f'val/{metric_name}_ours_std'] = np.std(val_metric_ours_dict[metric_name])
+            wandb_run.log(log_dict)
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -993,20 +1003,15 @@ def infer(config, wandb_run=None):
             filepath=config.log_path,
             to_console=True)
 
-        # if wandb_run is not None:
-        #     wandb_run.log({'infer/dice_seg_mean': np.mean(dice_list),
-        #             'infer/dice_seg_std': np.std(dice_list),
-        #             'infer/iou_seg_mean': np.mean(iou_list),
-        #             'infer/iou_seg_std': np.std(iou_list)})
+        if wandb_run is not None:
+            wandb_run.log(
+                {'infer/dice_seg_mean': np.mean(dice_list),
+                 'infer/dice_seg_std': np.std(dice_list),
+                 'infer/iou_seg_mean': np.mean(iou_list),
+                 'infer/iou_seg_std': np.std(iou_list)})
 
     return
 
-
-from dotenv import load_dotenv
-
-load_dotenv('../.env')
-WANDB_ENTITY = os.getenv('WANDB_ENTITY')
-PROJECT_PATH = os.getenv('PROJECT_PATH')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Entry point.')
@@ -1017,13 +1022,12 @@ if __name__ == '__main__':
     parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
     parser.add_argument('--random-seed', default=1, type=int)
 
-    parser.add_argument('--dataset-path', default='$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_axis_patch_96x96/', type=str)
     parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
     parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
 
-    # parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
     parser.add_argument('--DiffeoMappingNet-model', default='UNet', type=str)
     parser.add_argument('--dataset-name', default='A28+axis', type=str)
+    parser.add_argument('--dataset-path', default='$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_axis_patch_96x96/', type=str)
     parser.add_argument('--percentage', default=100, type=float)
     parser.add_argument('--organ', default=None, type=str)
     parser.add_argument('--depth', default=4, type=int)
@@ -1039,6 +1043,9 @@ if __name__ == '__main__':
     parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
     parser.add_argument('--n-plot-per-epoch', default=2, type=int)
 
+    parser.add_argument('--use-wandb', action='store_true')
+    parser.add_argument('--wandb-username', default='yale-cl2482', type=str)
+
     config = parser.parse_args()
     assert config.mode in ['train', 'test', 'infer']
 
@@ -1050,7 +1057,7 @@ if __name__ == '__main__':
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
-    DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_strong-{config.strong}_seed{config.random_seed}'
+    DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_strong-{config.strong}_epoch-{config.max_epochs}_seed{config.random_seed}'
     config.DiffeoMappingNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoMappingNet_str + '.ckpt')
     config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, '')
     config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, 'log.txt')
@@ -1060,17 +1067,16 @@ if __name__ == '__main__':
 
     seed_everything(config.random_seed)
 
-    # wandb_run = None
-    # import wandb
-    # if config.use_wandb and args.mode == 'train':
-    #     wandb_run = wandb.init(
-    #         entity=WANDB_ENTITY,
-    #         project="cellseg",
-    #         name=f"DiffeoMappingNet_{config.organ}_m{config.multiplier}_{config.dataset_name}_seed{config.random_seed}",
-    #         config=OmegaConf.to_container(config, resolve=True, throw_on_missing=True),
-    #         reinit=True,
-    #         settings=wandb.Settings(start_method="thread")
-    #     )
+    wandb_run = None
+    if config.use_wandb and config.mode == 'train':
+        wandb_run = wandb.init(
+            entity=config.wandb_username,    # NOTE: need to use your wandb user name.
+            project="cellseg",               # NOTE: need to create project on your wandb website.
+            name=model_name + '_' + DiffeoMappingNet_str,
+            config=config,
+            reinit=True,
+            settings=wandb.Settings(start_method="thread")
+        )
 
     if config.mode == 'train':
         # Initialize log file.
@@ -1082,11 +1088,10 @@ if __name__ == '__main__':
 
         train(config=config)
         test(config=config)
-        # infer(config=config)
     elif config.mode == 'test':
         test(config=config)
     elif config.mode == 'infer':
         infer(config=config)
 
-    # if wandb_run is not None:
-    #     wandb_run.finish()
+    if wandb_run is not None:
+        wandb_run.finish()

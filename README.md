@@ -5,6 +5,20 @@
 
 
 
+## [New] Usage
+Train and test DiffeoInvariantNet.
+```
+cd src/
+python main_DiffeoInvariantNet.py --dataset-name A28+axis --dataset-path '$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_axis_patch_96x96/' --max-epochs 2 --use-wandb --wandb-username yale-cl2482 --DiffeoInvariantNet-model AutoEncoder
+```
+
+Train and test DiffeoMappingNet.
+```
+cd src/
+python main_DiffeoMappingNet.py --dataset-name A28+axis --dataset-path '$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_axis_patch_96x96/' --use-wandb --wandb-username yale-cl2482 --DiffeoMappingNet-model VoxelMorph
+```
+
+
 ## Preparation
 
 ## Naming Conventions

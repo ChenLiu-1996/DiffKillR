@@ -50,8 +50,8 @@ def prepare_dataset(config: AttributeHashmap):
     train_set, val_set, test_set = split_dataset(
         dataset=dataset, splits=ratios, random_seed=config.random_seed)
 
-    if len(train_set) < 50 * config.batch_size:
-        train_set = ExtendedDataset(train_set, desired_len=50 * config.batch_size)
+    if len(train_set) < 20 * config.batch_size:
+        train_set = ExtendedDataset(train_set, desired_len=20 * config.batch_size)
     if len(val_set) < config.batch_size:
         val_set = ExtendedDataset(val_set, desired_len=2 * config.batch_size)
     if len(test_set) < config.batch_size:

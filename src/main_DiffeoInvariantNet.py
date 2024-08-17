@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import sklearn.metrics
 import pandas as pd
+import wandb
 
 import os
 from glob import glob
@@ -50,7 +51,7 @@ def train(config, wandb_run=None):
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
     lr_scheduler = LinearWarmupCosineAnnealingLR(
         optimizer=optimizer,
-        warmup_epochs=10,
+        warmup_epochs=config.max_epochs//5,
         warmup_start_lr=float(config.learning_rate) / 100,
         max_epochs=config.max_epochs,
         eta_min=0)
@@ -76,6 +77,7 @@ def train(config, wandb_run=None):
     for epoch_idx in range(config.max_epochs):
         train_loss, train_latent_loss, train_recon_loss = 0, 0, 0
         model.train()
+        dataset.set_deterministic(False)
 
         for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(train_loader):
             images = images.float().to(device)  # [batch_size, C, H, W]
@@ -142,13 +144,14 @@ def train(config, wandb_run=None):
                train_recon_loss),
             filepath=config.log_path,
             to_console=True)
-        # if wandb_run is not None:
-        #     wandb.log({'train/loss': train_loss,
-        #                'train/latent_loss': train_latent_loss,
-        #                'train/recon_loss': train_recon_loss})
+        if wandb_run is not None:
+            wandb.log({'train/loss': train_loss,
+                       'train/latent_loss': train_latent_loss,
+                       'train/recon_loss': train_recon_loss})
 
         # Validation.
         model.eval()
+        dataset.set_deterministic(True)
         with torch.no_grad():
             val_loss, val_latent_loss, val_recon_loss = 0, 0, 0
             for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(val_loader):
@@ -198,10 +201,10 @@ def train(config, wandb_run=None):
                val_recon_loss),
             filepath=config.log_path,
             to_console=True)
-        # if wandb_run is not None:
-        #     wandb.log({'val/loss': val_loss,
-        #                'val/latent_loss': val_latent_loss,
-        #                'val/recon_loss': val_recon_loss})
+        if wandb_run is not None:
+            wandb.log({'val/loss': val_loss,
+                       'val/latent_loss': val_latent_loss,
+                       'val/recon_loss': val_recon_loss})
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -222,7 +225,7 @@ def train(config, wandb_run=None):
 def test(config):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    dataset, train_set, val_set, test_set = prepare_dataset(config=config)
+    dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
 
     # Build the model
     try:
@@ -257,9 +260,10 @@ def test(config):
 
     # Test.
     model.eval()
+    dataset.set_deterministic(True)
     with torch.no_grad():
         test_loss, test_latent_loss, test_recon_loss = 0, 0, 0
-        for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(test_set):
+        for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(test_loader):
             images = images.float().to(device)  # [batch_size, C, H, W]
 
             # [batch_size, n_views, C, H, W] -> [batch_size * n_views, C, H, W]
@@ -316,36 +320,63 @@ def test(config):
     reconstructed = {split: None for split in ['train', 'val', 'test']}
 
     with torch.no_grad():
-        for split, split_set in zip(['train', 'val', 'test'], [train_set, val_set, test_set]):
-            for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(split_set):
-                images = images.float().to(device)  # [batch_size, C, H, W]
+        dataset.set_deterministic(False)  # To allow for variation.
 
-                recon_images, latent_features = model(images)
-                latent_features = torch.flatten(latent_features, start_dim=1)
+        # Ensure no shuffling for train loader.
+        train_loader_no_shuffle = DataLoader(
+            train_loader.dataset,
+            batch_size=train_loader.batch_size,
+            num_workers=train_loader.num_workers,
+            collate_fn=train_loader.collate_fn,
+            pin_memory=train_loader.pin_memory,
+            drop_last=train_loader.drop_last,
+            timeout=train_loader.timeout,
+            worker_init_fn=train_loader.worker_init_fn,
+            multiprocessing_context=train_loader.multiprocessing_context,
+            generator=train_loader.generator,
+            prefetch_factor=train_loader.prefetch_factor,
+            persistent_workers=train_loader.persistent_workers,
+            shuffle=False)
 
-                # Move to cpu to save memory on gpu.
-                images = images.cpu()
-                recon_images = recon_images.cpu()
-                latent_features = latent_features.cpu()
+        for split, split_set in zip(['train', 'val', 'test'], [train_loader_no_shuffle, val_loader, test_loader]):
+            # Repeat for 5 random augmentations.
+            for _ in range(5):
+                for iter_idx, (images, _, _, _, canonical_images, _) in enumerate(split_set):
+                    # Limit the computation.
+                    if iter_idx > 400:
+                        break
 
-                if embeddings[split] is None:
-                    embeddings[split] = latent_features  # (batch_size, latent_dim)
-                else:
-                    embeddings[split] = torch.cat([embeddings[split], latent_features], dim=0)
-                if reconstructed[split] is None:
-                    reconstructed[split] = recon_images # (batch_size, in_chan, H, W)
-                else:
-                    reconstructed[split] = torch.cat([reconstructed[split], recon_images], dim=0)
-                if orig_inputs[split] is None:
-                    orig_inputs[split] = images
-                else:
-                    orig_inputs[split] = torch.cat([orig_inputs[split], images], dim=0)
-                if canonical[split] is None:
-                    canonical[split] = canonical_images
-                else:
-                    canonical[split] = torch.cat([canonical[split], canonical_images], dim=0)
-                embedding_patch_id_int[split].extend([dataset.get_patch_id_idx(img_path=img_path) for img_path in img_paths])
+                    images = images.float().to(device)  # [batch_size, C, H, W]
 
+                    recon_images, latent_features = model(images)
+                    latent_features = torch.flatten(latent_features, start_dim=1)
+
+                    # Move to cpu to save memory on gpu.
+                    images = images.cpu()
+                    recon_images = recon_images.cpu()
+                    latent_features = latent_features.cpu()
+
+                    if embeddings[split] is None:
+                        embeddings[split] = latent_features  # (batch_size, latent_dim)
+                    else:
+                        embeddings[split] = torch.cat([embeddings[split], latent_features], dim=0)
+
+                    if reconstructed[split] is None:
+                        reconstructed[split] = recon_images # (batch_size, in_chan, H, W)
+                    else:
+                        reconstructed[split] = torch.cat([reconstructed[split], recon_images], dim=0)
+
+                    if orig_inputs[split] is None:
+                        orig_inputs[split] = images
+                    else:
+                        orig_inputs[split] = torch.cat([orig_inputs[split], images], dim=0)
+
+                    if canonical[split] is None:
+                        canonical[split] = canonical_images
+                    else:
+                        canonical[split] = torch.cat([canonical[split], canonical_images], dim=0)
+
+                    embedding_patch_id_int[split].extend([iter_idx for _ in range(images.shape[0])])
 
             embeddings[split] = embeddings[split].numpy()
             reconstructed[split] = reconstructed[split].numpy()
@@ -372,9 +403,7 @@ def test(config):
                 if embedding_patch_id_int[split][i] == embedding_patch_id_int[split][j]:
                     instance_adj[i, j] = 1
 
-        print('before yo=======!')
         log(f'Done constructing instance adjacency ({instance_adj.shape}) matrices.', to_console=True)
-        print('after yo=======!')
 
         ins_clustering_acc[split] = clustering_accuracy(embeddings[split],
                                                         embeddings['train'],
@@ -382,6 +411,7 @@ def test(config):
                                                         embedding_patch_id_int['train'],
                                                         distance_measure=distance_measure,
                                                         voting_k=1)
+
         ins_topk_acc[split] = topk_accuracy(embeddings[split],
                                             instance_adj,
                                             distance_measure=distance_measure,
@@ -390,170 +420,12 @@ def test(config):
         ins_mAP[split] = embedding_mAP(embeddings[split],
                                        instance_adj,
                                        distance_op=distance_measure)
-        print('?===========')
-        print(ins_clustering_acc)
+
         log(f'[{split}]Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
         log(f'[{split}]Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
         log(f'[{split}]Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
 
     return
-
-# def infer(config):
-#     '''
-#         Inference mode. Given test image patch folder, load the model and
-#         pair the test images with closest images in anchor bank.
-#         The anchor patch bank: training images from the original or augmented images.
-#         !TODO: we may only want to use the original images for the anchor bank,
-#         !TODO: since the augmented images are not real instances. and the DiffeoMappingNet
-#         !TODO: model is trained on the warping aug to original images.
-#         Output: a csv file with the following columns:
-#             - test_image_path
-#             - closest_image_path
-#             - distance
-#             - source (original or augmented)
-#     '''
-#     # Step 1: Load the model & generate embeddings for images in anchor bank.
-
-#     # Load anchor bank data
-#     device = torch.device(
-#         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-#     aug_lists = config.aug_methods.split(',')
-#     if config.dataset_name == 'MoNuSeg':
-#         dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,
-#                                             base_path=config.dataset_path,
-#                                             target_dim=config.target_dim)
-#     elif config.dataset_name == 'GLySAC':
-#         dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists,
-#                                          base_path=config.dataset_path,
-#                                          target_dim=config.target_dim)
-#     else:
-#         raise ValueError('`dataset_name`: %s not supported.' % config.dataset_name)
-
-#     dataloader = DataLoader(dataset=dataset,
-#                             batch_size=config.batch_size,
-#                             shuffle=False,
-#                             num_workers=config.num_workers)
-
-#     # Build the model
-#     try:
-#         model = globals()[config.DiffeoInvariantNet_model](num_filters=config.num_filters,
-#                                                            in_channels=3,
-#                                                            out_channels=3)
-#     except:
-#         raise ValueError('`config.DiffeoInvariantNet_model`: %s not supported.' % config.DiffeoInvariantNet_model)
-#     model = model.to(device)
-#     model.load_weights(config.DiffeoInvariantNet_model_save_path, device=device)
-#     log('%s: Model weights successfully loaded.' % config.DiffeoInvariantNet_model,
-#         to_console=True)
-
-#     # Generate embeddings for anchor bank
-#     log('Generating embeddings for anchor bank. Total images: %d' % len(dataset),
-#         to_console=True)
-#     anchor_bank = {
-#         'embeddings': [],
-#         'img_paths': [],
-#         'sources': [],
-#     }
-#     log('Inferring ...', to_console=True)
-
-#     model.eval()
-#     config.anchor_only = False # !FIXME: add as param
-#     with torch.no_grad():
-#         for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(dataloader):
-#             images = images.float().to(device)
-#             _, latent_features = model(images)
-#             latent_features = torch.flatten(latent_features, start_dim=1)
-#             #print('latent_features.shape: ', latent_features.shape) # (batch_size, latent_dim)
-
-#             for i in range(len(latent_features)):
-#                 if config.anchor_only:
-#                     if 'original' in img_paths[i]:
-#                         anchor_bank['embeddings'].append(latent_features[i].cpu().numpy())
-#                         anchor_bank['img_paths'].append(img_paths[i])
-#                         anchor_bank['sources'].append('original')
-#                 else:
-#                     anchor_bank['embeddings'].append(latent_features[i].cpu().numpy())
-#                     anchor_bank['img_paths'].append(img_paths[i])
-#                     anchor_bank['sources'].append('original' if 'original' in img_paths[i] else 'augmented')
-
-#     anchor_bank['embeddings'] = np.concatenate([anchor_bank['embeddings']], axis=0) # (N, latent_dim)
-#     print('anchor_bank[embeddings].shape: ', anchor_bank['embeddings'].shape)
-#     print('len(anchor_bank[img_paths]): ', len(anchor_bank['img_paths']))
-#     print('len(anchor_bank[sources]): ', len(anchor_bank['sources']))
-#     assert anchor_bank['embeddings'].shape[0] == len(anchor_bank['img_paths']) == len(anchor_bank['sources'])
-#     log(f'Anchor bank embeddings generated. shape:{anchor_bank["embeddings"].shape}', to_console=True)
-
-#     # Step 2: Generate embeddings for test images.
-#     test_img_folder = os.path.join(config.test_folder, 'image')
-#     test_img_files = sorted(glob(os.path.join(test_img_folder, '*.png')))
-#     # Filter out on organ type
-#     if config.dataset_name == 'MoNuSeg':
-#         from preprocessing.Metas import Organ2FileID
-#         file_ids = Organ2FileID[config.organ]['test']
-#     elif config.dataset_name == 'GLySAC':
-#         from preprocessing.Metas import GLySAC_Organ2FileID
-#         file_ids = GLySAC_Organ2FileID[config.organ]['test']
-
-#     test_img_files = [x for x in test_img_files if any([f'{file_id}' in x for file_id in file_ids])]
-
-#     print('test_img_folder: ', test_img_folder)
-#     test_img_bank = {
-#         'embeddings': [],
-#     }
-#     test_images = [torch.Tensor(load_image(img_path, config.target_dim)) for img_path in test_img_files]
-#     test_images = torch.stack(test_images, dim=0) # (N, in_chan, H, W)
-#     log(f'Done loading test images, shape: {test_images.shape}', to_console=True)
-
-#     test_dataset = torch.utils.data.TensorDataset(test_images)
-#     test_loader = DataLoader(dataset=test_dataset,
-#                              batch_size=config.batch_size,
-#                              shuffle=False, # No shuffle since we're using the indices
-#                              num_workers=config.num_workers)
-
-#     with torch.no_grad():
-#         for iter_idx, (images,) in enumerate(test_loader):
-#             images = images.float().to(device)
-#             _, latent_features = model(images)
-#             latent_features = torch.flatten(latent_features, start_dim=1)
-#             test_img_bank['embeddings'].extend([latent_features.cpu().numpy()])
-
-#     test_img_bank['embeddings'] = np.concatenate(test_img_bank['embeddings'], axis=0) # (N, latent_dim)
-#     log(f"test_img_bank[embeddings].shape: {test_img_bank['embeddings'].shape}", to_console=True)
-#     log('Done generating embeddings for test images.', to_console=True)
-
-#     # Step 3: Pair the test images with closest images in anchor bank.
-#     if config.latent_loss == 'triplet':
-#         distance_measure = 'cosine'
-#     elif config.latent_loss == 'SimCLR':
-#         distance_measure = 'cosine'
-#     else:
-#         raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
-
-#     log('Computing pairwise distances...', to_console=True)
-#     print('test_img_bank[embeddings].shape: ', test_img_bank['embeddings'].shape)
-#     print('anchor_bank[embeddings].shape: ', anchor_bank['embeddings'].shape)
-#     dist_matrix = sklearn.metrics.pairwise_distances(test_img_bank['embeddings'],
-#                                         anchor_bank['embeddings'],
-#                                         metric=distance_measure) # [N, M]
-#     closest_anchor_idxs = list(np.argmin(dist_matrix, axis=1, keepdims=False)) # [N]
-#     closest_img_paths = [anchor_bank['img_paths'][idx] for idx in closest_anchor_idxs] # [N]
-
-#     # Step 4: Save the results to a csv file.
-#     results_df = pd.DataFrame({
-#         'test_image_path': test_img_files,
-#         'closest_image_path': closest_img_paths,
-#         'distance': np.min(dist_matrix, axis=1, keepdims=False),
-#         'source': [anchor_bank['sources'][idx] for idx in closest_anchor_idxs],
-#     })
-
-#     # overwriting the previous results
-#     if os.path.exists(os.path.join(config.output_save_path, 'infer_pairs.csv')):
-#         os.remove(os.path.join(config.output_save_path, 'infer_pairs.csv'))
-#     results_df.to_csv(os.path.join(config.output_save_path, 'infer_pairs.csv'), index=False)
-
-#     print('Results saved to: ', os.path.join(config.output_save_path, 'infer_pairs.csv'))
-
-#     return
 
 
 if __name__ == '__main__':
@@ -565,12 +437,12 @@ if __name__ == '__main__':
     parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
     parser.add_argument('--random-seed', default=1, type=int)
 
-    parser.add_argument('--dataset-path', default='$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_axis_patch_96x96/', type=str)
     parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
     parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
 
     parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
     parser.add_argument('--dataset-name', default='A28+axis', type=str)
+    parser.add_argument('--dataset-path', default='$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_axis_patch_96x96/', type=str)
     parser.add_argument('--percentage', default=100, type=float)
     parser.add_argument('--organ', default=None, type=str)
 
@@ -591,6 +463,9 @@ if __name__ == '__main__':
     parser.add_argument('--num-filters', default=32, type=int)
     parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
 
+    parser.add_argument('--use-wandb', action='store_true')
+    parser.add_argument('--wandb-username', default='yale-cl2482', type=str)
+
     config = parser.parse_args()
     assert config.mode in ['train', 'test', 'infer']
 
@@ -607,14 +482,25 @@ if __name__ == '__main__':
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
-    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_seed{config.random_seed}'
+    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_epoch-{config.max_epochs}_seed{config.random_seed}'
     config.DiffeoInvariantNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoInvariantNet_str + '.ckpt')
     config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str, '')
-    config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str + 'log.txt')
+    config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str, 'log.txt')
 
     print(config)
 
     seed_everything(config.random_seed)
+
+    wandb_run = None
+    if config.use_wandb and config.mode == 'train':
+        wandb_run = wandb.init(
+            entity=config.wandb_username,    # NOTE: need to use your wandb user name.
+            project="cellseg",               # NOTE: need to create project on your wandb website.
+            name=model_name + '_' + DiffeoInvariantNet_str,
+            config=config,
+            reinit=True,
+            settings=wandb.Settings(start_method="thread")
+        )
 
     if config.mode == 'train':
         # Initialize log file.
@@ -624,11 +510,10 @@ if __name__ == '__main__':
         log_str += '\nTraining History:'
         log(log_str, filepath=config.log_path, to_console=True)
 
-        train(config=config)
+        train(config=config, wandb_run=wandb_run)
         test(config=config)
     elif config.mode == 'test':
         test(config=config)
-    elif config.mode == 'infer':
-        infer(config=config)
 
-    print('Done.\n')
+    if wandb_run is not None:
+        wandb_run.finish()
