@@ -1,16 +1,16 @@
 #
 # https://github.com/voxelmorph/voxelmorph
 #
+import os
+import sys
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.distributions.normal import Normal
-
-import torch
-import torch.nn as nn
 import torch.nn.functional as nnf
 
+import_dir = '/'.join(os.path.realpath(__file__).split('/')[:-2])
+sys.path.insert(0, import_dir)
 from model.base import BaseNetwork
 
 
