@@ -53,13 +53,13 @@ def plot_predict_warp(fig, counter, moving_image, fixed_image):
     warper = SpatialTransformer(size=moving_image.shape[:2])
     warper = warper.to(device)
 
-    optimizer = torch.optim.AdamW(DiffeoMappingNet.parameters(), lr=5e-4)
+    optimizer = torch.optim.AdamW(DiffeoMappingNet.parameters(), lr=1e-3)
     mse_loss = torch.nn.MSELoss()
 
     moving_image_torch = torch.from_numpy((moving_image).transpose(2, 0, 1)[None, ...]).float()
     fixed_image_torch = torch.from_numpy((fixed_image).transpose(2, 0, 1)[None, ...]).float()
 
-    for _ in tqdm(range(100)):
+    for _ in tqdm(range(150)):
         __diffeo_forward, __diffeo_backward = DiffeoMappingNet(source=moving_image_torch, target=fixed_image_torch)
         image_warped_forward = warper(moving_image_torch, flow=__diffeo_forward)
         image_warped_backward = warper(fixed_image_torch, flow=__diffeo_backward)
@@ -107,13 +107,13 @@ def plot_predict_warp(fig, counter, moving_image, fixed_image):
     warper = SpatialTransformer(size=moving_image.shape[:2])
     warper = warper.to(device)
 
-    optimizer = torch.optim.AdamW(DiffeoMappingNet.parameters(), lr=5e-4)
+    optimizer = torch.optim.AdamW(DiffeoMappingNet.parameters(), lr=1e-3)
     mse_loss = torch.nn.MSELoss()
 
     moving_image_torch = torch.from_numpy((moving_image).transpose(2, 0, 1)[None, ...]).float()
     fixed_image_torch = torch.from_numpy((fixed_image).transpose(2, 0, 1)[None, ...]).float()
 
-    for _ in tqdm(range(100)):
+    for _ in tqdm(range(150)):
         __diffeo_forward, __diffeo_backward = DiffeoMappingNet(source=moving_image_torch, target=fixed_image_torch)
         image_warped_forward = warper(moving_image_torch, flow=__diffeo_forward)
         image_warped_backward = warper(fixed_image_torch, flow=__diffeo_backward)
