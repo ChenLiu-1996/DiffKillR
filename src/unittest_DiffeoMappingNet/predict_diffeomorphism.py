@@ -62,6 +62,7 @@ def plot_predict_warp(fig, counter, moving_image, fixed_image, coeff_smoothness=
     ax.set_axis_off()
     ax.set_title('Diffeomorphism (GT)', fontsize=24)
 
+
     # NOTE: DiffeoMappingNet with UNet.
     DiffeoMappingNet = UNet(
         num_filters=32,
@@ -250,11 +251,11 @@ def dict_statistics(result_dict: Dict, digits: int = 3) -> None:
 
     for key in result_dict:
         if key == 'Architecture':
-            df[key] = np.tile(result_dict[key], result_dict['Runtime'].shape[1])
+            df[key] = np.tile(result_dict[key], result_dict['Runtime'].shape[0])
         else:
             df[key] = result_dict[key].flatten('F')  # Flatten in Fortran-like (column-major) order
 
-    df['Architecture'] = np.repeat(result_dict['Architecture'], result_dict['Runtime'].shape[1])
+    df['Architecture'] = np.repeat(result_dict['Architecture'], result_dict['Runtime'].shape[0])
     df = df[['Architecture'] + [col for col in df.columns if col != 'Architecture']]
     df_mean = df.groupby('Architecture').mean().reset_index()
     df_std = df.groupby('Architecture').std().reset_index()
@@ -362,9 +363,8 @@ if __name__ == '__main__':
     result_dict = merge_dict(plot_predict_warp(fig, counter=4, moving_image=triangle, fixed_image=rectangle), result_dict)
     result_dict = merge_dict(plot_predict_warp(fig, counter=5, moving_image=rectangle, fixed_image=triangle), result_dict)
 
+    fig.tight_layout(pad=2)
+    fig.savefig('predict_diffeomorphism.png', dpi=300)
+
     dict_statistics(result_dict, digits=2)
     dict_statistics(result_dict, digits=3)
-
-    fig.tight_layout(pad=2)
-    fig.savefig('predict_diffeomorphism.png')
-
