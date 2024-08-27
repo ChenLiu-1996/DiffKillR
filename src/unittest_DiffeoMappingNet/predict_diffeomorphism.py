@@ -16,15 +16,16 @@ from unet import UNet
 from voxelmorph import VxmDense as VoxelMorph
 from corrmlp import CorrMLP
 from registration_utils import register_dipy, radially_color_mask_with_colormap, random_rectangle, random_triangle, random_star
-from registration_loss import Grad as SmoothnessLoss
+from registration_loss import GradLoss as SmoothnessLoss
 
 sys.path.insert(0, import_dir + '/utils/')
-from metrics import dice_coeff, IoU, l1, l2
+from metrics import dice_coeff, IoU, l1, ncc
+from seed import seed_everything
 
 
 def plot_predict_warp(fig, counter, moving_image, fixed_image, coeff_smoothness=0):
-    model_list, time_list, image_l1_list, image_l2_list, \
-        mask_dice_list, mask_iou_list, diffeo_l1_list, diffeo_l2_list = [], [], [], [], [], [], [], []
+    model_list, time_list, image_l1_list, image_ncc_list, \
+        mask_dice_list, mask_iou_list, diffeo_l1_list, diffeo_ncc_list = [], [], [], [], [], [], [], []
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     loss_fn_mse = torch.nn.MSELoss()
@@ -33,11 +34,14 @@ def plot_predict_warp(fig, counter, moving_image, fixed_image, coeff_smoothness=
     _, diffeo_forward_dipy, _ = register_dipy(moving_image=moving_image, fixed_image=fixed_image)
 
     moving_image = radially_color_mask_with_colormap(moving_image)
-    fixed_image = radially_color_mask_with_colormap(fixed_image)
     warper = SpatialTransformer(size=moving_image.shape[:2])
     warped_image_dipy = warper(torch.from_numpy(moving_image.transpose(2, 0, 1)[None, ...]).float(),
                           flow=torch.from_numpy(diffeo_forward_dipy.transpose(2, 0, 1)[None, ...]))
     warped_image_dipy = np.uint8(warped_image_dipy[0, ...]).transpose(1, 2, 0)
+
+    # NOTE: For a fair comparison, starting from now, we will treat the
+    # DiPy-warped image as the fixed image.
+    fixed_image = warped_image_dipy
 
     ax = fig.add_subplot(6, 11, counter * 11 + 1)
     ax.imshow(moving_image, vmin=0, vmax=255)
@@ -74,11 +78,11 @@ def plot_predict_warp(fig, counter, moving_image, fixed_image, coeff_smoothness=
     model_list.append('UNet')
     time_list.append(time_unet)
     image_l1_list.append(l1(warped_image_unet, fixed_image))
-    image_l2_list.append(l2(warped_image_unet, fixed_image))
+    image_ncc_list.append(ncc(warped_image_unet, fixed_image))
     mask_dice_list.append(dice_coeff(warped_image_unet > 0, fixed_image > 0))
     mask_iou_list.append(IoU(warped_image_unet > 0, fixed_image > 0))
     diffeo_l1_list.append(l1(diffeo_forward_unet, diffeo_forward_dipy))
-    diffeo_l2_list.append(l2(diffeo_forward_unet, diffeo_forward_dipy))
+    diffeo_ncc_list.append(ncc(diffeo_forward_unet, diffeo_forward_dipy))
 
     ax = fig.add_subplot(6, 11, counter * 11 + 4)
     ax.imshow(warped_image_unet, vmin=0, vmax=255)
@@ -113,11 +117,11 @@ def plot_predict_warp(fig, counter, moving_image, fixed_image, coeff_smoothness=
     model_list.append('VM')
     time_list.append(time_vm)
     image_l1_list.append(l1(warped_image_vm, fixed_image))
-    image_l2_list.append(l2(warped_image_vm, fixed_image))
+    image_ncc_list.append(ncc(warped_image_vm, fixed_image))
     mask_dice_list.append(dice_coeff(warped_image_vm > 0, fixed_image > 0))
     mask_iou_list.append(IoU(warped_image_vm > 0, fixed_image > 0))
     diffeo_l1_list.append(l1(diffeo_forward_vm, diffeo_forward_dipy))
-    diffeo_l2_list.append(l2(diffeo_forward_vm, diffeo_forward_dipy))
+    diffeo_ncc_list.append(ncc(diffeo_forward_vm, diffeo_forward_dipy))
 
     ax = fig.add_subplot(6, 11, counter * 11 + 6)
     ax.imshow(warped_image_vm, vmin=0, vmax=255)
@@ -150,11 +154,11 @@ def plot_predict_warp(fig, counter, moving_image, fixed_image, coeff_smoothness=
     model_list.append('VM-Diff')
     time_list.append(time_vmdiff)
     image_l1_list.append(l1(warped_image_vmdiff, fixed_image))
-    image_l2_list.append(l2(warped_image_vmdiff, fixed_image))
+    image_ncc_list.append(ncc(warped_image_vmdiff, fixed_image))
     mask_dice_list.append(dice_coeff(warped_image_vmdiff > 0, fixed_image > 0))
     mask_iou_list.append(IoU(warped_image_vmdiff > 0, fixed_image > 0))
     diffeo_l1_list.append(l1(diffeo_forward_vmdiff, diffeo_forward_dipy))
-    diffeo_l2_list.append(l2(diffeo_forward_vmdiff, diffeo_forward_dipy))
+    diffeo_ncc_list.append(ncc(diffeo_forward_vmdiff, diffeo_forward_dipy))
 
     ax = fig.add_subplot(6, 11, counter * 11 + 8)
     ax.imshow(warped_image_vmdiff, vmin=0, vmax=255)
@@ -184,11 +188,11 @@ def plot_predict_warp(fig, counter, moving_image, fixed_image, coeff_smoothness=
     model_list.append('CorrMLP')
     time_list.append(time_corrmlp)
     image_l1_list.append(l1(warped_image_corrmlp, fixed_image))
-    image_l2_list.append(l2(warped_image_corrmlp, fixed_image))
+    image_ncc_list.append(ncc(warped_image_corrmlp, fixed_image))
     mask_dice_list.append(dice_coeff(warped_image_corrmlp > 0, fixed_image > 0))
     mask_iou_list.append(IoU(warped_image_corrmlp > 0, fixed_image > 0))
     diffeo_l1_list.append(l1(diffeo_forward_corrmlp, diffeo_forward_dipy))
-    diffeo_l2_list.append(l2(diffeo_forward_corrmlp, diffeo_forward_dipy))
+    diffeo_ncc_list.append(ncc(diffeo_forward_corrmlp, diffeo_forward_dipy))
 
     ax = fig.add_subplot(6, 11, counter * 11 + 10)
     ax.imshow(warped_image_corrmlp, vmin=0, vmax=255)
@@ -208,18 +212,18 @@ def plot_predict_warp(fig, counter, moving_image, fixed_image, coeff_smoothness=
     ax.set_axis_off()
     ax.set_title(f'Predicted Diffeomorphism\nDiffeoMappingNet (CorrMLP)', fontsize=18)
 
-    model_arr, time_arr, image_l1_arr, image_l2_arr, mask_dice_arr, mask_iou_arr, diffeo_l1_arr, diffeo_l2_arr = \
-        list_to_np_arr(model_list, time_list, image_l1_list, image_l2_list,
-                       mask_dice_list, mask_iou_list, diffeo_l1_list, diffeo_l2_list)
+    model_arr, time_arr, image_l1_arr, image_ncc_arr, mask_dice_arr, mask_iou_arr, diffeo_l1_arr, diffeo_ncc_arr = \
+        list_to_np_arr(model_list, time_list, image_l1_list, image_ncc_list,
+                       mask_dice_list, mask_iou_list, diffeo_l1_list, diffeo_ncc_list)
     result_dict = {
         'Architecture': model_arr,
         'Runtime': time_arr,
         'image L1': image_l1_arr,
-        'image L2': image_l2_arr,
+        'image NCC': image_ncc_arr,
         'mask DSC': mask_dice_arr,
         'mask IoU': mask_iou_arr,
         'diffeo L1': diffeo_l1_arr,
-        'diffeo L2': diffeo_l2_arr,
+        'diffeo NCC': diffeo_ncc_arr,
     }
     return result_dict
 
@@ -316,12 +320,12 @@ def train_eval_net(DiffeoMappingNet,
     warper = SpatialTransformer(size=moving_image.shape[:2])
     warper = warper.to(device)
 
-    optimizer = torch.optim.AdamW(DiffeoMappingNet.parameters(), lr=learning_rate)
+    optimizer = torch.optim.AdamW(DiffeoMappingNet.parameters(), lr=learning_rate, weight_decay=1e-4)
     moving_image_torch = torch.from_numpy((moving_image).transpose(2, 0, 1)[None, ...]).float()
     fixed_image_torch = torch.from_numpy((fixed_image).transpose(2, 0, 1)[None, ...]).float()
 
     time_begin = time.time()
-    for _ in tqdm(range(200)):
+    for _ in tqdm(range(150)):
         __diffeo_forward, __diffeo_backward = DiffeoMappingNet(source=moving_image_torch, target=fixed_image_torch)
         __image_warped_forward = warper(moving_image_torch, flow=__diffeo_forward)
         __image_warped_backward = warper(fixed_image_torch, flow=__diffeo_backward)
@@ -349,6 +353,8 @@ def train_eval_net(DiffeoMappingNet,
 
 
 if __name__ == '__main__':
+    seed_everything(1)
+
     rectangle = random_rectangle(rectangle_size=(32, 32), center=(32, 32))
     star = random_star(center=(32, 32))
     triangle = random_triangle(center=(36, 32))
@@ -366,7 +372,7 @@ if __name__ == '__main__':
     result_dict = merge_dict(plot_predict_warp(fig, counter=5, moving_image=rectangle, fixed_image=triangle), result_dict)
 
     fig.tight_layout(pad=2)
-    fig.savefig('predict_diffeomorphism.png', dpi=300)
+    fig.savefig('predict_diffeomorphism.png', dpi=200)
 
     dict_statistics(result_dict, digits=2)
     dict_statistics(result_dict, digits=3)

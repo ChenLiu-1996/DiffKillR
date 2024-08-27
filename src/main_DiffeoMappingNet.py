@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 from functools import partial
 import wandb
 
-from registration.registration_loss import Grad as SmoothnessLoss
+from registration.registration_loss import GradLoss as SmoothnessLoss
 from registration.spatial_transformer import SpatialTransformer as Warper
 from registration.unet import UNet
 from registration.voxelmorph import VxmDense as VoxelMorph
@@ -26,6 +26,38 @@ from utils.early_stop import EarlyStopping
 from utils.metrics import dice_coeff, IoU
 from utils.ncc import NCC
 
+
+def build_model(config):
+    if config.DiffeoMappingNet_model == 'UNet':
+        warp_predictor = UNet(
+            num_filters=config.num_filters,
+            in_channels=6,
+            out_channels=4,
+        )
+    elif config.DiffeoMappingNet_model == 'VM':
+        warp_predictor = VoxelMorph(
+            inshape=(32, 32),
+            src_feats=3,
+            trg_feats=3,
+            int_steps=0,  # non-diffeomorphic
+            bidir=True,
+        )
+    elif config.DiffeoMappingNet_model == 'VM-Diff':
+        warp_predictor = VoxelMorph(
+            inshape=(32, 32),
+            src_feats=3,
+            trg_feats=3,
+            bidir=True,
+        )
+    elif config.DiffeoMappingNet_model == 'CorrMLP':
+        # NOTE: `CorrMLP` needs smaller learning rate (recommended: 1e-4).
+        warp_predictor = CorrMLP(
+            in_channels=3,
+            enc_channels=config.num_filters,
+        )
+    else:
+        raise ValueError('`config.DiffeoMappingNet_model`: %s not supported.' % config.DiffeoMappingNet_model)
+    return warp_predictor
 
 def numpy_variables(*tensors: torch.Tensor) -> Tuple[np.array]:
     '''
@@ -44,14 +76,6 @@ def numpy_variables(*tensors: torch.Tensor) -> Tuple[np.array]:
     # [N, C, H, W] -> [N, H, W, C] for visualization.
     assert all([len(t.shape) == 3 for t in results])
     return results
-
-def l1(im1, im2) -> float:
-    '''
-    Mean Absolute Error.
-    '''
-    vec1 = im1.flatten()
-    vec2 = im2.flatten()
-    return np.linalg.norm((vec1 - vec2), ord=1) / len(vec1)
 
 def direction_from_gradient(gradient_image: np.array, thr: float = 0) -> float:
     '''
@@ -211,42 +235,13 @@ def train(config, wandb_run=None):
     dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
 
     # Build the model
-    if config.DiffeoMappingNet_model == 'UNet':
-        warp_predictor = UNet(
-            num_filters=config.num_filters,
-            in_channels=6,
-            out_channels=4,
-        )
-    elif config.DiffeoMappingNet_model == 'VM':
-        warp_predictor = VoxelMorph(
-            inshape=(32, 32),
-            src_feats=3,
-            trg_feats=3,
-            int_steps=0,  # non-diffeomorphic
-            bidir=True,
-        )
-    elif config.DiffeoMappingNet_model == 'VM-Diff':
-        warp_predictor = VoxelMorph(
-            inshape=(32, 32),
-            src_feats=3,
-            trg_feats=3,
-            bidir=True,
-        )
-    elif config.DiffeoMappingNet_model == 'CorrMLP':
-        # NOTE: `CorrMLP` needs smaller learning rate (recommended: 1e-4).
-        warp_predictor = CorrMLP(
-            in_channels=3,
-            enc_channels=config.num_filters,
-        )
-    else:
-        raise ValueError('`config.DiffeoMappingNet_model`: %s not supported.' % config.DiffeoMappingNet_model)
-
+    warp_predictor = build_model(config)
     warp_predictor = warp_predictor.to(device)
 
     warper = Warper(size=config.target_dim)
     warper = warper.to(device)
 
-    optimizer = torch.optim.AdamW(warp_predictor.parameters(), lr=config.learning_rate)
+    optimizer = torch.optim.AdamW(warp_predictor.parameters(), lr=config.learning_rate, weight_decay=1e-4)
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=5)
 
     loss_fn_mse = torch.nn.MSELoss()
@@ -581,20 +576,7 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
     dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
 
     # Build the model
-    if config.DiffeoMappingNet_model == 'UNet':
-        warp_predictor = UNet(
-            num_filters=config.num_filters,
-            in_channels=6,
-            out_channels=4)
-    elif config.DiffeoMappingNet_model == 'VoxelMorph':
-        warp_predictor = VoxelMorph(
-            inshape=(32, 32),
-            src_feats=3,
-            trg_feats=3,
-            bidir=True)
-    else:
-        raise ValueError('`config.DiffeoMappingNet_model`: %s not supported.' % config.DiffeoMappingNet_model)
-
+    warp_predictor = build_model(config)
     warp_predictor.load_weights(config.DiffeoMappingNet_model_save_path, device=device)
     warp_predictor = warp_predictor.to(device)
 
@@ -895,20 +877,7 @@ def infer(config, wandb_run=None):
         os.makedirs(pred_label_folder)
 
     # Build the model
-    if config.DiffeoMappingNet_model == 'UNet':
-        warp_predictor = UNet(
-            num_filters=config.num_filters,
-            in_channels=6,
-            out_channels=4)
-    elif config.DiffeoMappingNet_model == 'VoxelMorph':
-        warp_predictor = VoxelMorph(
-            inshape=(32, 32),
-            src_feats=3,
-            trg_feats=3,
-            bidir=True)
-    else:
-        raise ValueError('`config.DiffeoMappingNet_model`: %s not supported.' % config.DiffeoMappingNet_model)
-
+    warp_predictor = build_model(config)
     warp_predictor.load_weights(config.DiffeoMappingNet_model_save_path, device=device)
     warp_predictor = warp_predictor.to(device)
 

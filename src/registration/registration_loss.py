@@ -4,9 +4,10 @@ import torch
 import torch.nn.functional as F
 
 
-class NCC:
-    def __init__(self, win=9):
+class NCCLoss:
+    def __init__(self, win=9, n_channels=3):
         self.win = win
+        self.n_channels = n_channels
 
     def loss(self, y_true, y_pred):
 
@@ -22,7 +23,7 @@ class NCC:
         win = [self.win] * ndims
 
         # compute filters
-        sum_filt = torch.ones([1, 3, *win]).to(y_pred.device)
+        sum_filt = torch.ones([1, self.n_channels, *win]).to(y_pred.device)
 
         pad_no = math.floor(win[0] / 2)
 
@@ -63,7 +64,7 @@ class NCC:
         return -torch.mean(cc)
 
 
-class Grad:
+class GradLoss:
     def __init__(self, penalty='l1', loss_mult=None):
         self.penalty = penalty
         self.loss_mult = loss_mult

@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 from skimage.metrics import structural_similarity
 import scipy.stats as stats
@@ -10,6 +11,8 @@ from sklearn.metrics import f1_score
 from sklearn.metrics import recall_score, precision_score
 from scipy.spatial.distance import directed_hausdorff as hausdorff
 from scipy.ndimage.measurements import center_of_mass
+from registration.registration_loss import NCCLoss
+
 
 def clustering_accuracy(embeddings: np.ndarray,
                         reference_embeddings: np.ndarray,
@@ -483,10 +486,24 @@ def l1(im1, im2) -> float:
     vec2 = im2.flatten()
     return np.linalg.norm((vec1 - vec2), ord=1) / len(vec1)
 
-def l2(im1, im2) -> float:
+def ncc(im1, im2) -> float:
     '''
-    Mean Squared Error.
+    Normalized Cross Correlation.
     '''
-    vec1 = im1.flatten()
-    vec2 = im2.flatten()
-    return np.linalg.norm((vec1 - vec2), ord=2) / len(vec1)
+
+    assert im1.shape == im2.shape
+    assert len(im1.shape) in [2, 3]
+    if len(im1.shape) == 2:
+        im1 = im1[None, None, ...]
+        im2 = im2[None, None, ...]
+        n_channels = 1
+    else:
+        im1 = im1.transpose(2, 0, 1)[None, ...]
+        im2 = im2.transpose(2, 0, 1)[None, ...]
+        n_channels = im1.shape[1]
+
+    tensor1 = torch.from_numpy(im1).float()
+    tensor2 = torch.from_numpy(im2).float()
+
+    ncc_op = NCCLoss(n_channels=n_channels).loss
+    return ncc_op(tensor1, tensor2).cpu().detach().numpy()

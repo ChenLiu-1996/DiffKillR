@@ -1,3 +1,5 @@
+import os
+import sys
 import einops
 import torch
 import torch.nn as nn
@@ -5,8 +7,12 @@ import torch.nn.functional as nnf
 import torch.utils.checkpoint as checkpoint
 from torch.distributions.normal import Normal
 
+import_dir = '/'.join(os.path.realpath(__file__).split('/')[:-2])
+sys.path.insert(0, import_dir)
+from model.base import BaseNetwork
 
-class CorrMLP(nn.Module):
+
+class CorrMLP(BaseNetwork):
     """
     Correlation-aware Coarse-to-fine MLPs for Deformable Medical Image Registration.
     CVPR 2024 (Oral).
