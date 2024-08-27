@@ -23,7 +23,7 @@ from utils.log_util import log
 from utils.parse import parse_settings
 from utils.seed import seed_everything
 from utils.early_stop import EarlyStopping
-from utils.metrics import dice_coeff, IoU
+from utils.metrics import dice_coeff, IoU, l1
 from utils.ncc import NCC
 
 
