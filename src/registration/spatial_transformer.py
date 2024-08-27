@@ -51,6 +51,7 @@ class SpatialTransformer(nn.Module):
 
 
 if __name__ == '__main__':
+    import os
     import cv2
     import numpy as np
     from matplotlib import pyplot as plt
@@ -134,4 +135,5 @@ if __name__ == '__main__':
     ax.set_title('Warp operation by\nDifferentiable Neural Network')
 
     fig.tight_layout(pad=2.0)
-    fig.savefig('test_warp.png')
+    os.makedirs('./test_output/', exist_ok=True)
+    fig.savefig('./test_output/test_spatial_transformer.png')

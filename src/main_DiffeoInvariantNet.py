@@ -68,7 +68,7 @@ def train(config, wandb_run=None):
     else:
         raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
 
-    mse_loss = torch.nn.MSELoss()
+    loss_fn_mse = torch.nn.MSELoss()
     early_stopper = EarlyStopping(mode='min',
                                   patience=config.patience)
 
@@ -93,7 +93,7 @@ def train(config, wandb_run=None):
             Reconstruction loss.
             '''
             recon_images, latent_features = model(images)
-            recon_loss = mse_loss(recon_images, canonical_images)
+            recon_loss = loss_fn_mse(recon_images, canonical_images)
 
             '''
             Latent embedding loss.
@@ -169,7 +169,7 @@ def train(config, wandb_run=None):
                 batch_size = images.shape[0]
 
                 recon_images, latent_features = model(images)
-                recon_loss = mse_loss(recon_images, canonical_images)
+                recon_loss = loss_fn_mse(recon_images, canonical_images)
 
                 latent_loss = None
 
@@ -263,7 +263,7 @@ def test(config):
     else:
         raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
 
-    mse_loss = torch.nn.MSELoss()
+    loss_fn_mse = torch.nn.MSELoss()
 
     # Test.
     model.eval()
@@ -281,7 +281,7 @@ def test(config):
             batch_size = images.shape[0]
 
             recon_images, latent_features = model(images)
-            recon_loss = mse_loss(recon_images, canonical_images)
+            recon_loss = loss_fn_mse(recon_images, canonical_images)
 
             latent_loss = None
             if config.latent_loss == 'SimCLR':

@@ -38,7 +38,7 @@ def clustering_accuracy(embeddings: np.ndarray,
     N1, N2 = embeddings.shape[0], reference_embeddings.shape[0]
     if voting_k > N2:
         voting_k = N2
-    
+
     knn_op = NearestNeighbors(n_neighbors=voting_k, metric=distance_measure)
     knn_op.fit(reference_embeddings)
 
@@ -87,7 +87,7 @@ def topk_accuracy(embeddings: np.ndarray,
     topk_nodes = np.argsort(distances, axis=1)[:, :k] # [N, k]
     if len(topk_nodes.shape) < 2:
         topk_nodes = topk_nodes[:, np.newaxis]
-        
+
     # Get the top-k labels for each node
     topk_labels = np.take_along_axis(adj_mat, topk_nodes, axis=1)
 
@@ -95,7 +95,7 @@ def topk_accuracy(embeddings: np.ndarray,
         acc = np.mean(np.sum(topk_labels, axis=1) / k)
     else:
         acc = np.mean(topk_labels)
-    
+
     return acc
 
 
@@ -474,3 +474,19 @@ def AJI_fast(gt, pred_arr):
     used[j] = 1
     u += (np.sum(s_areas[1:] * (1 - used)))
     return 1.0 * c / u
+
+def l1(im1, im2) -> float:
+    '''
+    Mean Absolute Error.
+    '''
+    vec1 = im1.flatten()
+    vec2 = im2.flatten()
+    return np.linalg.norm((vec1 - vec2), ord=1) / len(vec1)
+
+def l2(im1, im2) -> float:
+    '''
+    Mean Squared Error.
+    '''
+    vec1 = im1.flatten()
+    vec2 = im2.flatten()
+    return np.linalg.norm((vec1 - vec2), ord=2) / len(vec1)

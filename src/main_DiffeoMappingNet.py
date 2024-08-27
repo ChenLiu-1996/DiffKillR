@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 from functools import partial
 import wandb
 
+from registration.registration_loss import Grad as SmoothnessLoss
 from registration.unet import UNet
 from registration.voxelmorph import VxmDense as VoxelMorph
 from registration.spatial_transformer import SpatialTransformer as Warper
@@ -231,7 +232,8 @@ def train(config, wandb_run=None):
     optimizer = torch.optim.AdamW(warp_predictor.parameters(), lr=config.learning_rate)
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=5)
 
-    mse_loss = torch.nn.MSELoss()
+    loss_fn_mse = torch.nn.MSELoss()
+    loss_fn_smoothness = SmoothnessLoss('l2').loss
     early_stopper = EarlyStopping(mode='min',
                                   patience=config.patience,
                                   percentage=False)
@@ -342,9 +344,14 @@ def train(config, wandb_run=None):
                         unannotated_labels[0], annotated_labels[0],
                         labels_A2U[0]), metric_name_list, metric_list)
 
-            loss_forward = mse_loss(annotated_images, images_U2A)
-            loss_cyclic = mse_loss(unannotated_images, images_U2A_A2U)
+            loss_forward = loss_fn_mse(annotated_images, images_U2A)
+            loss_cyclic = loss_fn_mse(unannotated_images, images_U2A_A2U)
             loss = loss_forward + loss_cyclic
+
+            if config.coeff_smoothness:
+                loss_smoothness = loss_fn_smoothness(np.zeros((1)), warp_field_forward) \
+                                + loss_fn_smoothness(np.zeros((1)), warp_field_reverse)
+                loss += config.coeff_smoothness * loss_smoothness
 
             train_loss += loss.item() * curr_batch_size
             train_loss_forward += loss_forward.item() * curr_batch_size
@@ -488,9 +495,13 @@ def train(config, wandb_run=None):
                             unannotated_labels[0], annotated_labels[0],
                             labels_A2U[0]), metric_name_list, metric_list)
 
-                loss_forward = mse_loss(annotated_images, images_U2A)
-                loss_cyclic = mse_loss(unannotated_images, images_U2A_A2U)
+                loss_forward = loss_fn_mse(annotated_images, images_U2A)
+                loss_cyclic = loss_fn_mse(unannotated_images, images_U2A_A2U)
                 loss = loss_forward + loss_cyclic
+                if config.coeff_smoothness:
+                    loss_smoothness = loss_fn_smoothness(np.zeros((1)), warp_field_forward) \
+                                    + loss_fn_smoothness(np.zeros((1)), warp_field_reverse)
+                    loss += config.coeff_smoothness * loss_smoothness
 
                 val_loss += loss.item() * curr_batch_size
                 val_loss_forward += loss_forward.item() * curr_batch_size
@@ -574,7 +585,8 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
     warper = Warper(size=config.target_dim)
     warper = warper.to(device)
 
-    mse_loss = torch.nn.MSELoss()
+    loss_fn_mse = torch.nn.MSELoss()
+    loss_fn_smoothness = SmoothnessLoss('l2').loss
 
     dataset.set_deterministic(True)
     warp_predictor.eval()
@@ -677,9 +689,13 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
                     unannotated_labels[0], annotated_labels[0],
                     labels_A2U[0]), metric_name_list, metric_list)
 
-        loss_forward = mse_loss(annotated_images, images_U2A)
-        loss_cyclic = mse_loss(unannotated_images, images_U2A_A2U)
+        loss_forward = loss_fn_mse(annotated_images, images_U2A)
+        loss_cyclic = loss_fn_mse(unannotated_images, images_U2A_A2U)
         loss = loss_forward + loss_cyclic
+        if config.coeff_smoothness:
+            loss_smoothness = loss_fn_smoothness(np.zeros((1)), warp_field_forward) \
+                            + loss_fn_smoothness(np.zeros((1)), warp_field_reverse)
+            loss += config.coeff_smoothness * loss_smoothness
 
         test_loss += loss.item() * curr_batch_size
         test_loss_forward += loss_forward.item() * curr_batch_size
@@ -1027,6 +1043,7 @@ if __name__ == '__main__':
     parser.add_argument('--max-epochs', default=50, type=int)
     parser.add_argument('--batch-size', default=16, type=int)
     parser.add_argument('--num-filters', default=32, type=int)
+    parser.add_argument('--coeff-smoothness', default=0, type=float)
     parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
     parser.add_argument('--n-plot-per-epoch', default=2, type=int)
 
@@ -1044,7 +1061,7 @@ if __name__ == '__main__':
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
-    DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_strong-{config.strong}_epoch-{config.max_epochs}_seed{config.random_seed}'
+    DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_strong-{config.strong}_epoch-{config.max_epochs}_smoothness-{config.coeff_smoothness}_seed{config.random_seed}'
     config.DiffeoMappingNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoMappingNet_str + '.ckpt')
     config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, '')
     config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, 'log.txt')
