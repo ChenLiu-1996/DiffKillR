@@ -135,7 +135,7 @@ class AugmentedA28Dataset(Dataset):
                 image_new_view = center_crop(image_new_view, output_size=self.target_dim[0])
                 image_new_view = fix_channel_dimension(normalize_image(image_new_view))
                 label_new_view = center_crop(label_new_view, output_size=self.target_dim[0])
-                label_new_view = fix_channel_dimension(normalize_image(label_new_view))
+                label_new_view = fix_channel_dimension(label_new_view)
 
                 image_n_view.append(image_new_view[np.newaxis, ...])
                 label_n_view.append(label_new_view[np.newaxis, ...])
@@ -149,7 +149,7 @@ class AugmentedA28Dataset(Dataset):
         canonical_pose_label = center_crop(canonical_pose_label, output_size=self.target_dim[0])
 
         canonical_pose_image = fix_channel_dimension(normalize_image(canonical_pose_image))
-        canonical_pose_label = fix_channel_dimension(normalize_image(canonical_pose_label))
+        canonical_pose_label = fix_channel_dimension(canonical_pose_label)
 
         return (image_aug, label_aug,
                 image_n_view, label_n_view,

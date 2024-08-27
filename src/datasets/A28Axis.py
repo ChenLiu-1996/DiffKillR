@@ -95,8 +95,6 @@ class AugmentedA28AxisDataset(Dataset):
             # TODO: How to unseed the other random generators?
             random.seed(None)
             np.random.seed(None)
-            torch.manual_seed(None)
-            torch.cuda.manual_seed(None)
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
             torch.use_deterministic_algorithms(False)

@@ -12,9 +12,10 @@ from functools import partial
 import wandb
 
 from registration.registration_loss import Grad as SmoothnessLoss
+from registration.spatial_transformer import SpatialTransformer as Warper
 from registration.unet import UNet
 from registration.voxelmorph import VxmDense as VoxelMorph
-from registration.spatial_transformer import SpatialTransformer as Warper
+from registration.corrmlp import CorrMLP
 
 from utils.attribute_hashmap import AttributeHashmap
 from utils.prepare_dataset import prepare_dataset
@@ -214,13 +215,29 @@ def train(config, wandb_run=None):
         warp_predictor = UNet(
             num_filters=config.num_filters,
             in_channels=6,
-            out_channels=4)
-    elif config.DiffeoMappingNet_model == 'VoxelMorph':
+            out_channels=4,
+        )
+    elif config.DiffeoMappingNet_model == 'VM':
         warp_predictor = VoxelMorph(
             inshape=(32, 32),
             src_feats=3,
             trg_feats=3,
-            bidir=True)
+            int_steps=0,  # non-diffeomorphic
+            bidir=True,
+        )
+    elif config.DiffeoMappingNet_model == 'VM-Diff':
+        warp_predictor = VoxelMorph(
+            inshape=(32, 32),
+            src_feats=3,
+            trg_feats=3,
+            bidir=True,
+        )
+    elif config.DiffeoMappingNet_model == 'CorrMLP':
+        # NOTE: `CorrMLP` needs smaller learning rate (recommended: 1e-4).
+        warp_predictor = CorrMLP(
+            in_channels=3,
+            enc_channels=config.num_filters,
+        )
     else:
         raise ValueError('`config.DiffeoMappingNet_model`: %s not supported.' % config.DiffeoMappingNet_model)
 
@@ -476,7 +493,6 @@ def train(config, wandb_run=None):
                         val_metric_ours_dict[metric_name].append(
                             metric((labels_A2U[i, ...]).cpu().detach().numpy().transpose(1, 2, 0),
                                    (unannotated_labels[i, ...]).cpu().detach().numpy().transpose(1, 2, 0)))
-
 
                 if shall_plot:
                     save_path_fig_sbs = '%s/val/figure_log_epoch%s_sample%s.png' % (
@@ -1038,7 +1054,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--learning-rate', default=1e-3, type=float)
     parser.add_argument('--strong', action='store_true', help='If true, we map among different cells.')
-    parser.add_argument('--patience', default=50, type=int)
+    parser.add_argument('--patience', default=100, type=int)
     parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
     parser.add_argument('--max-epochs', default=50, type=int)
     parser.add_argument('--batch-size', default=16, type=int)

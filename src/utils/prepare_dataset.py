@@ -25,7 +25,7 @@ def prepare_dataset(config: AttributeHashmap):
                                       target_dim=config.target_dim,
                                       n_views=config.n_views)
 
-    elif config.dataset_name == 'A28+axis':
+    elif config.dataset_name == 'A28Axis':
         aug_lists = config.aug_methods.split(',')
         dataset = AugmentedA28AxisDataset(augmentation_methods=aug_lists,
                                           base_path=config.dataset_path,

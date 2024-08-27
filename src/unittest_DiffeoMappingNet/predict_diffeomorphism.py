@@ -272,6 +272,8 @@ def dict_statistics(result_dict: Dict, digits: int = 3) -> None:
 
     df_latex.set_index('Architecture', inplace=True)
     df_latex = bold_best_per_row(df_latex.transpose())
+
+    df_latex = df_latex[['UNet', 'VM', 'VM-Diff', 'CorrMLP']]
     print(df_latex.to_latex())
     return
 
@@ -319,7 +321,7 @@ def train_eval_net(DiffeoMappingNet,
     fixed_image_torch = torch.from_numpy((fixed_image).transpose(2, 0, 1)[None, ...]).float()
 
     time_begin = time.time()
-    for _ in tqdm(range(100)):
+    for _ in tqdm(range(200)):
         __diffeo_forward, __diffeo_backward = DiffeoMappingNet(source=moving_image_torch, target=fixed_image_torch)
         __image_warped_forward = warper(moving_image_torch, flow=__diffeo_forward)
         __image_warped_backward = warper(fixed_image_torch, flow=__diffeo_backward)
