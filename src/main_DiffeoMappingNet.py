@@ -264,20 +264,25 @@ def train(config, wandb_run=None):
             curr_batch_size = image_n_view.shape[0]
             shall_plot = iter_idx % plot_freq == plot_freq - 1
 
-            if not config.strong:
-                # Weak mapping: map within the same cell (one augmented version to another).
+            if config.hard_example_ratio == 0:
+                # No hard example: map within the same cell (one augmented version to another).
                 unannotated_images = image_n_view[:, 0, ...]
                 unannotated_labels = label_n_view[:, 0, ...]
                 annotated_images = image_n_view[:, 1, ...]
                 annotated_labels = label_n_view[:, 1, ...]
 
             else:
-                # Strong mapping: map across different cells.
-                permuted_idx = np.random.permutation(len(image_n_view))
+                # Hard example mining: map across different cells.
+                num_permuted = int(len(image_n_view) * config.hard_example_ratio)
+                permuted_idx = np.random.permutation(num_permuted)
                 unannotated_images = image_n_view[:, 0, ...]
                 unannotated_labels = label_n_view[:, 0, ...]
-                annotated_images = image_n_view[permuted_idx][:, 1, ...]
-                annotated_labels = label_n_view[permuted_idx][:, 1, ...]
+                permuted_image_n_view = image_n_view.clone()
+                permuted_label_n_view = label_n_view.clone()
+                permuted_image_n_view[:num_permuted] = image_n_view[:num_permuted][permuted_idx]
+                permuted_label_n_view[:num_permuted] = label_n_view[:num_permuted][permuted_idx]
+                annotated_images = permuted_image_n_view[:, 1, ...]
+                annotated_labels = permuted_label_n_view[:, 1, ...]
 
             if len(unannotated_labels.shape) == 3:
                 unannotated_labels = unannotated_labels[:, None, ...]
@@ -422,7 +427,7 @@ def train(config, wandb_run=None):
                 curr_batch_size = image_n_view.shape[0]
                 shall_plot = iter_idx % plot_freq == plot_freq - 1
 
-                # Strong or Weak mapping only relevant to training.
+                # Hard example mining only relevant to training.
                 # For val and test we always use the same cell.
                 unannotated_images = image_n_view[:, 0, ...]
                 unannotated_labels = label_n_view[:, 0, ...]
@@ -603,7 +608,7 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
         curr_batch_size = image_n_view.shape[0]
         shall_plot = iter_idx % plot_freq == plot_freq - 1
 
-        # Strong or Weak mapping only relevant to training.
+        # Hard example mining only relevant to training.
         # For val and test we always use the same cell.
         unannotated_images = image_n_view[:, 0, ...]
         unannotated_labels = label_n_view[:, 0, ...]
@@ -1022,7 +1027,7 @@ if __name__ == '__main__':
     parser.add_argument('--latent-loss', default='SimCLR', type=str)
 
     parser.add_argument('--learning-rate', default=1e-3, type=float)
-    parser.add_argument('--strong', action='store_true', help='If true, we map among different cells.')
+    parser.add_argument('--hard-example-ratio', default=0, type=float)
     parser.add_argument('--patience', default=100, type=int)
     parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
     parser.add_argument('--max-epochs', default=50, type=int)
@@ -1046,7 +1051,7 @@ if __name__ == '__main__':
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
-    DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_strong-{config.strong}_epoch-{config.max_epochs}_smoothness-{config.coeff_smoothness}_seed{config.random_seed}'
+    DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_hard-{config.hard_example_ratio}_epoch-{config.max_epochs}_smoothness-{config.coeff_smoothness}_seed{config.random_seed}'
     config.DiffeoMappingNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoMappingNet_str + '.ckpt')
     config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, '')
     config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, 'log.txt')
