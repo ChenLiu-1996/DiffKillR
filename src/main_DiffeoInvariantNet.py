@@ -27,13 +27,13 @@ from utils.seed import seed_everything
 from utils.early_stop import EarlyStopping
 from loss.supervised_contrastive import SupConLoss
 from loss.triplet_loss import TripletLoss
-from datasets.augmented_MoNuSeg import AugmentedMoNuSegDataset, load_image
-from datasets.augmented_GLySAC import AugmentedGLySACDataset
 
 
 def train(config, wandb_run=None):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    if torch.backends.mps.is_available():
+        device = 'mps'
 
     dataset, train_loader, val_loader, _ = prepare_dataset(config=config)
 
@@ -232,7 +232,12 @@ def train(config, wandb_run=None):
 def test(config):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
+    if torch.backends.mps.is_available():
+        device = 'mps'
+    
     dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
+
+    print('Len(Dataset): ', len(dataset))
 
     # Build the model
     try:
@@ -324,7 +329,8 @@ def test(config):
 
     # Visualize latent embeddings.
     embeddings = {split: None for split in ['train', 'val', 'test']}
-    embedding_patch_id_int = {split: [] for split in ['train', 'val', 'test']}
+    reference_embeddings = {split: None for split in ['train', 'val', 'test']}
+    n_views_embeddings = {split: None for split in ['train', 'val', 'test']}
     orig_inputs = {split: None for split in ['train', 'val', 'test']}
     canonical = {split: None for split in ['train', 'val', 'test']}
     reconstructed = {split: None for split in ['train', 'val', 'test']}
@@ -350,27 +356,50 @@ def test(config):
 
         for split, split_set in zip(['train', 'val', 'test'], [train_loader_no_shuffle, val_loader, test_loader]):
             # NOTE (quite arbitrary): Repeat for 5 random augmentations.
-            for _ in range(5):
-                for iter_idx, (images, _, _, _, canonical_images, _) in enumerate(split_set):
+            for _ in range(1):
+                for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(split_set):
                     # NOTE (quite arbitrary): Limit the computation.
                     batch_size = images.shape[0]
                     if iter_idx * batch_size > 400:
                         break
-
+                    
+                    # Infer latent embeddings for aug view.
                     images = images.float().to(device)  # [batch_size, C, H, W]
-
                     recon_images, latent_features = model(images)
                     latent_features = torch.flatten(latent_features, start_dim=1)
+
+                    # Infer latent embeddings for canonical view.
+                    canonical_images = canonical_images.float().to(device)
+                    _, latent_features_ref = model(canonical_images)
+                    latent_features_ref = torch.flatten(latent_features_ref, start_dim=1)
+
+                    # Infer latent embeddings for n_views: [batch_size, n_views, C, H, W] -> [batch_size * n_views, C, H, W]
+                    image_n_view = image_n_view.reshape(-1, image_n_view.shape[-3], image_n_view.shape[-2], image_n_view.shape[-1])
+                    image_n_view = image_n_view.float().to(device)
+                    _, latent_features_n_views = model(image_n_view)
+                    latent_features_n_views = torch.flatten(latent_features_n_views, start_dim=1)
 
                     # Move to cpu to save memory on gpu.
                     images = images.cpu()
                     recon_images = recon_images.cpu()
                     latent_features = latent_features.cpu()
+                    latent_features_ref = latent_features_ref.cpu()
+                    latent_features_n_views = latent_features_n_views.cpu()
 
                     if embeddings[split] is None:
                         embeddings[split] = latent_features  # (batch_size, latent_dim)
                     else:
                         embeddings[split] = torch.cat([embeddings[split], latent_features], dim=0)
+                    
+                    if reference_embeddings[split] is None:
+                        reference_embeddings[split] = latent_features_ref
+                    else:
+                        reference_embeddings[split] = torch.cat([reference_embeddings[split], latent_features_ref], dim=0)
+
+                    if n_views_embeddings[split] is None:
+                        n_views_embeddings[split] = latent_features_n_views
+                    else:
+                        n_views_embeddings[split] = torch.cat([n_views_embeddings[split], latent_features_n_views], dim=0)
 
                     if reconstructed[split] is None:
                         reconstructed[split] = recon_images # (batch_size, in_chan, H, W)
@@ -387,18 +416,16 @@ def test(config):
                     else:
                         canonical[split] = torch.cat([canonical[split], canonical_images], dim=0)
 
-                    embedding_patch_id_int[split].extend([iter_idx for _ in range(images.shape[0])])
-
             embeddings[split] = embeddings[split].numpy()
+            reference_embeddings[split] = reference_embeddings[split].numpy()
             reconstructed[split] = reconstructed[split].numpy()
-            orig_inputs[split] = orig_inputs[split].numpy()
-            canonical[split] = canonical[split].numpy()
-            embedding_patch_id_int[split] = np.array(embedding_patch_id_int[split])
-            assert len(embeddings[split]) == len(reconstructed[split]) == len(embedding_patch_id_int[split])
+            orig_inputs[split] = orig_inputs[split].cpu().numpy()
+            canonical[split] = canonical[split].cpu().numpy()
 
     # Quantify latent embedding quality.
     ins_clustering_acc = {}
-    ins_top1_acc, ins_top3_acc, ins_top5_acc, ins_mAP = {}, {}, {}, {}
+    ins_topk_acc = {k: {} for k in [3]}
+    ins_mAP = {}
 
     for split in ['train', 'val', 'test']:
         if config.latent_loss == 'triplet':
@@ -406,53 +433,36 @@ def test(config):
         elif config.latent_loss == 'SimCLR':
             distance_measure = 'cosine'
 
-        instance_adj = np.zeros((len(embedding_patch_id_int[split]), len(embedding_patch_id_int[split])))
-        log(f'Constructing instance adjacency ({instance_adj.shape}) matrices...', to_console=True)
-        for i in range(len(embedding_patch_id_int[split])):
-            for j in range(len(embedding_patch_id_int[split])):
-                # same patch id means same instance
-                if embedding_patch_id_int[split][i] == embedding_patch_id_int[split][j]:
-                    instance_adj[i, j] = 1
-
-        log(f'Done constructing instance adjacency ({instance_adj.shape}) matrices.', to_console=True)
-
-        # TODO: [to Danqi, from Chen]
-        # I have not checked your latest logic for computing the
-        # class vs. instance acc and top-k. Please fix as needed.
-        # Note that I would suggest keeping a few different values of `k`.
-
         ins_clustering_acc[split] = clustering_accuracy(embeddings[split],
-                                                        embeddings['train'],
-                                                        embedding_patch_id_int[split],
-                                                        embedding_patch_id_int['train'],
+                                                        reference_embeddings[split],
+                                                        labels=np.arange(len(embeddings[split])),
+                                                        reference_labels=np.arange(len(reference_embeddings[split])),
                                                         distance_measure=distance_measure,
                                                         voting_k=1)
 
-        ins_top1_acc[split] = topk_accuracy(embeddings[split],
-                                            instance_adj,
-                                            distance_measure=distance_measure,
-                                            k=1)
-
-        ins_top3_acc[split] = topk_accuracy(embeddings[split],
-                                            instance_adj,
-                                            distance_measure=distance_measure,
-                                            k=3)
-
-        ins_top5_acc[split] = topk_accuracy(embeddings[split],
-                                            instance_adj,
-                                            distance_measure=distance_measure,
-                                            k=5)
-
-        ins_mAP[split] = embedding_mAP(embeddings[split],
-                                       instance_adj,
-                                       distance_op=distance_measure)
-
+        # repeat the labels for n_views times.
+        n_views_labels = np.repeat(np.arange(len(embeddings[split])), config.n_views)
+        concatenated_labels = np.concatenate([np.arange(len(embeddings[split])), n_views_labels], axis=0)
+        concatenated_embeddings = np.concatenate([embeddings[split], n_views_embeddings[split]], axis=0)
+        instance_adj = np.zeros((len(concatenated_embeddings), len(concatenated_embeddings)))
+        for i in range(len(concatenated_embeddings)):
+            for j in range(len(concatenated_embeddings)):
+                if concatenated_labels[i] == concatenated_labels[j]:
+                    instance_adj[i, j] = 1
+        print('Done constructing instance adjacency matrix of shape: ', instance_adj.shape)
+        for k in ins_topk_acc.keys():
+            ins_topk_acc[k][split] = topk_accuracy(concatenated_embeddings,
+                                                    instance_adj,
+                                                    distance_measure=distance_measure,
+                                                    k=k)
+        ins_mAP[split] = embedding_mAP(concatenated_embeddings,
+                                        instance_adj,
+                                        distance_op=distance_measure)
+        
         log(f'[{split}]Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
-        log(f'[{split}]Instance top-1 accuracy: {ins_top1_acc[split]:.3f}', to_console=True)
-        log(f'[{split}]Instance top-3 accuracy: {ins_top3_acc[split]:.3f}', to_console=True)
-        log(f'[{split}]Instance top-5 accuracy: {ins_top5_acc[split]:.3f}', to_console=True)
+        for k in ins_topk_acc.keys():
+            log(f'[{split}]Instance top-{k} accuracy: {ins_topk_acc[k][split]:.3f}', to_console=True)
         log(f'[{split}]Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
-
     return
 
 
@@ -469,10 +479,10 @@ if __name__ == '__main__':
     parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
 
     parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
-    parser.add_argument('--dataset-name', default='A28', type=str)
-    parser.add_argument('--dataset-path', default='$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_patch_96x96/', type=str)
+    parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
+    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg2018TrainData_patch_96x96/', type=str)
     parser.add_argument('--percentage', default=100, type=float)
-    parser.add_argument('--organ', default=None, type=str)
+    parser.add_argument('--organ', default='Breast', type=str)
 
     parser.add_argument('--learning-rate', default=1e-3, type=float)
     parser.add_argument('--patience', default=50, type=int)

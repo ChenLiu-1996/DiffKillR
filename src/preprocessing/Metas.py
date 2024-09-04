@@ -57,7 +57,7 @@ GLySAC_Organ2FileID = {
     }
 }
 
-Organ2FileID = {
+MoNuSeg_Organ2FileID = {
     'Colon': {
         'train': [
             'TCGA-AY-A8YK-01A-01-TS1',

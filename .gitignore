@@ -1,3 +1,5 @@
+*.zip
+/src/outputs/
 .DS_Store
 /results/*
 /checkpoints/

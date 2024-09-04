@@ -1,10 +1,10 @@
 from torch.utils.data import DataLoader
 from datasets.synthetic import SyntheticDataset
 from datasets.augmented import AugmentedDataset
-from datasets.A28 import AugmentedA28Dataset
+# from datasets.A28 import AugmentedA28Dataset
 from datasets.A28Axis import AugmentedA28AxisDataset
 # from datasets.tissuenet import TissueNetDataset
-from datasets.augmented_MoNuSeg import AugmentedMoNuSegDataset
+from datasets.MoNuSeg import MoNuSegDataset
 from datasets.augmented_GLySAC import AugmentedGLySACDataset
 from datasets.BCCD_augmented import BCCD_augmentedDataset
 from utils.split import split_dataset
@@ -43,9 +43,11 @@ def prepare_dataset(config: AttributeHashmap):
     #                                target_dim=config.target_dim)
     elif config.dataset_name == 'MoNuSeg':
         aug_lists = config.aug_methods.split(',')
-        dataset = AugmentedMoNuSegDataset(augmentation_methods=aug_lists,
-                                          base_path=config.dataset_path,
-                                          target_dim=config.target_dim)
+        dataset = MoNuSegDataset(augmentation_methods=aug_lists,
+                                 organ=config.organ,
+                                 base_path=config.dataset_path,
+                                 target_dim=config.target_dim,
+                                 n_views=config.n_views)
     elif config.dataset_name == 'GLySAC':
         aug_lists = config.aug_methods.split(',')
         dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists,
