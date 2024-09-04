@@ -28,13 +28,13 @@ class AugmentedGLySACDataset(Dataset):
         self.augmentation_method_to_folder = {}
         for folder in self.augmentation_folders:
             self.augmentation_method_to_folder[folder.split('/')[-2]] = folder
-        
+
         # Note: make sure only 1 copy of patch_id_original.png exists in dataset
         # Otherwise, can't perform super contrastive learning.
         '''
-            e.g. 'DB-0001_normal_2_H-10_W574_original.png', 
+            e.g. 'DB-0001_normal_2_H-10_W574_original.png',
                  'DB-0001_normal_2_H-10_W574_aug00001.png'
-        '''            
+        '''
         self.patch_id_to_canonical_pose_path = {}
         self.patch_id_to_patch_id_idx = {}
 
@@ -44,7 +44,7 @@ class AugmentedGLySACDataset(Dataset):
         for folder in self.augmentation_folders:
             aug_method = folder.split('/')[-2]
             #print('Loading images and labels from %s; aug_method: %s ' % (folder, aug_method))
-            
+
             img_paths = sorted(glob('%s/image/*.png' % (folder)))
             label_paths = sorted(glob('%s/label/*.png' % (folder)))
             for img_path, label_path in zip(img_paths, label_paths):
@@ -54,7 +54,7 @@ class AugmentedGLySACDataset(Dataset):
                 #print(img_path)
                 patch_id = "_".join(file_name.split('_')[:-1]) # e.g. 'DB-0001_normal_2_H-10_W574'
                 is_original = file_name.split('_')[-1].split('.')[0] == 'original'
-                
+
                 if is_original == True:
                     if patch_id not in self.patch_id_to_canonical_pose_path.keys():
                         self.patch_id_to_canonical_pose_path[patch_id] = img_path
@@ -64,7 +64,7 @@ class AugmentedGLySACDataset(Dataset):
                     self.all_image_paths.append(img_path)
                     self.all_label_paths.append(label_path)
         assert len(self.all_image_paths) == len(self.all_label_paths)
-        
+
         patch_id_list = list(self.patch_id_to_canonical_pose_path.keys())
         for i in range(len(patch_id_list)):
             self.patch_id_to_patch_id_idx[patch_id_list[i]] = i
@@ -84,7 +84,7 @@ class AugmentedGLySACDataset(Dataset):
 
     def __len__(self) -> int:
         return len(self.all_image_paths)
-    
+
     def __str__(self) -> str:
         return 'AugmentedGLySACDataset: %d images' % len(self)
 
@@ -96,19 +96,19 @@ class AugmentedGLySACDataset(Dataset):
         # label = np.array(cv2.imread(label_path, cv2.IMREAD_UNCHANGED))
         image = self.all_images[idx]
         label = self.all_labels[idx]
-        
+
         canonical_pose_image, canonical_pose_label, canonical_pose_img_path = self._canonical_pose(
             img_path=image_path)
 
-        return (image, label, 
-                canonical_pose_image, canonical_pose_label, 
+        return (image, label,
+                canonical_pose_image, canonical_pose_label,
                 image_path, canonical_pose_img_path)
-    
+
     def _canonical_pose(self, img_path) -> np.array:
         '''
             Return the canonical pose image/label of an image.
             For now, the mother of each augmented views is the canonical pose.
-            e.g. 'DB-0001_normal_2_H-10_W574_original.png' is the canonical pose of 
+            e.g. 'DB-0001_normal_2_H-10_W574_original.png' is the canonical pose of
             'DB-0001_normal_2_H-10_W574_aug00001.png'
         '''
         patch_id = self.get_patch_id(img_path=img_path) # e.g. 'TCGA-NH-A8F7-01A-01-TS1_H673_W415'
@@ -122,7 +122,7 @@ class AugmentedGLySACDataset(Dataset):
         canonical_pose_label = self.all_labels[self.img_path_2_idx[canonical_pose_img_path]]
 
         return canonical_pose_img, canonical_pose_label, canonical_pose_img_path
-    
+
     def get_patch_id(self, img_path) -> str:
         '''
             Return the patch_id of an image.
@@ -131,7 +131,7 @@ class AugmentedGLySACDataset(Dataset):
         img_file = os.path.basename(img_path)
         patch_id = "_".join(img_file.split('_')[:-1])
         return patch_id
-    
+
     def get_patch_id_idx(self, img_path) -> int:
         patch_id = self.get_patch_id(img_path)
         return self.patch_id_to_patch_id_idx[patch_id]
@@ -146,7 +146,7 @@ class AugmentedGLySACDataset(Dataset):
         '''
         images = []
         labels = []
-        
+
         candiates = self.img_path_by_patch_id_and_split[patch_id][split]
         if cnt > len(candiates):
             raise ValueError('Not enough images for \
@@ -164,12 +164,12 @@ class AugmentedGLySACDataset(Dataset):
 
             images.append(image[np.newaxis, ...])
             labels.append(label[np.newaxis, ...])
-        
+
         images = np.concatenate(images, axis=0)
         labels = np.concatenate(labels, axis=0)
 
         return images, labels
-    
+
     def _set_img_path_to_split(self, img_path_to_split: dict) -> None:
         '''
             Set the img_path_to_split dict
@@ -189,7 +189,7 @@ class AugmentedGLySACDataset(Dataset):
             else:
                 self.img_path_by_patch_id_and_split[patch_id][split].append(img_path)
 
-        print('Finished setting img_path_to_split dict and img_path_by_patch_id_and_split.\n')        
+        print('Finished setting img_path_to_split dict and img_path_by_patch_id_and_split.\n')
 
 
 def load_mask(path: str, target_dim: Tuple[int] = None) -> np.array:
@@ -198,7 +198,7 @@ def load_mask(path: str, target_dim: Tuple[int] = None) -> np.array:
 
     if target_dim is not None:
         mask = np.array(cv2.resize(mask, target_dim))
-    
+
     return mask # [W, H]
 
 
@@ -229,14 +229,14 @@ if __name__ == '__main__':
                  'directional_stretch',
                  'volume_preserving_stretch',
                  'partial_stretch']
-    
-    dataset = AugmentedGLySACgDataset(augmentation_methods=aug_lists)
+
+    dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists)
     print(len(dataset))
 
     dataloader = DataLoader(dataset=dataset, batch_size=32, shuffle=True, num_workers=0)
 
-    for batch_idx, (images, labels, 
-                canonical_pose_images, canonical_pose_labels, 
+    for batch_idx, (images, labels,
+                canonical_pose_images, canonical_pose_labels,
                 image_paths, canonical_pose_img_paths) in enumerate(dataloader):
         print(images.shape)
         print(labels.shape)
@@ -247,4 +247,3 @@ if __name__ == '__main__':
 
         break
 
-    

@@ -42,14 +42,14 @@ class TripletLoss(nn.Module):
             anchor = F.normalize(anchor, p=2, dim=1)
             positive = F.normalize(positive, p=2, dim=2)
             negative = F.normalize(negative, p=2, dim=2)
-        
+
         # Tile anchor to shape (bsz * num_pos, latent_dim)
         anchor = anchor.repeat(self.num_pos, 1) # (bsz * num_pos, latent_dim)
 
         # Reshape positive and negative to shape (bsz * num_pos, latent_dim)
         positive = torch.cat(torch.unbind(positive, dim=1), dim=0)
         negative = torch.cat(torch.unbind(negative, dim=1), dim=0)
-        
+
         # Pairwise distances
         if self.distance_measure == 'cosine':
             d_ap = 1 - F.cosine_similarity(anchor, positive, dim=1)
@@ -104,7 +104,6 @@ def construct_triplet_batch(img_paths,
     _, pos_features = model(pos_images) # (bsz * num_pos, latent_dim)
 
     # Negative.
-    num_neg = config.num_neg
     neg_features = None # (bsz*num_neg, latent_dim)
     all_features = torch.cat([latent_features, pos_features], dim=0) # (bsz * (1+num_pos), latent_dim)
 

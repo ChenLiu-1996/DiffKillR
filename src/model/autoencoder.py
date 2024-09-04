@@ -10,7 +10,7 @@ class AutoEncoder(BaseNetwork):
                  device: torch.device = torch.device('cpu'),
                  num_filters: int = 16,
                  depth: int = 4,
-                 use_residual: bool = False,
+                 use_residual: bool = True,
                  in_channels: int = 3,
                  out_channels: int = 3,
                  non_linearity: str = 'relu'):

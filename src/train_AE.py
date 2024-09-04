@@ -94,7 +94,7 @@ def construct_batch_images_with_n_views(
     '''
     if sampling_method not in ['supercontrast', 'SimCLR']:
         raise ValueError('`sampling_method`: %s not supported.' % sampling_method)
-    
+
     # Construct batch_images [bsz * n_views, in_chan, H, W].
     batch_images = None
     cell_type_labels = []
@@ -112,7 +112,7 @@ def construct_batch_images_with_n_views(
                 aug_images, _ = dataset.sample_views(split=split,
                                                      patch_id=patch_id,
                                                      cnt=n_views-1)
-                
+
             aug_images = torch.Tensor(aug_images).to(device) # (cnt, in_chan, H, W)
 
             image = torch.unsqueeze(image, dim=0) # (1, in_chan, H, W)
@@ -136,7 +136,7 @@ def construct_batch_images_with_n_views(
 def train(config: AttributeHashmap):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    # check apple metal 
+    # check apple metal
     if torch.backends.mps.is_available():
         device = "mps"
     dataset, train_set, val_set, test_set = \
@@ -166,7 +166,7 @@ def train(config: AttributeHashmap):
     if config.latent_loss in ['supercontrast', 'SimCLR']:
         supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
-                                        contrast_mode=config.contrast_mode)
+                                        contrastive_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
         triplet_loss = TripletLoss(distance_measure='cosine',
                                    margin=config.margin,
@@ -350,10 +350,10 @@ def train(config: AttributeHashmap):
 def test(config: AttributeHashmap):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    # check apple metal 
+    # check apple metal
     if torch.backends.mps.is_available():
         device = "mps"
-        
+
     dataset, train_set, val_set, test_set = prepare_dataset(config=config)
 
     # Build the model
@@ -377,7 +377,7 @@ def test(config: AttributeHashmap):
     if config.latent_loss in ['supercontrast', 'SimCLR']:
         supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
-                                        contrast_mode=config.contrast_mode)
+                                        contrastive_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
         triplet_loss = TripletLoss(distance_measure='cosine',
                                    margin=config.margin,
@@ -524,7 +524,7 @@ def test(config: AttributeHashmap):
             for j in range(len(embedding_labels[split])):
                 if embedding_labels_int[split][i] == embedding_labels_int[split][j]:
                     class_adj[i, j] = 1
-                
+
                 # same patch id means same instance
                 if embedding_patch_id_int[split][i] == embedding_patch_id_int[split][j]:
                     instance_adj[i, j] = 1
@@ -546,11 +546,11 @@ def test(config: AttributeHashmap):
         #                                distance_op=distance_measure)
         print('start class clustering accuracy...')
         class_clustering_acc[split] = clustering_accuracy(embeddings[split],
-                                                        embeddings['train'],
-                                                        embedding_labels_int[split],
-                                                        embedding_labels_int['train'],
-                                                        distance_measure=distance_measure,
-                                                        voting_k=1)
+                                                          embeddings['train'],
+                                                          embedding_labels_int[split],
+                                                          embedding_labels_int['train'],
+                                                          distance_measure=distance_measure,
+                                                          voting_k=1)
         print('Done class clustering accuracy. Start class top-k accuracy...')
         class_topk_acc[split] = topk_accuracy(embeddings[split],
                                               class_adj,
@@ -560,7 +560,7 @@ def test(config: AttributeHashmap):
         # class_mAP[split] = embedding_mAP(embeddings[split],
         #                                  class_adj,
         #                                  distance_op=distance_measure)
-        
+
         #log(f'Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
         #log(f'Instance top-k accuracy: {ins_topk_acc[split]:.3f}', to_console=True)
         #log(f'Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
@@ -588,7 +588,7 @@ def test(config: AttributeHashmap):
         ax = fig_embedding.add_subplot(3, 1, ['train', 'val', 'test'].index(split) + 1)
         title = f"{split}: Class clustering acc: {class_clustering_acc[split]:.3f},\n \
             Class top-k acc: {class_topk_acc[split]:.3f}"
-        
+
         scprep.plot.scatter2d(data_phate,
                               c=embedding_labels[split],
                               legend=dataset.cell_types,
@@ -621,7 +621,7 @@ def test(config: AttributeHashmap):
         #     Class mAP: {class_mAP[split]:.3f}"
         title = f"{split}: Class clustering acc: {class_clustering_acc[split]:.3f},\n \
             Class top-k acc: {class_topk_acc[split]:.3f}"
-        
+
         scprep.plot.scatter2d(data_phate,
                               c=embedding_patch_id_int[split],
                               legend=dataset.cell_types,
@@ -690,7 +690,7 @@ def test(config: AttributeHashmap):
 def infer(config: AttributeHashmap):
     device = torch.device(
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    # check apple metal 
+    # check apple metal
     if torch.backends.mps.is_available():
         device = "mps"
 
@@ -706,13 +706,13 @@ def infer(config: AttributeHashmap):
     model.load_weights(config.model_save_path, device=device)
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)
-    
+
     # Load references from cell bank.
     aug_methods = config.aug_methods.split(',')
     config.cell_bank_folders = [f'{config.dataset_path}/{aug_method}/image/' for aug_method in aug_methods]
     print('Cell bank folders:', config.cell_bank_folders)
 
-    reference_images, reference_labels, reference_files = load_cell_bank(config.cell_bank_folders, 
+    reference_images, reference_labels, reference_files = load_cell_bank(config.cell_bank_folders,
                                                                     orig_only=True,
                                                                     celltype_pos=config.celltype_pos)
     label2idx, idx2label = label_to_idx(reference_labels)
@@ -767,7 +767,7 @@ def infer(config: AttributeHashmap):
     df = pd.DataFrame({'test_file': test_files,
                           'matching_reference_file': matching_reference_files,
                           'matching_celltype': top1_labels})
-    
+
     df.to_csv(save_path, index=False)
 
     print('Done saving matching results:', save_path)

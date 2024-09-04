@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 from skimage.metrics import structural_similarity
 import scipy.stats as stats
@@ -10,6 +11,8 @@ from sklearn.metrics import f1_score
 from sklearn.metrics import recall_score, precision_score
 from scipy.spatial.distance import directed_hausdorff as hausdorff
 from scipy.ndimage.measurements import center_of_mass
+from registration.registration_loss import NCCLoss
+
 
 def clustering_accuracy(embeddings: np.ndarray,
                         reference_embeddings: np.ndarray,
@@ -38,7 +41,7 @@ def clustering_accuracy(embeddings: np.ndarray,
     N1, N2 = embeddings.shape[0], reference_embeddings.shape[0]
     if voting_k > N2:
         voting_k = N2
-    
+
     knn_op = NearestNeighbors(n_neighbors=voting_k, metric=distance_measure)
     knn_op.fit(reference_embeddings)
 
@@ -87,7 +90,7 @@ def topk_accuracy(embeddings: np.ndarray,
     topk_nodes = np.argsort(distances, axis=1)[:, :k] # [N, k]
     if len(topk_nodes.shape) < 2:
         topk_nodes = topk_nodes[:, np.newaxis]
-        
+
     # Get the top-k labels for each node
     topk_labels = np.take_along_axis(adj_mat, topk_nodes, axis=1)
 
@@ -95,7 +98,7 @@ def topk_accuracy(embeddings: np.ndarray,
         acc = np.mean(np.sum(topk_labels, axis=1) / k)
     else:
         acc = np.mean(topk_labels)
-    
+
     return acc
 
 
@@ -474,3 +477,33 @@ def AJI_fast(gt, pred_arr):
     used[j] = 1
     u += (np.sum(s_areas[1:] * (1 - used)))
     return 1.0 * c / u
+
+def l1(im1, im2) -> float:
+    '''
+    Mean Absolute Error.
+    '''
+    vec1 = im1.flatten()
+    vec2 = im2.flatten()
+    return np.linalg.norm((vec1 - vec2), ord=1) / len(vec1)
+
+def ncc(im1, im2) -> float:
+    '''
+    Normalized Cross Correlation.
+    '''
+
+    assert im1.shape == im2.shape
+    assert len(im1.shape) in [2, 3]
+    if len(im1.shape) == 2:
+        im1 = im1[None, None, ...]
+        im2 = im2[None, None, ...]
+        n_channels = 1
+    else:
+        im1 = im1.transpose(2, 0, 1)[None, ...]
+        im2 = im2.transpose(2, 0, 1)[None, ...]
+        n_channels = im1.shape[1]
+
+    tensor1 = torch.from_numpy(im1).float()
+    tensor2 = torch.from_numpy(im2).float()
+
+    ncc_op = NCCLoss(n_channels=n_channels).loss
+    return ncc_op(tensor1, tensor2).cpu().detach().numpy()

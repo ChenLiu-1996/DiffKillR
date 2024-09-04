@@ -41,7 +41,7 @@ def construct_batch_images_with_n_views(
     '''
     if sampling_method not in ['SimCLR']:
         raise ValueError('`sampling_method`: %s not supported.' % sampling_method)
-    
+
     # Construct batch_images [bsz * n_views, in_chan, H, W].
     batch_images = None
     n_views = config.n_views
@@ -52,7 +52,7 @@ def construct_batch_images_with_n_views(
                 aug_images, _ = dataset.sample_views(split=split,
                                                      patch_id=patch_id,
                                                      cnt=n_views-1)
-                
+
             aug_images = torch.Tensor(aug_images).to(device) # (cnt, in_chan, H, W)
 
             image = torch.unsqueeze(image, dim=0) # (1, in_chan, H, W)
@@ -80,7 +80,7 @@ def train(config: OmegaConf, wandb_run=None):
 
     dataset, train_set, val_set, _ = \
         prepare_dataset(config=config)
-    
+
     # Set all paths.
     dataste_name = config.dataset_name.split('_')[-1]
     model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_{dataste_name}_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
@@ -109,7 +109,7 @@ def train(config: OmegaConf, wandb_run=None):
     if config.latent_loss in ['SimCLR']:
         supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
-                                        contrast_mode=config.contrast_mode)
+                                        contrastive_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
         triplet_loss = TripletLoss(distance_measure='cosine',
                                    margin=config.margin,
@@ -117,7 +117,7 @@ def train(config: OmegaConf, wandb_run=None):
                                    num_neg=config.num_neg)
     else:
         raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
-    
+
     mse_loss = torch.nn.MSELoss()
     early_stopper = EarlyStopping(mode='min',
                                   patience=config.patience,
@@ -292,7 +292,7 @@ def generate_train_pairs(config: OmegaConf):
     '''
         Generate training pairs for reg2seg model.
         Given the trained AIAE model, generate pairs of images from the training/val/test set.
-        Generate pairing, match augmented images to its non-mother anchor. 
+        Generate pairing, match augmented images to its non-mother anchor.
         The anchor bank: training images from the original images.
     '''
     device = torch.device(
@@ -300,7 +300,7 @@ def generate_train_pairs(config: OmegaConf):
     if torch.backends.mps.is_available():
         device = "mps"
     dataset, train_set, val_set, test_set = prepare_dataset(config=config)
-    
+
     # Build the model
     try:
         model = globals()[config.model](num_filters=config.num_filters,
@@ -352,7 +352,7 @@ def generate_train_pairs(config: OmegaConf):
         bank_embeddings = np.stack(bank_embeddings, axis=0) # (N2, latent_dim)
         log(f'[{k}]Bank: {bank_embeddings.shape}, \
             To be matched: {to_be_matched_embeddings.shape}', to_console=True)
-        
+
         # Generate pairing, match augmented images to its non-mother anchor
         dist_matrix = sklearn.metrics.pairwise_distances(to_be_matched_embeddings,
                                             bank_embeddings,
@@ -367,12 +367,12 @@ def generate_train_pairs(config: OmegaConf):
             if mother in bank_paths: # mother may not be in the same split
                 mother_index = bank_paths.index(mother)
                 sorted_idx = sorted_idx[sorted_idx != mother_index]
-            
+
             # select the closest non-mother index
             closest_index = sorted_idx[0]
             closest_img_paths.append(bank_paths[closest_index])
             closest_dists.append(dist_matrix[i, closest_index]) # NOTE: this is wrong, but not affecting the result.
-            
+
         results_df = pd.DataFrame({
             'test_image_path': to_be_matched_paths,
             'closest_image_path': closest_img_paths,
@@ -381,7 +381,7 @@ def generate_train_pairs(config: OmegaConf):
         })
         results_df.to_csv(pairing_save_path, index=False)
         log(f'[{k}] Pairing saved to {pairing_save_path}', to_console=True)
-    
+
     return
 
 
@@ -410,7 +410,7 @@ def test(config: OmegaConf):
     os.makedirs(output_save_path, exist_ok=True)
     save_path_fig_embeddings_inst = '%s/embeddings_inst.png' % output_save_path
     save_path_fig_reconstructed = '%s/reconstructed.png' % output_save_path
-    
+
     model.load_weights(model_save_path, device=device)
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)
@@ -418,7 +418,7 @@ def test(config: OmegaConf):
     if config.latent_loss in ['SimCLR']:
         supercontrast_loss = SupConLoss(temperature=config.temp,
                                         base_temperature=config.base_temp,
-                                        contrast_mode=config.contrast_mode)
+                                        contrastive_mode=config.contrast_mode)
     elif config.latent_loss == 'triplet':
         triplet_loss = TripletLoss(distance_measure='cosine',
                                    margin=config.margin,
@@ -596,7 +596,7 @@ def test(config: OmegaConf):
     #     title = f"{split}:Instance clustering acc: {ins_clustering_acc[split]:.3f},\n \
     #         Instance top-k acc: {ins_topk_acc[split]:.3f},\n \
     #         Instance mAP: {ins_mAP[split]:.3f}"
-        
+
     #     scprep.plot.scatter2d(data_phate,
     #                           c=embedding_patch_id_int[split],
     #                           ax=ax,
@@ -661,11 +661,11 @@ def test(config: OmegaConf):
 
 def infer(config: OmegaConf):
     '''
-        Inference mode. Given test image patch folder, load the model and 
+        Inference mode. Given test image patch folder, load the model and
         pair the test images with closest images in anchor bank.
         The anchor patch bank: training images from the original or augmented images.
         !TODO: we may only want to use the original images for the anchor bank,
-        !TODO: since the augmented images are not real instances. and the reg2seg 
+        !TODO: since the augmented images are not real instances. and the reg2seg
         !TODO: model is trained on the warping aug to original images.
         Output: a csv file with the following columns:
             - test_image_path
@@ -694,7 +694,7 @@ def infer(config: OmegaConf):
                                          target_dim=config.target_dim)
     else:
         raise ValueError('`dataset_name`: %s not supported.' % dataset_name)
-    
+
     dataloader = DataLoader(dataset=dataset,
                             batch_size=config.batch_size,
                             shuffle=False,
@@ -711,9 +711,9 @@ def infer(config: OmegaConf):
     model.load_weights(model_save_path, device=device)
     log('%s: Model weights successfully loaded.' % config.model,
         to_console=True)
-    
+
     # Generate embeddings for anchor bank
-    log('Generating embeddings for anchor bank. Total images: %d' % len(dataset), 
+    log('Generating embeddings for anchor bank. Total images: %d' % len(dataset),
         to_console=True)
     anchor_bank = {
         'embeddings': [],
@@ -741,7 +741,7 @@ def infer(config: OmegaConf):
                     anchor_bank['embeddings'].append(latent_features[i].cpu().numpy())
                     anchor_bank['img_paths'].append(img_paths[i])
                     anchor_bank['sources'].append('original' if 'original' in img_paths[i] else 'augmented')
-        
+
     anchor_bank['embeddings'] = np.concatenate([anchor_bank['embeddings']], axis=0) # (N, latent_dim)
     print('anchor_bank[embeddings].shape: ', anchor_bank['embeddings'].shape)
     print('len(anchor_bank[img_paths]): ', len(anchor_bank['img_paths']))
@@ -775,7 +775,7 @@ def infer(config: OmegaConf):
                                  batch_size=config.batch_size,
                                  shuffle=False, # No shuffle since we're using the indices
                                  num_workers=config.num_workers)
-    
+
     with torch.no_grad():
         for iter_idx, (images,) in enumerate(test_dataloader):
             images = images.float().to(device)
@@ -794,7 +794,7 @@ def infer(config: OmegaConf):
         distance_measure = 'cosine'
     else:
         raise ValueError('`config.latent_loss`: %s not supported.' % config.latent_loss)
-    
+
     log('Computing pairwise distances...', to_console=True)
     print('test_img_bank[embeddings].shape: ', test_img_bank['embeddings'].shape)
     print('anchor_bank[embeddings].shape: ', anchor_bank['embeddings'].shape)
@@ -817,7 +817,7 @@ def infer(config: OmegaConf):
     if os.path.exists(os.path.join(output_save_path, 'infer_pairs.csv')):
         os.remove(os.path.join(output_save_path, 'infer_pairs.csv'))
     results_df.to_csv(os.path.join(output_save_path, 'infer_pairs.csv'), index=False)
-    
+
     print('Results saved to: ', os.path.join(output_save_path, 'infer_pairs.csv'))
 
     return
@@ -834,14 +834,14 @@ if __name__ == '__main__':
     parser.add_argument('--data_config', help='Path to data config file', default='./config/MoNuSeg_data.yaml')
     parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
     parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
-    
+
     args = parser.parse_args()
     assert args.mode in ['train', 'test', 'infer']
-    
+
     model_config = OmegaConf.load(args.model_config)
     data_config = OmegaConf.load(args.data_config)
     config = OmegaConf.merge(model_config, data_config)
-    
+
     config.gpu_id = args.gpu_id
     config.num_workers = args.num_workers
 
@@ -870,5 +870,5 @@ if __name__ == '__main__':
 
     if wandb_run is not None:
         wandb_run.finish()
-    
+
     print('Done.\n')

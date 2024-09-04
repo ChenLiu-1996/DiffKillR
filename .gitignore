@@ -1,3 +1,5 @@
+*.zip
+/src/outputs/
 .DS_Store
 /results/*
 /checkpoints/
@@ -16,6 +18,9 @@ tools/_jupyter/.ipynb_checkpoints
 training
 validation
 testing
+bash/
+comparison/
+external_data/
 
 # Models
 **/*.pt
