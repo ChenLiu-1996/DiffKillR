@@ -6,6 +6,7 @@ from glob import glob
 from typing import List, Tuple
 
 import cv2
+import pandas as pd
 import random
 import numpy as np
 import torch
@@ -52,8 +53,17 @@ class MoNuSegDataset(Dataset):
 
             self.img_paths = [path for path in self.img_paths if any([file_id in path for file_id in organ_files])]
             self.label_paths = [path for path in self.label_paths if any([file_id in path for file_id in organ_files])]
-
-        assert len(self.img_paths) == len(self.label_paths)
+        
+        # Read class labelcsv file.
+        self.class_labels_pd = pd.read_csv(f'{base_path}/class_labels.csv')
+        self.patchID2Class = {row['patch_id']: row['type'] for _, row in self.class_labels_pd.iterrows()}
+        self.num_cells = np.sum([self.patchID2Class[patchID] == 'cell' for patchID in self.patchID2Class])
+        self.num_background = np.sum([self.patchID2Class[patchID] == 'background' for patchID in self.patchID2Class])
+        print(f'Number of cells: {self.num_cells}')
+        print(f'Number of background: {self.num_background}')
+        print(f'Number of images: {len(self.img_paths)}')
+        print(f'Number of labels: {len(self.label_paths)}')
+        assert len(self.img_paths) == len(self.label_paths) + self.num_background
 
     def __len__(self) -> int:
         return len(self.img_paths)
@@ -68,7 +78,10 @@ class MoNuSegDataset(Dataset):
 
         # NOTE: we will not downsample the canonical images or labels.
         canonical_pose_image = load_image(path=self.img_paths[idx], target_dim=None)
-        canonical_pose_label = load_label(path=self.label_paths[idx], target_dim=None)
+        if idx < self.num_cells:
+            canonical_pose_label = load_label(path=self.label_paths[idx], target_dim=None)
+        else:
+            canonical_pose_label = load_label(path=self.label_paths[self.num_cells-1], target_dim=None) # Dummy label to pass augmentation methods. This label will be ignored during training.
 
         if self.deterministic:
             # Set a fixed random seed for validation and testing.

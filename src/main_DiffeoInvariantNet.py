@@ -465,46 +465,7 @@ def test(config):
         log(f'[{split}]Instance mAP: {ins_mAP[split]:.3f}', to_console=True)
     return
 
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Entry point.')
-    parser.add_argument('--mode', help='train|test|infer?', default='train')
-    parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
-    parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
-
-    parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
-    parser.add_argument('--random-seed', default=1, type=int)
-
-    parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
-    parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
-
-    parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
-    parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
-    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg2018TrainData_patch_96x96/', type=str)
-    parser.add_argument('--percentage', default=100, type=float)
-    parser.add_argument('--organ', default='Breast', type=str)
-
-    parser.add_argument('--learning-rate', default=1e-3, type=float)
-    parser.add_argument('--patience', default=50, type=int)
-    parser.add_argument('--depth', default=4, type=int)
-    parser.add_argument('--latent-loss', default='SimCLR', type=str)
-    parser.add_argument('--margin', default=0.2, type=float, help='Only relevant if latent-loss is `triplet`.')
-    parser.add_argument('--temp', default=1.0, type=float)
-    parser.add_argument('--base-temp', default=1.0, type=float)
-    parser.add_argument('--n-views', default=2, type=int)
-    parser.add_argument('--num-pos', default=1, type=int)
-    parser.add_argument('--num-neg', default=1, type=int)
-    parser.add_argument('--contrastive-mode', default='one', type=str)
-    parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
-    parser.add_argument('--max-epochs', default=50, type=int)
-    parser.add_argument('--batch-size', default=64, type=int)
-    parser.add_argument('--num-filters', default=32, type=int)
-    parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
-
-    parser.add_argument('--use-wandb', action='store_true')
-    parser.add_argument('--wandb-username', default='yale-cl2482', type=str)
-
-    config = parser.parse_args()
+def main(config):
     assert config.mode in ['train', 'test', 'infer']
 
     # handle edge cases.
@@ -555,3 +516,48 @@ if __name__ == '__main__':
 
     if wandb_run is not None:
         wandb_run.finish()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Entry point.')
+    parser.add_argument('--mode', help='train|test|infer?', default='train')
+    parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
+    parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
+
+    parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
+    parser.add_argument('--random-seed', default=1, type=int)
+
+    parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
+    parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
+
+    parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
+    parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
+    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg2018TrainData_patch_96x96', type=str)
+    parser.add_argument('--percentage', default=100, type=float)
+    parser.add_argument('--organ', default='Breast', type=str)
+
+    parser.add_argument('--learning-rate', default=1e-3, type=float)
+    parser.add_argument('--patience', default=50, type=int)
+    parser.add_argument('--depth', default=4, type=int)
+    parser.add_argument('--latent-loss', default='SimCLR', type=str)
+    parser.add_argument('--margin', default=0.2, type=float, help='Only relevant if latent-loss is `triplet`.')
+    parser.add_argument('--temp', default=1.0, type=float)
+    parser.add_argument('--base-temp', default=1.0, type=float)
+    parser.add_argument('--n-views', default=2, type=int)
+    parser.add_argument('--num-pos', default=1, type=int)
+    parser.add_argument('--num-neg', default=1, type=int)
+    parser.add_argument('--contrastive-mode', default='one', type=str)
+    parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
+    parser.add_argument('--max-epochs', default=50, type=int)
+    parser.add_argument('--batch-size', default=64, type=int)
+    parser.add_argument('--num-filters', default=32, type=int)
+    parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
+
+    parser.add_argument('--use-wandb', action='store_true')
+    parser.add_argument('--wandb-username', default='yale-cl2482', type=str)
+
+    config = parser.parse_args()
+
+    if config.organ is not None:
+        config.dataset_path = f'{config.dataset_path}_{config.organ}'
+
+    main(config)

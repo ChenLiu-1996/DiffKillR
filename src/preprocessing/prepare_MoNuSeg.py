@@ -288,7 +288,8 @@ def process_MoNuSeg_Traindata(patch_size=96, organ='Breast', background_ratio=0.
             w = cw - patch_size // 2
             bg_patch = image[h:h+patch_size, w:w+patch_size]
             bg_patch = cv2.cvtColor(bg_patch, cv2.COLOR_RGB2BGR)
-            save_path = '%s/image/%s.png' % (patches_folder, bg_file_name)
+            save_path = '%s/image/background/%s.png' % (patches_folder, bg_file_name)
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             # print(f'[Background] Saving background patch to {save_path}')
             cv2.imwrite(save_path, bg_patch)
         all_background_files.extend(bg_file_names)
