@@ -179,6 +179,57 @@ def non_max_suppression(boxes: List[Tuple[int, int, int, int, float]], threshold
 
     return final_boxes
 
+def evaluate_detections(detections: List[Tuple[int, int, int, int, float]], verts_list: List[np.array], image_sizes: Tuple[int, int]) -> Tuple[int, int, int]:
+    """Evaluate the performance of the detections.
+    Args:
+        detections (List[Tuple[int, int, int, int, float]]): The detected bounding boxes (min_x, min_y, max_x, max_y, score).
+        verts_list (List[np.array]): List of ground truth cell polygons. Each of (N, 2).
+    Returns:
+        Tuple[int, int, int]: True positives, false positives, and false negatives.
+    """
+    matched_gt = set()
+
+    for detection in detections:
+        min_x, min_y, max_x, max_y, _ = detection
+        detection_box = np.array([[min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y]])
+
+        for i, gt_cell in enumerate(verts_list):
+            if i in matched_gt:
+                continue
+
+            # Check if the detection overlaps with the ground truth cell
+            if inside_polygon(detection_box, gt_cell, image_sizes, threshold=1):
+                matched_gt.add(i)
+                break
+    tp = len(matched_gt)
+    fp = len(detections) - tp
+    fn = len(verts_list) - len(matched_gt)
+
+    return tp, fp, fn
+
+def inside_polygon(detection_box, gt_cell, image_sizes, threshold=1):
+    """Check if poly1 is inside poly2. Simply check if any pixel of poly1 is inside poly2.
+    Args:
+        detection_box (np.array): The first polygon, shape (N, 2).
+        gt_cell (np.array): The second polygon, shape (M, 2).
+        image_sizes (tuple): The size of the image.
+        threshold (int): The minimum number of pixels for intersection.
+    Returns:
+        bool: True if poly1 is inside poly2, False otherwise.
+    """
+    # Check if any pixel of poly1 is inside poly2.
+    mask1 = np.zeros(image_sizes, dtype=np.uint8)
+    mask2 = np.zeros(image_sizes, dtype=np.uint8)
+
+    poly1 = np.array(detection_box, dtype=np.int32).reshape((-1, 2))
+    poly2 = np.array(gt_cell, dtype=np.int32).reshape((-1, 2))
+    #print(poly1.shape, poly2.shape, mask1.shape, mask2.shape)
+
+    cv2.fillPoly(mask1, [poly1], 1)
+    cv2.fillPoly(mask2, [poly2], 1)
+    intersection = np.logical_and(mask1, mask2)
+    return intersection.sum() >= threshold
+
 def visualize_detections(image_path: str, detections: List[Tuple[int, int, int, int, float]],
                          annotation_path: str=None, label_path: str=None):
     """Visualize the cell detections on the image."""
@@ -188,6 +239,13 @@ def visualize_detections(image_path: str, detections: List[Tuple[int, int, int, 
     if annotation_path is not None:
         verts_list, region_id_list = load_MoNuSeg_annotation(annotation_path)
         title_str += f'GT: {len(verts_list)}'
+
+        # Evaluate the performance.
+        tp, fp, fn = evaluate_detections(detections, verts_list, image.shape[:2])
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        f1 = 2 * precision * recall / (precision + recall)
+        title_str += f'; Precision: {precision:.4f}; Recall: {recall:.4f}; F1: {f1:.4f}'
     if label_path is not None:
         label = np.array(cv2.imread(label_path, cv2.IMREAD_UNCHANGED)) # [H, W]
 
@@ -254,7 +312,7 @@ def main(config):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Cell Counting Entry point.')
     parser.add_argument("--image_path", type=str, default=ROOT_DIR + '/external_data/MoNuSeg/MoNuSegTestData/images/TCGA-A6-6782-01A-01-BS1.png')
-    parser.add_argument("--model_path", type=str, default=ROOT_DIR + '/checkpoints/dataset-MoNuSeg_fewShot-100.0%_organ-Colon/DiffeoInvariantNet_model-AutoEncoder_depth-4_latentLoss-SimCLR_epoch-100_seed1.ckpt')
+    parser.add_argument("--model_path", type=str, default=ROOT_DIR + '/checkpoints/dataset-MoNuSeg_fewShot-100.0%_organ-Colon/DiffeoInvariantNet_model-AutoEncoder_depth-4_latentLoss-SimCLR_epoch-200_seed1.ckpt')
     parser.add_argument("--gpu_id", type=int, default=0)
     parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
 
