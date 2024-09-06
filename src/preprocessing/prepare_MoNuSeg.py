@@ -10,6 +10,7 @@ executed from the '/src' folder of the project.
 '''
 import cv2
 import os
+import shutil
 import numpy as np
 from typing import Tuple
 from tqdm import tqdm
@@ -19,6 +20,7 @@ import skimage.measure
 import matplotlib.pyplot as plt
 import pandas as pd
 import matplotlib.pyplot as plt
+
 
 from Metas import MoNuSeg_Organ2FileID
 
@@ -138,9 +140,6 @@ def patchify_and_save(image, image_id, label, centroid_list,
         h_end = min(h_begin + patch_size, image.shape[0])
         w_end = min(w_begin + patch_size, image.shape[1])
 
-        # print('centroid', centroid)
-        # print('h, w', h_begin, h_end, w_begin, w_end)
-
         patch_image = image[h_begin:h_end, w_begin:w_end, :]
         patch_label = label[h_begin:h_end, w_begin:w_end]
 
@@ -235,6 +234,12 @@ def process_MoNuSeg_Traindata(patch_size=96, organ='Breast', background_ratio=0.
     # df for storing image id(file name + ch, cw), and the corresponding annotation info.
     df = pd.DataFrame(columns=['patch_id', 'type'])
 
+    patches_folder = f'{ROOT_DIR}/data/MoNuSeg2018TrainData_patch_%dx%d_%s/' % (patch_size, patch_size, organ)        
+    # Remove the old patches.
+    if os.path.exists(patches_folder):
+        shutil.rmtree(patches_folder)
+    os.makedirs(patches_folder, exist_ok=False)
+
     for i, annotation_file in enumerate(tqdm(annotation_files)):
         image_id = os.path.basename(annotation_file).split('.')[0]
         if image_id not in MoNuSeg_Organ2FileID[organ]['train']:
@@ -259,19 +264,11 @@ def process_MoNuSeg_Traindata(patch_size=96, organ='Breast', background_ratio=0.
         label, centroids_list = annotation_to_label(verts_list, image, image_id, region_id_list)
 
         # Divide the image and label into patches.
-        patches_folder = f'{ROOT_DIR}/data/MoNuSeg2018TrainData_patch_%dx%d_%s/' % (patch_size, patch_size, organ)
-        os.makedirs(patches_folder, exist_ok=True)
         saved_file_names = patchify_and_save(image, image_id, label, centroids_list, patches_folder, patch_size)
-
         df = pd.concat([df, pd.DataFrame({'patch_id': saved_file_names, 'type': 'cell'})])
-
         cell_count = len(all_verts_list)
-        # Find background patches and save them.
-        # background_patches_folder = '../data/MoNuSeg2018Background_patch_%dx%d/' % (aug_patch_size, 
-        #                                                                             aug_patch_size)
-        # find_background_and_save(label, image, image_id, 
-        #                          background_patches_folder, aug_patch_size)
 
+        # Find background patches.
         candidate_patches = find_background_patches(label, image, image_id, patches_folder, patch_size)
         if len(candidate_patches) <= 0:
             print('[Background] No candidate patches found for image %s' % image_id)
@@ -288,7 +285,7 @@ def process_MoNuSeg_Traindata(patch_size=96, organ='Breast', background_ratio=0.
             w = cw - patch_size // 2
             bg_patch = image[h:h+patch_size, w:w+patch_size]
             bg_patch = cv2.cvtColor(bg_patch, cv2.COLOR_RGB2BGR)
-            save_path = '%s/image/background/%s.png' % (patches_folder, bg_file_name)
+            save_path = '%s/image/%s.png' % (patches_folder, bg_file_name)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             # print(f'[Background] Saving background patch to {save_path}')
             cv2.imwrite(save_path, bg_patch)
@@ -337,7 +334,7 @@ def process_MoNuSeg_Traindata(patch_size=96, organ='Breast', background_ratio=0.
     ax.hist(dx_list, bins=100, label='dx')
     ax = plt.subplot(1, 2, 2)
     ax.hist(dy_list, bins=100, label='dy')
-    save_path = '../data/MoNuSeg2018TrainData_patch_%dx%d/' % (patch_size, patch_size)
+    save_path = f'{patches_folder}/histogram.png'
     plt.savefig(save_path + 'histogram.png')
 
 
@@ -437,10 +434,13 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--patch_size', type=int, default=96)
     parser.add_argument('--aug_patch_size', type=int, default=32)
-    parser.add_argument('--background_ratio', type=float, default=0.3)
-    parser.add_argument('--organ', type=str, default='Breast')
+    parser.add_argument('--background_ratio', type=float, default=1.0)
+    parser.add_argument('--organ', type=str, default='Colon')
     args = parser.parse_args()
+
+    np.random.seed(args.seed)
 
     main(args)

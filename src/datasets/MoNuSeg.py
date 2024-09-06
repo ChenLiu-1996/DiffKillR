@@ -74,13 +74,15 @@ class MoNuSegDataset(Dataset):
     def set_deterministic(self, deterministic: bool):
         self.deterministic = deterministic
 
-    def __getitem__(self, idx) -> Tuple[np.array, np.array, str]:
+    def __getitem__(self, idx) -> Tuple[np.array, np.array, np.array, np.array, np.array, np.array]:
 
         # NOTE: we will not downsample the canonical images or labels.
         canonical_pose_image = load_image(path=self.img_paths[idx], target_dim=None)
         if idx < self.num_cells:
+            # Load the label for the cell.
             canonical_pose_label = load_label(path=self.label_paths[idx], target_dim=None)
         else:
+            # Load dummy label for background, since label is not used for DiffeoInvariantNet.
             canonical_pose_label = load_label(path=self.label_paths[self.num_cells-1], target_dim=None) # Dummy label to pass augmentation methods. This label will be ignored during training.
 
         if self.deterministic:
