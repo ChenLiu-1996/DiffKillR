@@ -23,6 +23,7 @@ from utils.prepare_dataset import prepare_dataset
 from model.autoencoder import AutoEncoder
 from datasets.MoNuSeg import MoNuSegDataset, load_image, load_label, normalize_image, fix_channel_dimension
 from preprocessing.prepare_MoNuSeg import load_MoNuSeg_annotation
+from blob_detector import detect_nuclei as blob_detect_nuclei
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -248,17 +249,28 @@ def visualize_detections(image_path: str, detections: List[Tuple[int, int, int, 
         title_str += f'; Precision: {precision:.4f}; Recall: {recall:.4f}; F1: {f1:.4f}'
     if label_path is not None:
         label = np.array(cv2.imread(label_path, cv2.IMREAD_UNCHANGED)) # [H, W]
+    
+    # Blob detection
+    blob_detections, im_with_keypoints = blob_detect_nuclei(image, return_overlay=True)
+    print(f"[Blob Detection] Detected {len(blob_detections)} nuclei. Image Overlay: {im_with_keypoints.shape}, {image.shape}")
+    blob_tp, blob_fp, blob_fn = evaluate_detections(blob_detections, verts_list, image.shape[:2])
+    blob_precision = blob_tp / (blob_tp + blob_fp)
+    blob_recall = blob_tp / (blob_tp + blob_fn)
+    blob_f1 = 2 * blob_precision * blob_recall / (blob_precision + blob_recall)
 
-    # Draw the detections on the image on the left image, and the label on the right image.
+    # Draw the detections on the image on the left image, and the label in the middle image, blob detector overlay on the right image.
     for (min_x, min_y, max_x, max_y, score) in detections:
         cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 255, 0), 2)
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+    fig, axs = plt.subplots(1, 3, figsize=(5*3, 5))
     axs[0].imshow(image)
     axs[0].set_title(title_str)
     axs[0].axis('off')
     axs[1].imshow(label)
     axs[1].set_title('GT Mask')
     axs[1].axis('off')
+    axs[2].imshow(im_with_keypoints)
+    axs[2].set_title(f'Blob Detection: {len(blob_detections)}; Precision: {blob_precision:.4f}; Recall: {blob_recall:.4f}; F1: {blob_f1:.4f}')
+    axs[2].axis('off')
 
     plt.show()
 
@@ -311,8 +323,8 @@ def main(config):
 # Example usage
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Cell Counting Entry point.')
-    parser.add_argument("--image_path", type=str, default=ROOT_DIR + '/external_data/MoNuSeg/MoNuSegTestData/images/TCGA-A6-6782-01A-01-BS1.png')
-    parser.add_argument("--model_path", type=str, default=ROOT_DIR + '/checkpoints/dataset-MoNuSeg_fewShot-100.0%_organ-Colon/DiffeoInvariantNet_model-AutoEncoder_depth-4_latentLoss-SimCLR_epoch-200_seed1.ckpt')
+    parser.add_argument("--image_path", type=str, default=ROOT_DIR + '/external_data/MoNuSeg/MoNuSegTestData/images/TCGA-AO-A0J2-01A-01-BSA.png')
+    parser.add_argument("--model_path", type=str, default=ROOT_DIR + '/checkpoints/dataset-MoNuSeg_fewShot-100.0%_organ-Breast/DiffeoInvariantNet_model-AutoEncoder_depth-4_latentLoss-SimCLR_epoch-200_seed1.ckpt')
     parser.add_argument("--gpu_id", type=int, default=0)
     parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
 
