@@ -6,13 +6,22 @@ import skimage.segmentation
 
 
 def detect_nuclei(img: np.array, return_overlay: bool = False):
+    '''
+        Detect nuclei using a blob detector.
+        Args:
+            img: np.array, shape (H, W, 3)
+            return_overlay: bool, whether to return the overlay image
+        Returns:
+            detections: list of Tuple [min_x, min_y, max_x, max_y, score].
+            im_with_keypoints: np.array, shape (H, W, 3)
+    '''
     if img.shape[-1] == 1:
         # (H, W, 1) to (H, W, 3)
         img = np.repeat(img, 3, axis=-1)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # Pad white the image to avoid border effects
-    gray = cv2.copyMakeBorder(gray, 5, 5, 5, 5, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+    #gray = cv2.copyMakeBorder(gray, 5, 5, 5, 5, cv2.BORDER_CONSTANT, value=[255, 255, 255])
 
     # Setup SimpleBlobDetector parameters.
     print('Default parameters: =====')
@@ -36,7 +45,7 @@ def detect_nuclei(img: np.array, return_overlay: bool = False):
 
     # # Create a detector with the parameters
     # detector = cv2.SimpleBlobDetector_create(params)
-    print('Updated parameters: =====')
+    print('===== Updated parameters: =====')
     for p in dir(params):
         if not p.startswith('__'):
             print(p, getattr(params, p))
@@ -45,23 +54,28 @@ def detect_nuclei(img: np.array, return_overlay: bool = False):
     # Detect blobs.
     keypoints = detector.detect(gray)
 
-    nuclei_list = []
+    detections = []
     for kp in keypoints:
         (w, h) = kp.pt
-        nuclei_list.append([h, w])
+        size = kp.size
+        min_x = int(w - size / 2)
+        min_y = int(h - size / 2)
+        max_x = int(w + size / 2)
+        max_y = int(h + size / 2)
+        detections.append([min_x, min_y, max_x, max_y, kp.response])
 
     if return_overlay:
         # Draw detected blobs as red circles.
         # cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS ensures the size of the circle corresponds to the size of blob
         im_with_keypoints = cv2.drawKeypoints(gray, keypoints, np.array([]), (0, 0, 255),
                                               cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-        return nuclei_list, im_with_keypoints
+        return detections, im_with_keypoints
     else:
-        return nuclei_list
+        return detections
 
 
 if __name__ == '__main__':
-    test_file = '../raw_data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00.tif'
+    test_file = '../external_data/MoNuSeg/MoNuSegTestData/images/TCGA-A6-6782-01A-01-BS1.png'
 
     image = cv2.imread(test_file, cv2.IMREAD_UNCHANGED)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
