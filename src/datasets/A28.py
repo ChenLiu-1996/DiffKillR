@@ -1,7 +1,5 @@
-import itertools
 import os
 import sys
-from typing import Literal
 from glob import glob
 from typing import List, Tuple
 
@@ -22,7 +20,7 @@ from center_crop import center_crop
 ROOT_DIR = '/'.join(os.path.realpath(__file__).split('/')[:-3])
 
 
-class AugmentedA28Dataset(Dataset):
+class A28Dataset(Dataset):
     def __init__(self,
                  augmentation_methods: List[str],
                  cell_types: List[str] = ['EpithelialCell', 'EndothelialCell', 'Myocyte', 'Fibroblast'],
@@ -105,7 +103,7 @@ class AugmentedA28Dataset(Dataset):
         aug_seed = np.random.randint(low=0, high=self.__len__() * 100)
 
         assert self.target_dim[0] == self.target_dim[1], \
-            'AugmentedA28Dataset: currently only supporting square shape.'
+            'A28Dataset: currently only supporting square shape.'
 
         image_aug, label_aug = globals()['augment_' + augmentation_method](
             image=canonical_pose_image,
@@ -209,7 +207,7 @@ if __name__ == '__main__':
                  'volume_preserving_stretch',
                  'partial_stretch']
 
-    dataset = AugmentedA28Dataset(augmentation_methods=aug_lists)
+    dataset = A28Dataset(augmentation_methods=aug_lists)
     print(len(dataset))
 
     dataloader = DataLoader(dataset=dataset, batch_size=4, shuffle=True, num_workers=0)
