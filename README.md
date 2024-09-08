@@ -19,8 +19,46 @@ cd src/
 python main_DiffeoMappingNet.py --dataset-name A28 --dataset-path '$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_patch_96x96/' --DiffeoMappingNet-model VoxelMorph --use-wandb --wandb-username yale-cl2482
 ```
 
+### Comparison
+1. First train/infer the models. Can refer to `bash/baseline_medt.sh`, `bash/baseline_medt_intra.sh`, `bash/baseline_psm.sh`, `bash/baseline_psm_intra.sh`, `bash/baseline_sam.sh`, `bash/baseline_sam_intra.sh`.
+
+2. Then, stitch the images and run evaluation.
+```
+cd comparison/eval/
+python stitch_patches.py
+python evaluate_monuseg.py
+python evaluate_glysac.py
+```
+
+
 
 ## Preparation
+
+#### To use SAM.
+```
+## under `comparison/SAM/checkpoints/`
+wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
+```
+
+#### To Use SAM2.
+```
+## under `comparison/SAM2/checkpoints/`
+wget https://dl.fbaipublicfiles.com/segment_anything_2/072824/sam2_hiera_large.pt
+```
+
+#### To use MedSAM.
+```
+## under `comparison/MedSAM/checkpoints/`
+download from https://drive.google.com/file/d/1ARiB5RkSsWmAB_8mqWnwDF8ZKTtFwsjl/view
+```
+
+#### To use SAM-Med2D.
+```
+## under `comparison/SAM_Med2D/checkpoints/`
+download from https://drive.google.com/file/d/1ARiB5RkSsWmAB_8mqWnwDF8ZKTtFwsjl/view
+```
+
+
 
 ## Naming Conventions
 ```
@@ -135,6 +173,20 @@ python -m pip install lacss
 ## StarDist
 python -m pip install stardist
 python -m pip install tensorflow
+
+# For SAM
+python -m pip install git+https://github.com/facebookresearch/segment-anything.git
+
+# For SAM2
+python -m pip install git+https://github.com/facebookresearch/segment-anything-2.git
+
+# For MedSAM
+python -m pip install git+https://github.com/bowang-lab/MedSAM.git
+
+# For SAM-Med2D
+python -m pip install albumentations
+python -m pip install scikit-learn==1.1.3  # need to downgrade to 1.1.3
+
 
 # Export CuDNN
 # echo 'CUDNN_PATH=$(dirname $(python -c "import nvidia.cudnn;print(nvidia.cudnn.__file__)"))' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh

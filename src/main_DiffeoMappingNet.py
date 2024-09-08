@@ -1018,9 +1018,9 @@ if __name__ == '__main__':
     parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
     parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
 
-    parser.add_argument('--DiffeoMappingNet-model', default='UNet', type=str)
-    parser.add_argument('--dataset-name', default='A28', type=str)
-    parser.add_argument('--dataset-path', default='$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_patch_96x96/', type=str)
+    parser.add_argument('--DiffeoMappingNet-model', default='VM-Diff', type=str)
+    parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
+    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg2018TrainData_patch_96x96/', type=str)
     parser.add_argument('--percentage', default=100, type=float)
     parser.add_argument('--organ', default=None, type=str)
     parser.add_argument('--depth', default=4, type=int)

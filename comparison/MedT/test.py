@@ -10,7 +10,7 @@ from utils import JointTransform2D, ImageToImage2D, Image2D
 import cv2
 
 
-parser = argparse.ArgumentParser(description='MedT')
+parser = argparse.ArgumentParser(description='MedT,UNet,nnUNet')
 parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                     help='number of data loading workers (default: 8)')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',

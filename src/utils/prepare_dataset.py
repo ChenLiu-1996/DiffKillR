@@ -1,8 +1,8 @@
 from torch.utils.data import DataLoader
 from datasets.synthetic import SyntheticDataset
 from datasets.augmented import AugmentedDataset
-# from datasets.A28 import AugmentedA28Dataset
-from datasets.A28Axis import AugmentedA28AxisDataset
+from datasets.A28 import A28Dataset
+from datasets.A28Axis import A28AxisDataset
 # from datasets.tissuenet import TissueNetDataset
 from datasets.MoNuSeg import MoNuSegDataset
 from datasets.augmented_GLySAC import AugmentedGLySACDataset
@@ -20,17 +20,17 @@ def prepare_dataset(config: AttributeHashmap):
 
     elif config.dataset_name == 'A28':
         aug_lists = config.aug_methods.split(',')
-        dataset = AugmentedA28Dataset(augmentation_methods=aug_lists,
-                                      base_path=config.dataset_path,
-                                      target_dim=config.target_dim,
-                                      n_views=config.n_views)
+        dataset = A28Dataset(augmentation_methods=aug_lists,
+                             base_path=config.dataset_path,
+                             target_dim=config.target_dim,
+                             n_views=config.n_views)
 
     elif config.dataset_name == 'A28Axis':
         aug_lists = config.aug_methods.split(',')
-        dataset = AugmentedA28AxisDataset(augmentation_methods=aug_lists,
-                                          base_path=config.dataset_path,
-                                          target_dim=config.target_dim,
-                                          n_views=config.n_views)
+        dataset = A28AxisDataset(augmentation_methods=aug_lists,
+                                 base_path=config.dataset_path,
+                                 target_dim=config.target_dim,
+                                 n_views=config.n_views)
 
     elif config.dataset_name == 'augmented':
         aug_lists = config.aug_methods.split(',')

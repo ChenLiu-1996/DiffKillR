@@ -152,3 +152,22 @@ python main_monuseg.py --mode 'train_final_stage' --crop_edge_size 200 --dataset
 python main_monuseg.py --mode 'test' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/prostate --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/
 
 ```
+
+
+### SAM
+
+```
+cd SAM
+
+# colon
+python test.py --val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/test/" \
+--direc "../results/MoNuSegByCancer_200x200/colon/SAM/" --imgsize 200 --gray "no"
+
+# breast
+python test.py --val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/test/" \
+--direc "../results/MoNuSegByCancer_200x200/breast/SAM/" --imgsize 200 --gray "no"
+
+# prostate
+python test.py --val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/" \
+--direc "../results/MoNuSegByCancer_200x200/prostate/SAM/" --imgsize 200 --gray "no"
+```

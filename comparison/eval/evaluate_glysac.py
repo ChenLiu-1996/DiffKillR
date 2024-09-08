@@ -18,14 +18,14 @@ if __name__ == '__main__':
         for directory in directory_list:
             subset = directory.split('/')[-2]
 
-            for model in ['UNet', 'nnUNet', 'MedT', 'LACSS', 'PSM']:
+            for model in ['UNet', 'nnUNet', 'MedT', 'LACSS', 'PSM', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM']:
                 for seed in range(1, 4):
                     pred_folder = '%s/%s_seed%d_stitched/' % (directory, model, seed)
 
-                    if model == 'LACSS':
+                    if model in ['LACSS', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM']:
                         if seed > 1:
                             continue
-                        pred_folder = '%s/LACSS_stitched/' % directory
+                        pred_folder = '%s/%s_stitched/' % (directory, model)
                     pred_list = sorted(glob(pred_folder + '*.png'))
 
                     print('>>> Working on: GLySAC [%s] Model [%s] seed %d' % (directory, model, seed))

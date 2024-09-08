@@ -32,10 +32,18 @@ if __name__ == '__main__':
 
         directory_list = sorted(glob('../results/%s/*/' % folder))
         for directory in tqdm(directory_list):
-            for model in ['UNet', 'nnUNet', 'MedT', 'PSM']:
+            for model in ['UNet', 'nnUNet', 'MedT', 'PSM', 'LACSS', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM']:
                 for seed in range(1, 4):
-                    source_folder = '%s/%s_seed%d/' % (directory, model, seed)
-                    stitched_folder = '%s/%s_seed%d_stitched/' % (directory, model, seed)
+
+                    if model in ['LACSS', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM']:
+                        if seed > 1:
+                            continue
+                        source_folder = '%s/%s/' % (directory, model)
+                        stitched_folder = '%s/%s_stitched/' % (directory, model)
+                    else:
+                        source_folder = '%s/%s_seed%d/' % (directory, model, seed)
+                        stitched_folder = '%s/%s_seed%d_stitched/' % (directory, model, seed)
+
                     os.makedirs(stitched_folder, exist_ok=True)
 
                     mask_list = sorted(glob(source_folder + '*.png'))
