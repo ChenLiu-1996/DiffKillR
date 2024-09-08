@@ -78,35 +78,39 @@ for batch_idx, (X_batch, y_batch, *rest) in enumerate(tqdm(valloader)):
     label = y_batch.permute(0, 2, 3, 1).squeeze(0).squeeze(-1).cpu().detach().numpy()
     assert np.min(label) == 0
 
-    model.set_image(image)
+    try:
+        model.set_image(image)
 
-    point_coords, point_label = [], []
-    instance_label = skimage.measure.label(label)
-    for instance_id in np.unique(instance_label)[1:]:
-        instance_mask = (instance_label == instance_id).astype(int)
-        # Following code block directly adapted from
-        # https://github.com/mazurowski-lab/segment-anything-medical-evaluation/blob/main/prompt_gen_and_exec_v1.py
-        padded_mask = np.uint8(np.pad(instance_mask, ((1, 1), (1, 1)), 'constant'))
-        dist_img = cv2.distanceTransform(padded_mask,
-                                         distanceType=cv2.DIST_L2,
-                                         maskSize=5).astype(np.float32)[1:-1, 1:-1]
-        # NOTE: numpy and opencv have inverse definition of row and column
-        # NOTE: SAM and opencv have the same definition
-        cY, cX = np.where(dist_img == dist_img.max())
-        # NOTE: random seems to change DC by +/-1e-4
-        # Random sample one point with largest distance
-        random_idx = np.random.randint(0, len(cX))
-        cX, cY = int(cX[random_idx]), int(cY[random_idx])
+        point_coords, point_label = [], []
+        instance_label = skimage.measure.label(label)
+        for instance_id in np.unique(instance_label)[1:]:
+            instance_mask = (instance_label == instance_id).astype(int)
+            # Following code block directly adapted from
+            # https://github.com/mazurowski-lab/segment-anything-medical-evaluation/blob/main/prompt_gen_and_exec_v1.py
+            padded_mask = np.uint8(np.pad(instance_mask, ((1, 1), (1, 1)), 'constant'))
+            dist_img = cv2.distanceTransform(padded_mask,
+                                            distanceType=cv2.DIST_L2,
+                                            maskSize=5).astype(np.float32)[1:-1, 1:-1]
+            # NOTE: numpy and opencv have inverse definition of row and column
+            # NOTE: SAM and opencv have the same definition
+            cY, cX = np.where(dist_img == dist_img.max())
+            # NOTE: random seems to change DC by +/-1e-4
+            # Random sample one point with largest distance
+            random_idx = np.random.randint(0, len(cX))
+            cX, cY = int(cX[random_idx]), int(cY[random_idx])
 
-        # point: farthest from the object boundary
-        point_coords.append((cX, cY))
-        point_label.append(1)
+            # point: farthest from the object boundary
+            point_coords.append((cX, cY))
+            point_label.append(1)
 
-    preds, _, _ = model.predict(point_coords=np.array(point_coords),
-                                point_labels=np.array(point_label),
-                                multimask_output=False)
+        preds, _, _ = model.predict(point_coords=np.array(point_coords),
+                                    point_labels=np.array(point_label),
+                                    multimask_output=False)
 
-    label_sam = preds.squeeze(0)
+        label_sam = preds.squeeze(0)
+
+    except:
+        label_sam = np.zeros_like(label)
 
     assert len(label_sam.shape) == 2
     label_sam = label_sam.astype(int)[None, None, ...]
