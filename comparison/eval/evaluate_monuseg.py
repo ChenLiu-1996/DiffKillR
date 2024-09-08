@@ -18,7 +18,7 @@ if __name__ == '__main__':
         for directory in directory_list:
             subset = directory.split('/')[-2]
 
-            for model in ['UNet', 'nnUNet', 'MedT', 'LACSS', 'PSM']:
+            for model in ['UNet', 'nnUNet', 'MedT', 'LACSS', 'PSM', 'SAM', 'SAM2', 'MedSAM']:
                 for seed in range(1, 4):
                     pred_folder = '%s/%s_seed%d_stitched/' % (directory, model, seed)
 

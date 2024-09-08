@@ -32,7 +32,7 @@ if __name__ == '__main__':
 
         directory_list = sorted(glob('../results/%s/*/' % folder))
         for directory in tqdm(directory_list):
-            for model in ['UNet', 'nnUNet', 'MedT', 'PSM']:
+            for model in ['UNet', 'nnUNet', 'MedT', 'PSM', 'SAM', 'SAM2', 'MedSAM']:
                 for seed in range(1, 4):
                     source_folder = '%s/%s_seed%d/' % (directory, model, seed)
                     stitched_folder = '%s/%s_seed%d_stitched/' % (directory, model, seed)
