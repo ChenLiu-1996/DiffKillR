@@ -234,7 +234,7 @@ def test(config):
         'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
     if torch.backends.mps.is_available():
         device = 'mps'
-    
+
     dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
 
     print('Len(Dataset): ', len(dataset))
@@ -362,7 +362,7 @@ def test(config):
                     batch_size = images.shape[0]
                     if iter_idx * batch_size > 400:
                         break
-                    
+
                     # Infer latent embeddings for aug view.
                     images = images.float().to(device)  # [batch_size, C, H, W]
                     recon_images, latent_features = model(images)
@@ -390,7 +390,7 @@ def test(config):
                         embeddings[split] = latent_features  # (batch_size, latent_dim)
                     else:
                         embeddings[split] = torch.cat([embeddings[split], latent_features], dim=0)
-                    
+
                     if reference_embeddings[split] is None:
                         reference_embeddings[split] = latent_features_ref
                     else:
@@ -458,7 +458,7 @@ def test(config):
         ins_mAP[split] = embedding_mAP(concatenated_embeddings,
                                         instance_adj,
                                         distance_op=distance_measure)
-        
+
         log(f'[{split}]Instance clustering accuracy: {ins_clustering_acc[split]:.3f}', to_console=True)
         for k in ins_topk_acc.keys():
             log(f'[{split}]Instance top-{k} accuracy: {ins_topk_acc[k][split]:.3f}', to_console=True)
@@ -531,7 +531,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
     parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
-    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg2018TrainData_patch_96x96', type=str)
+    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg2018TrainData_patch_96x96/', type=str)
     parser.add_argument('--percentage', default=100, type=float)
     parser.add_argument('--organ', default='Breast', type=str)
 

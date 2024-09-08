@@ -3,8 +3,8 @@ from sam2.sam2_image_predictor import SAM2ImagePredictor
 
 import argparse
 import torch
-from torch import nn
 from torch.utils.data import DataLoader
+import cv2
 import os
 import sys
 import numpy as np
@@ -14,11 +14,8 @@ import skimage
 import_dir = '/'.join(os.path.realpath(__file__).split('/')[:-2])
 sys.path.insert(0, import_dir + '/MedT/')
 
-from utils import JointTransform2D, ImageToImage2D, Image2D
-import cv2
 
-
-parser = argparse.ArgumentParser(description='SAM')
+parser = argparse.ArgumentParser(description='SAM2')
 parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                     help='number of data loading workers (default: 8)')
 parser.add_argument('--val_dataset', type=str)
@@ -90,8 +87,8 @@ for batch_idx, (X_batch, y_batch, *rest) in enumerate(tqdm(valloader)):
             # https://github.com/mazurowski-lab/segment-anything-medical-evaluation/blob/main/prompt_gen_and_exec_v1.py
             padded_mask = np.uint8(np.pad(instance_mask, ((1, 1), (1, 1)), 'constant'))
             dist_img = cv2.distanceTransform(padded_mask,
-                                            distanceType=cv2.DIST_L2,
-                                            maskSize=5).astype(np.float32)[1:-1, 1:-1]
+                                             distanceType=cv2.DIST_L2,
+                                             maskSize=5).astype(np.float32)[1:-1, 1:-1]
             # NOTE: numpy and opencv have inverse definition of row and column
             # NOTE: SAM and opencv have the same definition
             cY, cX = np.where(dist_img == dist_img.max())

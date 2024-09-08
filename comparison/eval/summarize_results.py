@@ -25,7 +25,7 @@ if __name__ == '__main__':
     dataset = 'monuseg'
 
     metric_order = ['Dice', 'IoU', 'F1', 'AJI']
-    model_order = ['UNet', 'nnUNet', 'MedT', 'LACSS', 'PSM']
+    model_order = ['UNet', 'nnUNet', 'MedT', 'PSM', 'LACSS', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM']
 
     result_csv = 'results_%s.csv' % dataset
     result_df = pd.read_csv(result_csv)
