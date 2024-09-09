@@ -406,6 +406,7 @@ if __name__ == "__main__":
     parser.add_argument("--organ", type=str, default='Colon')
     parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
     parser.add_argument('--n-views', default=2, type=int)
+    parser.add_argument('--percentage', default=100, type=float)
     parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
     parser.add_argument('--random_seed', default=1, type=int)
     parser.add_argument('--batch_size', default=32, type=int)
