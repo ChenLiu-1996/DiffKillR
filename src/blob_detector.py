@@ -24,11 +24,11 @@ def detect_nuclei(img: np.array, return_overlay: bool = False):
     #gray = cv2.copyMakeBorder(gray, 5, 5, 5, 5, cv2.BORDER_CONSTANT, value=[255, 255, 255])
 
     # Setup SimpleBlobDetector parameters.
-    print('Default parameters: =====')
+    # print('Default parameters: =====')
     params = cv2.SimpleBlobDetector_Params()
-    for p in dir(params):
-        if not p.startswith('__'):
-            print(p, getattr(params, p))
+    # for p in dir(params):
+    #     if not p.startswith('__'):
+    #         print(p, getattr(params, p))
 
     params.minThreshold = 5
     params.maxThreshold = 220
@@ -45,10 +45,10 @@ def detect_nuclei(img: np.array, return_overlay: bool = False):
 
     # # Create a detector with the parameters
     # detector = cv2.SimpleBlobDetector_create(params)
-    print('===== Updated parameters: =====')
-    for p in dir(params):
-        if not p.startswith('__'):
-            print(p, getattr(params, p))
+    # print('===== Updated parameters: =====')
+    # for p in dir(params):
+    #     if not p.startswith('__'):
+    #         print(p, getattr(params, p))
     detector = cv2.SimpleBlobDetector_create(params)
 
     # Detect blobs.

@@ -59,7 +59,7 @@ def extract_patches(image: np.array, patch_size: int, stride: int) -> Tuple[List
 
 def detect_cells(image: np.array, model: torch.nn.Module, 
                  cell_bank_patches: torch.Tensor, cell_bank_labels: np.array,
-                 patch_size: int, stride: int, nms_threshold: float = 0.5,
+                 patch_size: int, stride: int, nms_threshold: float = 0.5, voting_k: int = 1,
                  device: str = 'cpu') -> List[Tuple[int, int, int, int, float]]:
     """
     Detect cells in the image using the DiffeoInvariantNet model.
@@ -75,10 +75,10 @@ def detect_cells(image: np.array, model: torch.nn.Module,
     """
     assert cell_bank_patches.shape[1] == image.shape[2]
     assert cell_bank_patches.shape[2] == cell_bank_patches.shape[3] == patch_size
-    bs = 32
+    bs = 128
 
     # Obtain embeddings for the cell bank patches.
-    print("Obtaining embeddings for the cell bank patches...")
+    print("[Step] Obtaining embeddings for the cell bank patches...")
     model.to(device)
     cell_bank_embeddings = []
     for i in range(0, cell_bank_patches.shape[0], bs):
@@ -92,7 +92,7 @@ def detect_cells(image: np.array, model: torch.nn.Module,
     cell_bank_embeddings = torch.cat(cell_bank_embeddings, dim=0) # [N, latent_dim]
     
     # Extract patches from the image.
-    print("Extracting patches from the image...")
+    print("[Step] Extracting patches from the image...")
     patches_list, coordinates = extract_patches(image, patch_size, stride)
     patches_array = np.stack(patches_list, axis=0)
     print('Extracted patches:', patches_array.shape)
@@ -105,7 +105,7 @@ def detect_cells(image: np.array, model: torch.nn.Module,
         patch = torch.from_numpy(patch).float().unsqueeze(0)
         patches.append(patch)
     patches = torch.cat(patches, dim=0)
-    print("Inferring embeddings for the patches...")
+    print("[Step] Inferring embeddings for the patches...")
     patch_embeddings = []
     for i in tqdm(range(0, len(patches), bs)):
         batch_patches = patches[i:i+bs]
@@ -117,12 +117,28 @@ def detect_cells(image: np.array, model: torch.nn.Module,
         patch_embeddings.append(embeddings)
     patch_embeddings = torch.cat(patch_embeddings, dim=0) # [M, latent_dim]
 
-    print("Assigning labels to the patches...")
-    # Assign the closest cell label to each patch.
+    print("[Step] Assigning labels to the patches...")
+    # Assign the closest cell label to each patch. TODO: use voting instead of closest.
     dists = torch.cdist(patch_embeddings, cell_bank_embeddings) # [M, N]
-    closest_idx = torch.argmin(dists, dim=1) # [M]
-    labels = cell_bank_labels[closest_idx]
+    if voting_k == 1:
+        closest_idx = torch.argmin(dists, dim=1) # [M]
+        labels = cell_bank_labels[closest_idx]
+    else:
+        closest_idx = torch.topk(dists, k=voting_k, dim=1, largest=False)[1] # [M, k]
+        labels = cell_bank_labels[closest_idx] # [M, k]
+        labels = labels.mode(dim=1)[0] # [M]
+    # Calculate uncertainty based on the distance to the closest cell and background embeddings
+    cell_dists = dists[:, cell_bank_labels == 1]
+    background_dists = dists[:,  cell_bank_labels == 0]
+    #import pdb; pdb.set_trace()
+    closest_cell_dist, _ = torch.min(cell_dists, dim=1) # [M]
+    closest_background_dist, _ = torch.min(background_dists, dim=1) # [M]
+    # if closest_cell_dist is small, closest_background_dist is large, uncertainty is small
+    # if closest_cell_dist is large, closest_background_dist is small, uncertainty is large
+    # uncertainty = closest_cell_dist / (closest_cell_dist + closest_background_dist)
+    probs = np.exp(-closest_cell_dist) / (np.exp(-closest_cell_dist) + np.exp(-closest_background_dist) + 1e-6)
     print(f"Cell percentage: {labels.mean()}")
+    print(f"Probs: {probs.mean()}")
 
     # Discard background patches.
     detections = []
@@ -132,8 +148,23 @@ def detect_cells(image: np.array, model: torch.nn.Module,
             score = -dists[i, closest_idx[i]]
             detections.append((min_x, min_y, max_x, max_y, score))
     
-    # Perform NMS
-    print("Performing NMS...")
+    # Filter out detections with low probs.
+    before_filtering = len(detections)
+    for i, det in enumerate(detections):
+        if probs[i] < 0.5:
+            detections.pop(i)
+    after_filtering = len(detections)
+    print(f"[Step] Filtered out {before_filtering - after_filtering} detections with low cell probability.")
+
+    # Filter out detections with low scores.
+    before_filtering = len(detections)
+    score_mean, score_std = torch.tensor(np.array(detections)[:, 4]).mean(), torch.tensor(np.array(detections)[:, 4]).std()
+    print(f"Score mean: {score_mean}, score std: {score_std} before filtering out detections with low scores...")
+    detections = [det for det in detections if det[4] > score_mean + 0 * score_std]
+    after_filtering = len(detections)
+    print(f"[Step] Filtered out {before_filtering - after_filtering} detections with low scores.")
+
+    print("[Step] Performing NMS...")
     detections = non_max_suppression(detections, nms_threshold)
     print(f"Detected {len(detections)} cells.")
 
@@ -180,7 +211,8 @@ def non_max_suppression(boxes: List[Tuple[int, int, int, int, float]], threshold
 
     return final_boxes
 
-def evaluate_detections(detections: List[Tuple[int, int, int, int, float]], verts_list: List[np.array], image_sizes: Tuple[int, int]) -> Tuple[int, int, int]:
+def evaluate_detections(detections: List[Tuple[int, int, int, int, float]], verts_list: List[np.array], 
+                        image_sizes: Tuple[int, int], threshold: float = 0.1) -> Tuple[int, int, int]:
     """Evaluate the performance of the detections.
     Args:
         detections (List[Tuple[int, int, int, int, float]]): The detected bounding boxes (min_x, min_y, max_x, max_y, score).
@@ -189,7 +221,9 @@ def evaluate_detections(detections: List[Tuple[int, int, int, int, float]], vert
         Tuple[int, int, int]: True positives, false positives, and false negatives.
     """
     matched_gt = set()
-
+    ious = []
+    intersections = []
+    unions = []
     for detection in detections:
         min_x, min_y, max_x, max_y, _ = detection
         detection_box = np.array([[min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y]])
@@ -199,16 +233,40 @@ def evaluate_detections(detections: List[Tuple[int, int, int, int, float]], vert
                 continue
 
             # Check if the detection overlaps with the ground truth cell
-            if inside_polygon(detection_box, gt_cell, image_sizes, threshold=1):
+            intersection, union, iou, is_inside = inside_polygon(detection_box, gt_cell, image_sizes, threshold=threshold)
+            if is_inside:
+                ious.append(iou)
+                intersections.append(intersection)
+                unions.append(union)
                 matched_gt.add(i)
                 break
+
+
+    print('iou mean:', np.mean(ious), 'iou std:', np.std(ious))
+    #import pdb; pdb.set_trace();
+    print('intersection mean:', np.mean(intersections), 'intersection std:', np.std(intersections), 'max intersection:', np.max(intersections))
+    # histogram of ious
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 3, 1)
+    plt.hist(ious, bins=100)
+    plt.title('IoU')
+    plt.subplot(1, 3, 2)
+    plt.hist(intersections, bins=100)
+    plt.title('Intersection')
+    plt.subplot(1, 3, 3)
+    plt.hist(unions, bins=100)
+    plt.title('Union')
+    plt.savefig('./ious.png', bbox_inches='tight', pad_inches=0)
+
+    
     tp = len(matched_gt)
     fp = len(detections) - tp
     fn = len(verts_list) - len(matched_gt)
+    print(f"[Evaluation] TP: {tp}, FP: {fp}, FN: {fn}")
 
     return tp, fp, fn
 
-def inside_polygon(detection_box, gt_cell, image_sizes, threshold=1):
+def inside_polygon(detection_box, gt_cell, image_sizes, threshold=0.1):
     """Check if poly1 is inside poly2. Simply check if any pixel of poly1 is inside poly2.
     Args:
         detection_box (np.array): The first polygon, shape (N, 2).
@@ -229,10 +287,15 @@ def inside_polygon(detection_box, gt_cell, image_sizes, threshold=1):
     cv2.fillPoly(mask1, [poly1], 1)
     cv2.fillPoly(mask2, [poly2], 1)
     intersection = np.logical_and(mask1, mask2)
-    return intersection.sum() >= threshold
+    union = np.logical_or(mask1, mask2)
+    iou = intersection.sum() / union.sum()
+    # if iou > threshold:
+    #     print(f"IoU: {iou}")
+    #import pdb; pdb.set_trace()
+    return intersection.sum(), union.sum(), iou, iou >= threshold
 
 def visualize_detections(image_path: str, detections: List[Tuple[int, int, int, int, float]],
-                         annotation_path: str=None, label_path: str=None):
+                         annotation_path: str=None, label_path: str=None, tp_iou: float = 0.1):
     """Visualize the cell detections on the image."""
     image = cv2.imread(image_path)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -242,7 +305,9 @@ def visualize_detections(image_path: str, detections: List[Tuple[int, int, int, 
         title_str += f'GT: {len(verts_list)}'
 
         # Evaluate the performance.
-        tp, fp, fn = evaluate_detections(detections, verts_list, image.shape[:2])
+        print(f"[Step] Evaluating detections...")
+        tp, fp, fn = evaluate_detections(detections, verts_list, 
+                                         image.shape[:2], threshold=tp_iou)
         precision = tp / (tp + fp)
         recall = tp / (tp + fn)
         f1 = 2 * precision * recall / (precision + recall)
@@ -254,14 +319,17 @@ def visualize_detections(image_path: str, detections: List[Tuple[int, int, int, 
     blob_detections, im_with_keypoints = blob_detect_nuclei(image, return_overlay=True)
     print(f"[Blob Detection] Detected {len(blob_detections)} nuclei. Image Overlay: {im_with_keypoints.shape}, {image.shape}")
     blob_tp, blob_fp, blob_fn = evaluate_detections(blob_detections, verts_list, image.shape[:2])
+    #blob_tp, blob_fp, blob_fn = 1,1,1 # dummy values for now
     blob_precision = blob_tp / (blob_tp + blob_fp)
     blob_recall = blob_tp / (blob_tp + blob_fn)
     blob_f1 = 2 * blob_precision * blob_recall / (blob_precision + blob_recall)
 
     # Draw the detections on the image on the left image, and the label in the middle image, blob detector overlay on the right image.
+    # Annotate the detections with the uncertainty score.
     for (min_x, min_y, max_x, max_y, score) in detections:
         cv2.rectangle(image, (min_x, min_y), (max_x, max_y), (0, 255, 0), 2)
-    fig, axs = plt.subplots(1, 3, figsize=(5*3, 5))
+        cv2.putText(image, f'{score:.2f}', (min_x+1, min_y+1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    fig, axs = plt.subplots(1, 3, figsize=(16*3, 16))
     axs[0].imshow(image)
     axs[0].set_title(title_str)
     axs[0].axis('off')
@@ -272,10 +340,11 @@ def visualize_detections(image_path: str, detections: List[Tuple[int, int, int, 
     axs[2].set_title(f'Blob Detection: {len(blob_detections)}; Precision: {blob_precision:.4f}; Recall: {blob_recall:.4f}; F1: {blob_f1:.4f}')
     axs[2].axis('off')
 
-    plt.show()
+    # plt.show()
 
     # Save plot to file
-    plt.savefig('detection_visualization.png', bbox_inches='tight', pad_inches=0)
+    image_name = os.path.basename(image_path).split('.')[0]
+    plt.savefig(f'./{image_name}_detection_visualization.png', pad_inches=0)
 
 def main(config):    
     device = torch.device(
@@ -293,7 +362,7 @@ def main(config):
 
     # Load the cell bank.
     dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
-    print('Cell bank loaded.')
+    print('[Step] Loading cell bank...')
 
     # Prepare cell bank patches and labels.
     dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
@@ -316,15 +385,18 @@ def main(config):
 
     # Detect cells in the image.
     detections = detect_cells(image, model, cell_bank_patches, cell_bank_labels, 
-                             config.patch_size, config.stride, config.nms_threshold)
-    visualize_detections(config.image_path, detections, config.image_annotation_path, config.image_label_path)
+                             config.patch_size, config.stride, config.nms_threshold, config.voting_k)
+    # Visualize the detections.
+    print(f"[Step] Visualizing detections...")
+    visualize_detections(config.image_path, detections, config.image_annotation_path, 
+                         config.image_label_path, tp_iou=config.tp_iou)
 
 
 # Example usage
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Cell Counting Entry point.')
-    parser.add_argument("--image_path", type=str, default=ROOT_DIR + '/external_data/MoNuSeg/MoNuSegTestData/images/TCGA-AO-A0J2-01A-01-BSA.png')
-    parser.add_argument("--model_path", type=str, default=ROOT_DIR + '/checkpoints/dataset-MoNuSeg_fewShot-100.0%_organ-Breast/DiffeoInvariantNet_model-AutoEncoder_depth-4_latentLoss-SimCLR_epoch-200_seed1.ckpt')
+    parser.add_argument("--image_path", type=str, default=ROOT_DIR + '/external_data/MoNuSeg/MoNuSegTestData/images/TCGA-EJ-A46H-01A-03-TSC.png') # NOTE: CHANGE THIS.
+    parser.add_argument("--model_path", type=str, default=ROOT_DIR + '/results/dataset-MoNuSeg_fewShot-100%_organ-Prostate/DiffeoInvariantNet-AutoEncoder_depth-4_latentLoss-SimCLR_ epoch-200_seed-1_backgroundRatio-2.0/model.ckpt') # NOTE: CHANGE THIS.
     parser.add_argument("--gpu_id", type=int, default=0)
     parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
 
@@ -342,6 +414,8 @@ if __name__ == "__main__":
     parser.add_argument("--patch_size", type=int, default=32)
     parser.add_argument("--stride", type=int, default=1)
     parser.add_argument("--nms_threshold", type=float, default=0.1)
+    parser.add_argument("--voting_k", type=int, default=1)
+    parser.add_argument("--tp_iou", type=float, default=0.1)
     config = parser.parse_args()
 
     if config.organ is not None:
