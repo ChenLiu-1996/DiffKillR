@@ -31,7 +31,8 @@ class MoNuSegDataset(Dataset):
                  organ: str = None,
                  base_path: str = ROOT_DIR + '/data/MoNuSeg2018TrainData_patch_96x96/',
                  target_dim: Tuple[int] = (32, 32),
-                 n_views: int = None):
+                 n_views: int = None,
+                 percentage: int = 100):
 
         super().__init__()
 
@@ -42,6 +43,7 @@ class MoNuSegDataset(Dataset):
         self.target_dim = target_dim
         self.augmentation_methods = augmentation_methods
         self.n_views = n_views
+        self.percentage = percentage
         self.deterministic = False  # For infinite possibilities during training.
 
         self.img_paths = sorted(glob('%s/image/*.png' % base_path))
@@ -63,11 +65,11 @@ class MoNuSegDataset(Dataset):
         print(f'Number of background: {self.num_background}')
         print(f'Number of images: {len(self.img_paths)}')
         print(f'Number of labels: {len(self.label_paths)}')
+        print(f'Taking {self.percentage}% of the data: {np.floor(len(self.img_paths) * (self.percentage/100))}')
         assert len(self.img_paths) == len(self.label_paths) + self.num_background
 
     def __len__(self) -> int:
-        return len(self.img_paths)
-
+        return int(np.floor(len(self.img_paths) * (self.percentage/100)))
     def __str__(self) -> str:
         return 'MoNuseg Dataset: %d images' % len(self)
 

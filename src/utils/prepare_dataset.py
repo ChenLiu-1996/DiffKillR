@@ -47,7 +47,8 @@ def prepare_dataset(config: AttributeHashmap):
                                  organ=config.organ,
                                  base_path=config.dataset_path,
                                  target_dim=config.target_dim,
-                                 n_views=config.n_views)
+                                 n_views=config.n_views,
+                                 percentage=config.percentage)
     elif config.dataset_name == 'GLySAC':
         aug_lists = config.aug_methods.split(',')
         dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists,

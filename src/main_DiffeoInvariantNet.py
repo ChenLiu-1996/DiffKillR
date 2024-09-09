@@ -480,15 +480,25 @@ def main(config):
         if type(getattr(config, key)) == str and '$ROOT' in getattr(config, key):
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
-    model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
-    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_epoch-{config.max_epochs}_seed{config.random_seed}'
-    config.DiffeoInvariantNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoInvariantNet_str + '.ckpt')
+    model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage}%_organ-{config.organ}'
+    DiffeoInvariantNet_str = f'DiffeoInvariantNet-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_epoch-{config.max_epochs}_seed-{config.random_seed}_backgroundRatio-{config.background_ratio:.1f}'
     config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str, '')
+    config.DiffeoInvariantNet_model_save_path = os.path.join(config.output_save_path, model_name, DiffeoInvariantNet_str, 'model.ckpt')
     config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str, 'log.txt')
 
     print(config)
 
     seed_everything(config.random_seed)
+
+    # run scr/preprocessing/prepare_MoNuSeg.py first to generate train data.
+    print('Running scr/preprocessing/prepare_MoNuSeg.py to generate train data...')
+    script_path = ROOT + '/src/preprocessing/prepare_MoNuSeg.py'
+    os.system(f"python {script_path} \
+                --patch_size {config.target_dim[0] * 2} \
+                --aug_patch_size {config.target_dim[0]} \
+                --organ {config.organ} \
+                --background_ratio {config.background_ratio}")
+    print('Training data generated.')
 
     wandb_run = None
     if config.use_wandb and config.mode == 'train':
@@ -526,14 +536,15 @@ if __name__ == '__main__':
     parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
     parser.add_argument('--random-seed', default=1, type=int)
 
-    parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
+    # parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
     parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
 
     parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
     parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
-    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg2018TrainData_patch_96x96/', type=str)
-    parser.add_argument('--percentage', default=100, type=float)
+    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg2018TrainData_patch_96x96', type=str)
+    parser.add_argument('--percentage', default=100, type=float) # NOTE: this is the percentage of the training data.
     parser.add_argument('--organ', default='Breast', type=str)
+    parser.add_argument('--background-ratio', default=1.0, type=float) # How many background patches to generate for each cell patch.
 
     parser.add_argument('--learning-rate', default=1e-3, type=float)
     parser.add_argument('--patience', default=50, type=int)
