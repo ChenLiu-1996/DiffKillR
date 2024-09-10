@@ -86,7 +86,6 @@ MoNuSeg_Organ2FileID = {
             'TCGA-G9-6336-01Z-00-DX1',
             'TCGA-G9-6348-01Z-00-DX1',
             'TCGA-G9-6356-01Z-00-DX1',
-            'TCGA-G9-6358-01Z-00-DX1',
             'TCGA-G9-6363-01Z-00-DX1',
             'TCGA-CH-5767-01Z-00-DX1',
             'TCGA-G9-6362-01Z-00-DX1',
