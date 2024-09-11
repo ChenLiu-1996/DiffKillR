@@ -23,9 +23,10 @@ ROOT_DIR = '/'.join(os.path.realpath(__file__).split('/')[:-3])
 class MoNuSegDataset(Dataset):
     def __init__(self,
                  subset: str,
-                 augmentation_methods: List[str],
+                 no_background: bool = False,
+                 augmentation_methods: List[str] = None,
                  organ: str = 'Colon',
-                 base_path: str = ROOT_DIR + '/data/MoNuSeg/MoNuSegByCancer_patch_64x64/',
+                 base_path: str = ROOT_DIR + '/data/MoNuSeg/MoNuSegByCancer_patch_96x96/',
                  target_dim: Tuple[int] = (32, 32),
                  n_views: int = None,
                  percentage: int = 100):
@@ -36,6 +37,7 @@ class MoNuSegDataset(Dataset):
         Find the list of relevant files.
         '''
         self.subset = subset
+        self.no_background = no_background
         self.organ = organ
         self.target_dim = target_dim
         self.augmentation_methods = augmentation_methods
@@ -65,7 +67,10 @@ class MoNuSegDataset(Dataset):
         assert len(self.background_img_paths) == self.num_backgrounds
 
     def __len__(self) -> int:
-        return self.num_cells + self.num_backgrounds
+        if self.no_background:
+            return self.num_cells
+        else:
+            return self.num_cells + self.num_backgrounds
 
     def __str__(self) -> str:
         return 'MoNuseg Dataset: %d images' % len(self)
@@ -135,7 +140,7 @@ class MoNuSegDataset(Dataset):
 
         # [1, C, H, W]
         image_aug = fix_channel_dimension(normalize_image(image_aug))
-        label_aug = fix_channel_dimension(label_aug)
+        label_aug = fix_channel_dimension(normalize_label(label_aug))
 
         image_n_view, label_n_view = None, None
         if self.n_views is not None:
@@ -154,7 +159,7 @@ class MoNuSegDataset(Dataset):
                 image_new_view = center_crop(image_new_view, output_size=self.target_dim[0])
                 image_new_view = fix_channel_dimension(normalize_image(image_new_view))
                 label_new_view = center_crop(label_new_view, output_size=self.target_dim[0])
-                label_new_view = fix_channel_dimension(label_new_view)
+                label_new_view = fix_channel_dimension(normalize_label(label_new_view))
 
                 image_n_view.append(image_new_view[np.newaxis, ...])
                 label_n_view.append(label_new_view[np.newaxis, ...])
@@ -168,7 +173,7 @@ class MoNuSegDataset(Dataset):
         canonical_pose_label = center_crop(canonical_pose_label, output_size=self.target_dim[0])
 
         canonical_pose_image = fix_channel_dimension(normalize_image(canonical_pose_image))
-        canonical_pose_label = fix_channel_dimension(canonical_pose_label)
+        canonical_pose_label = fix_channel_dimension(normalize_label(canonical_pose_label))
 
         return (image_aug, label_aug,
                 image_n_view, label_n_view,
@@ -206,9 +211,15 @@ def load_label(path: str, target_dim: Tuple[int] = None) -> np.ndarray:
 
 def normalize_image(image: np.ndarray) -> np.ndarray:
     '''
-    [0, 255] to [-1, 1]
+    [0, 255] to [-1.0, 1.0]
     '''
     return image / 255.0 * 2 - 1
+
+def normalize_label(label: np.ndarray) -> np.ndarray:
+    '''
+    [0, 255] to [0, 1]
+    '''
+    return np.uint8(label / 255)
 
 def fix_channel_dimension(arr: np.ndarray) -> np.ndarray:
     if len(arr.shape) == 3:

@@ -420,7 +420,7 @@ def infer(config: AttributeHashmap, n_plot_per_epoch: int = None):
             stitched_support[h_begin:h_end, w_begin:w_end] += np.ones_like(curr_label)
 
         stitched_label = stitched_label / stitched_support
-        stitched_label = stitched_label > 0.8
+        stitched_label = stitched_label > 0.5
         stitched_label = morphology.remove_small_objects(stitched_label, 200)
         stitched_label = morphology.remove_small_holes(stitched_label)
         cv2.imwrite(save_path, np.uint8(np.uint8(stitched_label) * 255))
@@ -444,7 +444,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
     parser.add_argument('--DiffeoMappingNet-model', default='VM-Diff', type=str)
-    parser.add_argument('--DiffeoInvariantNet-max-epochs', default=50, type=int)
+    parser.add_argument('--DiffeoInvariantNet-max-epochs', default=25, type=int)
     parser.add_argument('--DiffeoMappingNet-max-epochs', default=100, type=int)
     parser.add_argument('--percentage', default=10, type=float)
     parser.add_argument('--organ', default='Breast', type=str)
@@ -453,7 +453,7 @@ if __name__ == '__main__':
     parser.add_argument('--use-gt-loc', action='store_true')
 
     parser.add_argument('--learning-rate', default=1e-3, type=float)
-    parser.add_argument('--hard-example-ratio', default=0, type=float)
+    parser.add_argument('--hard-example-ratio', default=0.1, type=float)
     parser.add_argument('--patience', default=50, type=int)
     parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
     parser.add_argument('--batch-size', default=8, type=int)
@@ -481,6 +481,9 @@ if __name__ == '__main__':
 
     print(config)
     seed_everything(config.random_seed)
+
+    # Need background samples for DiffeoInvariantNet to perform localization.
+    config.no_background = False
 
     if config.mode == 'infer':
         infer(config=config)

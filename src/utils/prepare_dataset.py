@@ -44,6 +44,7 @@ def prepare_dataset(config: AttributeHashmap):
     elif config.dataset_name == 'MoNuSeg':
         aug_lists = config.aug_methods.split(',')
         dataset_trainval = MoNuSegDataset(subset='train',
+                                          no_background=config.no_background,
                                           augmentation_methods=aug_lists,
                                           organ=config.organ,
                                           base_path=config.dataset_path,
@@ -51,12 +52,14 @@ def prepare_dataset(config: AttributeHashmap):
                                           n_views=config.n_views,
                                           percentage=config.percentage)
         dataset_test = MoNuSegDataset(subset='test',
+                                      no_background=config.no_background,
                                       augmentation_methods=aug_lists,
                                       organ=config.organ,
                                       base_path=config.dataset_path,
                                       target_dim=config.target_dim,
                                       n_views=config.n_views,
                                       percentage=config.percentage)
+
     elif config.dataset_name == 'GLySAC':
         aug_lists = config.aug_methods.split(',')
         dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists,

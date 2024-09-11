@@ -1092,4 +1092,7 @@ if __name__ == '__main__':
 
     config = parser.parse_args()
 
+    # Do not want background samples to train DiffeoMappingNet.
+    config.no_background = True
+
     main(config)

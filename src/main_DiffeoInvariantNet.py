@@ -315,17 +315,15 @@ def test(config):
 
             test_latent_loss += latent_loss.item()
             test_recon_loss += recon_loss.item()
-            test_loss += test_latent_loss + test_recon_loss
 
-    test_loss /= (iter_idx + 1)
     test_latent_loss /= (iter_idx + 1)
     test_recon_loss /= (iter_idx + 1)
+    test_loss = test_latent_loss + test_recon_loss
 
     log('Test loss: %.3f, contrastive: %.3f, recon: %.3f\n'
         % (test_loss, test_latent_loss, test_recon_loss),
         filepath=config.log_path,
         to_console=False)
-
 
     # Visualize latent embeddings.
     embeddings = {split: None for split in ['train', 'val', 'test']}
@@ -546,7 +544,7 @@ if __name__ == '__main__':
     parser.add_argument('--num-neg', default=1, type=int)
     parser.add_argument('--contrastive-mode', default='one', type=str)
     parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
-    parser.add_argument('--max-epochs', default=50, type=int)
+    parser.add_argument('--max-epochs', default=25, type=int)
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--num-filters', default=32, type=int)
     parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
@@ -555,5 +553,8 @@ if __name__ == '__main__':
     parser.add_argument('--wandb-username', default='yale-cl2482', type=str)
 
     config = parser.parse_args()
+
+    # Need background samples to train DiffeoInvariantNet.
+    config.no_background = False
 
     main(config)
