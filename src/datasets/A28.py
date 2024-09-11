@@ -152,7 +152,8 @@ class A28Dataset(Dataset):
         return (image_aug, label_aug,
                 image_n_view, label_n_view,
                 canonical_pose_image,
-                canonical_pose_label)
+                canonical_pose_label,
+                True)
 
 
 def load_image(path: str, target_dim: Tuple[int] = None) -> np.array:

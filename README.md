@@ -32,7 +32,8 @@ python main_DiffeoMappingNet.py --dataset-name A28 --dataset-path '$ROOT/data/A2
 Run the pipeline on MoNuSeg.
 ```
 cd src
-python main_DiffeoInvariantNet.py
+python main_DiffeoInvariantNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' \
+--organ Breast --percentage 10
 ```
 
 ### Comparison

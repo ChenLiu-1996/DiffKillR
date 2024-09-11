@@ -27,7 +27,7 @@ from utils.metrics import dice_coeff, IoU, l1
 from utils.ncc import NCC
 
 
-def build_model(config):
+def build_diffeomappingnet(config):
     if config.DiffeoMappingNet_model == 'UNet':
         warp_predictor = UNet(
             num_filters=config.num_filters,
@@ -235,7 +235,7 @@ def train(config, wandb_run=None):
     dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
 
     # Build the model
-    warp_predictor = build_model(config)
+    warp_predictor = build_diffeomappingnet(config)
     warp_predictor = warp_predictor.to(device)
 
     warper = Warper(size=config.target_dim)
@@ -258,7 +258,7 @@ def train(config, wandb_run=None):
 
         warp_predictor.train()
         plot_freq = int(len(train_loader) // config.n_plot_per_epoch)
-        for iter_idx, (_, _, image_n_view, label_n_view, _, _) in enumerate(tqdm(train_loader)):
+        for iter_idx, (_, _, image_n_view, label_n_view, _, _, _) in enumerate(tqdm(train_loader)):
 
             assert image_n_view.shape[1] == 2
             curr_batch_size = image_n_view.shape[0]
@@ -421,7 +421,7 @@ def train(config, wandb_run=None):
             val_metric_ref_dict, val_metric_fliprot_dict, val_metric_ours_dict = {}, {}, {}
 
             plot_freq = int(len(val_loader) // config.n_plot_per_epoch)
-            for iter_idx, (_, _, image_n_view, label_n_view, _, _) in enumerate(tqdm(val_loader)):
+            for iter_idx, (_, _, image_n_view, label_n_view, _, _, _) in enumerate(tqdm(val_loader)):
 
                 assert image_n_view.shape[1] == 2
                 curr_batch_size = image_n_view.shape[0]
@@ -581,7 +581,7 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
     dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
 
     # Build the model
-    warp_predictor = build_model(config)
+    warp_predictor = build_diffeomappingnet(config)
     warp_predictor.load_weights(config.DiffeoMappingNet_model_save_path, device=device)
     warp_predictor = warp_predictor.to(device)
 
@@ -602,7 +602,7 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
     test_metric_ref_dict, test_metric_fliprot_dict, test_metric_ours_dict = {}, {}, {}
 
     plot_freq = int(len(test_loader) // config.n_plot_per_epoch)
-    for iter_idx, (_, _, image_n_view, label_n_view, _, _) in enumerate(tqdm(test_loader)):
+    for iter_idx, (_, _, image_n_view, label_n_view, _, _, _) in enumerate(tqdm(test_loader)):
 
         assert image_n_view.shape[1] == 2
         curr_batch_size = image_n_view.shape[0]
@@ -882,7 +882,7 @@ def infer(config, wandb_run=None):
         os.makedirs(pred_label_folder)
 
     # Build the model
-    warp_predictor = build_model(config)
+    warp_predictor = build_diffeomappingnet(config)
     warp_predictor.load_weights(config.DiffeoMappingNet_model_save_path, device=device)
     warp_predictor = warp_predictor.to(device)
 
@@ -1006,41 +1006,7 @@ def infer(config, wandb_run=None):
     return
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Entry point.')
-    parser.add_argument('--mode', help='train|test|infer?', default='train')
-    parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
-    parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
-
-    parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
-    parser.add_argument('--random-seed', default=1, type=int)
-
-    parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
-    parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
-
-    parser.add_argument('--DiffeoMappingNet-model', default='VM-Diff', type=str)
-    parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
-    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg2018TrainData_patch_96x96/', type=str)
-    parser.add_argument('--percentage', default=100, type=float)
-    parser.add_argument('--organ', default=None, type=str)
-    parser.add_argument('--depth', default=4, type=int)
-    parser.add_argument('--latent-loss', default='SimCLR', type=str)
-
-    parser.add_argument('--learning-rate', default=1e-3, type=float)
-    parser.add_argument('--hard-example-ratio', default=0, type=float)
-    parser.add_argument('--patience', default=100, type=int)
-    parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
-    parser.add_argument('--max-epochs', default=50, type=int)
-    parser.add_argument('--batch-size', default=16, type=int)
-    parser.add_argument('--num-filters', default=32, type=int)
-    parser.add_argument('--coeff-smoothness', default=0, type=float)
-    parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
-    parser.add_argument('--n-plot-per-epoch', default=2, type=int)
-
-    parser.add_argument('--use-wandb', action='store_true')
-    parser.add_argument('--wandb-username', default='yale-cl2482', type=str)
-
-    config = parser.parse_args()
+def main(config):
     assert config.mode in ['train', 'test', 'infer']
 
     # fix path issues
@@ -1052,9 +1018,9 @@ if __name__ == '__main__':
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
     DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_hard-{config.hard_example_ratio}_epoch-{config.max_epochs}_smoothness-{config.coeff_smoothness}_seed{config.random_seed}'
-    config.DiffeoMappingNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoMappingNet_str + '.ckpt')
     config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, '')
-    config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, 'log.txt')
+    config.DiffeoMappingNet_model_save_path = os.path.join(config.output_save_path, 'model.ckpt')
+    config.log_path = os.path.join(config.output_save_path, 'log.txt')
 
     # `config.n_views` set to 2 for DiffeoMappingNet training.
     config.n_views = 2
@@ -1089,3 +1055,41 @@ if __name__ == '__main__':
 
     if wandb_run is not None:
         wandb_run.finish()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Entry point.')
+    parser.add_argument('--mode', help='train|test|infer?', default='train')
+    parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
+    parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
+
+    parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
+    parser.add_argument('--random-seed', default=1, type=int)
+
+    parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
+    parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
+
+    parser.add_argument('--DiffeoMappingNet-model', default='VM-Diff', type=str)
+    parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
+    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/', type=str)
+    parser.add_argument('--percentage', default=100, type=float)
+    parser.add_argument('--organ', default=None, type=str)
+    parser.add_argument('--depth', default=4, type=int)
+    parser.add_argument('--latent-loss', default='SimCLR', type=str)
+    parser.add_argument('--learning-rate', default=1e-3, type=float)
+    parser.add_argument('--hard-example-ratio', default=0, type=float)
+    parser.add_argument('--patience', default=100, type=int)
+    parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
+    parser.add_argument('--max-epochs', default=100, type=int)
+    parser.add_argument('--batch-size', default=16, type=int)
+    parser.add_argument('--num-filters', default=32, type=int)
+    parser.add_argument('--coeff-smoothness', default=0, type=float)
+    parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
+    parser.add_argument('--n-plot-per-epoch', default=2, type=int)
+
+    parser.add_argument('--use-wandb', action='store_true')
+    parser.add_argument('--wandb-username', default='yale-cl2482', type=str)
+
+    config = parser.parse_args()
+
+    main(config)

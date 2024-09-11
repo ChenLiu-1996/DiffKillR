@@ -43,12 +43,20 @@ def prepare_dataset(config: AttributeHashmap):
     #                                target_dim=config.target_dim)
     elif config.dataset_name == 'MoNuSeg':
         aug_lists = config.aug_methods.split(',')
-        dataset = MoNuSegDataset(augmentation_methods=aug_lists,
-                                 organ=config.organ,
-                                 base_path=config.dataset_path,
-                                 target_dim=config.target_dim,
-                                 n_views=config.n_views,
-                                 percentage=config.percentage)
+        dataset_trainval = MoNuSegDataset(subset='train',
+                                          augmentation_methods=aug_lists,
+                                          organ=config.organ,
+                                          base_path=config.dataset_path,
+                                          target_dim=config.target_dim,
+                                          n_views=config.n_views,
+                                          percentage=config.percentage)
+        dataset_test = MoNuSegDataset(subset='test',
+                                      augmentation_methods=aug_lists,
+                                      organ=config.organ,
+                                      base_path=config.dataset_path,
+                                      target_dim=config.target_dim,
+                                      n_views=config.n_views,
+                                      percentage=config.percentage)
     elif config.dataset_name == 'GLySAC':
         aug_lists = config.aug_methods.split(',')
         dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists,
@@ -63,11 +71,18 @@ def prepare_dataset(config: AttributeHashmap):
         raise ValueError(
             'Dataset not found. Check `dataset_name` in config yaml file.')
 
-    # Load into DataLoader
-    ratios = [float(c) for c in config.train_val_test_ratio.split(':')]
-    ratios = tuple([c / sum(ratios) for c in ratios])
-    train_set, val_set, test_set = split_dataset(
-        dataset=dataset, splits=ratios, random_seed=config.random_seed)
+    if config.dataset_name in ['MoNuSeg']:
+        dataset = dataset_trainval  # for compatibility
+        ratios = [float(c) for c in config.train_val_test_ratio.split(':')]
+        ratios = tuple([c / sum(ratios) for c in ratios])
+        train_set, val_set = split_dataset(
+            dataset=dataset_trainval, splits=ratios[:2], random_seed=config.random_seed)
+        test_set = dataset_test
+    else:
+        ratios = [float(c) for c in config.train_val_test_ratio.split(':')]
+        ratios = tuple([c / sum(ratios) for c in ratios])
+        train_set, val_set, test_set = split_dataset(
+            dataset=dataset, splits=ratios, random_seed=config.random_seed)
 
     if len(train_set) < 20 * config.batch_size:
         train_set = ExtendedDataset(train_set, desired_len=20 * config.batch_size)
@@ -88,16 +103,5 @@ def prepare_dataset(config: AttributeHashmap):
                              batch_size=config.batch_size,
                              shuffle=False,
                              num_workers=config.num_workers)
-
-    # # NOTE: Make sure no leakage between train/val/test sets when sampling augmentation.
-    # # A hacky way, but works for now.
-    # img_path_to_split = {}
-    # for _, (_, _, _, _, img_path, _) in enumerate(train_set):
-    #     img_path_to_split[img_path] = 'train'
-    # for _, (_, _, _, _, img_path, _) in enumerate(val_set):
-    #     img_path_to_split[img_path] = 'val'
-    # for _, (_, _, _, _, img_path, _) in enumerate(test_set):
-    #     img_path_to_split[img_path] = 'test'
-    # dataset._set_img_path_to_split(img_path_to_split=img_path_to_split)
 
     return dataset, train_loader, val_loader, test_loader

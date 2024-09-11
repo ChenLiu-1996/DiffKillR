@@ -148,7 +148,7 @@ def process_MoNuSeg_data():
 
     return
 
-def patchify_MoNuSeg_data_by_cancer_mask_centric(imsize: int = 96, background_ratio: float = 0.5):
+def patchify_MoNuSeg_data_by_cancer_mask_centric(imsize: int, background_ratio: float = 0.5):
     '''
     images are in .tif format, RGB, 1000x1000.
     '''
@@ -196,12 +196,12 @@ def patchify_MoNuSeg_data_by_cancer_mask_centric(imsize: int = 96, background_ra
 
                 # Patchify and save the cell images and masks.
                 for coord in centroids_list:
-                    h = int(coord[0] - imsize / 2)
-                    w = int(coord[1] - imsize / 2)
+                    h = int(coord[0] - imsize // 2)
+                    w = int(coord[1] - imsize // 2)
 
-                    h = min(h, image_h - imsize - 1)
+                    h = min(h, image_h - imsize)
                     h = max(h, 0)
-                    w = min(w, image_w - imsize - 1)
+                    w = min(w, image_w - imsize)
                     w = max(w, 0)
 
                     cell_file_name = f'{image_id}_H{h}W{w}_patch_{imsize}x{imsize}.png'
@@ -335,9 +335,9 @@ def subset_patchify_MoNuSeg_data_by_cancer(imsize: int):
                     h = h_chunk * imsize
                     w = w_chunk * imsize
 
-                    h = min(h, image_h - imsize - 1)
+                    h = min(h, image_h - imsize)
                     h = max(h, 0)
-                    w = min(w, image_w - imsize - 1)
+                    w = min(w, image_w - imsize)
                     w = max(w, 0)
 
                     image_path_to = os.path.join(target_folder, cancer_type, 'train', 'images', train_item + f'_H{h}W{w}.png')
@@ -364,9 +364,9 @@ def subset_patchify_MoNuSeg_data_by_cancer(imsize: int):
                     h = h_chunk * imsize
                     w = w_chunk * imsize
 
-                    h = min(h, image_h - imsize - 1)
+                    h = min(h, image_h - imsize)
                     h = max(h, 0)
-                    w = min(w, image_w - imsize - 1)
+                    w = min(w, image_w - imsize)
                     w = max(w, 0)
 
                     image_path_to = os.path.join(target_folder, cancer_type, 'test', 'images', test_item + f'_H{h}W{w}.png')
@@ -412,9 +412,9 @@ def subset_patchify_MoNuSeg_data_by_cancer_intraimage(imsize: int):
                         h = h_chunk * imsize
                         w = w_chunk * imsize
 
-                        h = min(h, image_h - imsize - 1)
+                        h = min(h, image_h - imsize)
                         h = max(h, 0)
-                        w = min(w, image_w - imsize - 1)
+                        w = min(w, image_w - imsize)
                         w = max(w, 0)
 
                         image_patch = image[h : h+imsize, w : w+imsize, :]
@@ -470,8 +470,8 @@ if __name__ == '__main__':
     # For our pipeline
     patchify_MoNuSeg_data_by_cancer_mask_centric(imsize=96)
 
-    # For comparison
+    # # For comparison
     process_MoNuSeg_data()
     subset_MoNuSeg_data_by_cancer()
     subset_patchify_MoNuSeg_data_by_cancer(imsize=200)
-    subset_patchify_MoNuSeg_data_by_cancer_intraimage(imsize=200)
+    # subset_patchify_MoNuSeg_data_by_cancer_intraimage(imsize=200)

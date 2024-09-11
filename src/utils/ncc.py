@@ -82,7 +82,7 @@ def channel_normalize(template):
     """
     Z-normalize image channels independently.
     """
-    reshaped_template = template.clone().view(template.shape[0], -1)
+    reshaped_template = template.clone().reshape(template.shape[0], -1)
     reshaped_template.sub_(reshaped_template.mean(dim=-1, keepdim=True))
     reshaped_template.div_(reshaped_template.std(dim=-1, keepdim=True, unbiased=False))
 

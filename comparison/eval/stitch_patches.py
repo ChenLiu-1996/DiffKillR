@@ -21,18 +21,19 @@ if __name__ == '__main__':
 
     for folder in [
         'MoNuSegByCancer_200x200',
-        'MoNuSegByCancer_intraimage5pct_200x200',
-        'MoNuSegByCancer_intraimage20pct_200x200',
-        'MoNuSegByCancer_intraimage50pct_200x200',
-        'GLySACByTumor_200x200',
-        'GLySACByTumor_intraimage5pct_200x200',
-        'GLySACByTumor_intraimage20pct_200x200',
-        'GLySACByTumor_intraimage50pct_200x200',
+        # 'MoNuSegByCancer_intraimage5pct_200x200',
+        # 'MoNuSegByCancer_intraimage20pct_200x200',
+        # 'MoNuSegByCancer_intraimage50pct_200x200',
+        # 'GLySACByTumor_200x200',
+        # 'GLySACByTumor_intraimage5pct_200x200',
+        # 'GLySACByTumor_intraimage20pct_200x200',
+        # 'GLySACByTumor_intraimage50pct_200x200',
     ]:
 
         directory_list = sorted(glob('../results/%s/*/' % folder))
         for directory in tqdm(directory_list):
-            for model in ['UNet', 'nnUNet', 'MedT', 'PSM', 'LACSS', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM']:
+            # for model in ['UNet', 'nnUNet', 'MedT', 'PSM', 'LACSS', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM', 'Ours_gt_loc', 'Ours']:
+            for model in ['Ours_gt_loc', 'Ours']:
                 for seed in range(1, 4):
 
                     if model in ['LACSS', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM']:
