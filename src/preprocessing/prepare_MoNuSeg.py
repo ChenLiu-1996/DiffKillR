@@ -221,8 +221,8 @@ def process_MoNuSeg_Traindata(patch_size=96, organ='Breast', background_ratio=0.
     '''
         images are in .tif format, RGB, 1000x1000.
     '''
-    image_folder = '../../external_data/MoNuSeg/MoNuSegTrainData/Tissue Images'
-    annotation_folder = '../../external_data/MoNuSeg/MoNuSegTrainData/Annotations'
+    image_folder = ROOT_DIR + '/external_data/MoNuSeg/MoNuSeg2018TrainData/Tissue Images'
+    annotation_folder = ROOT_DIR + '/external_data/MoNuSeg/MoNuSeg2018TrainData/Annotations'
 
     annotation_files = sorted(glob(f'{annotation_folder}/*.xml'))
     image_files = sorted(glob(f'{image_folder}/*.tif'))

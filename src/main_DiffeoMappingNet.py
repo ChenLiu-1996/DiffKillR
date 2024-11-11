@@ -5,12 +5,12 @@ import torch
 import cv2
 import ast
 import os
-# from model.scheduler import LinearWarmupCosineAnnealingLR
 from tqdm import tqdm
 from matplotlib import pyplot as plt
 from functools import partial
 import wandb
 
+from model.scheduler import LinearWarmupCosineAnnealingLR
 from registration.registration_loss import GradLoss as SmoothnessLoss
 from registration.spatial_transformer import SpatialTransformer as Warper
 from registration.unet import UNet
@@ -20,14 +20,14 @@ from registration.corrmlp import CorrMLP
 from utils.attribute_hashmap import AttributeHashmap
 from utils.prepare_dataset import prepare_dataset
 from utils.log_util import log
-from utils.parse import parse_settings
 from utils.seed import seed_everything
 from utils.early_stop import EarlyStopping
 from utils.metrics import dice_coeff, IoU, l1
 from utils.ncc import NCC
+from utils.mi import MI_batched_image
 
 
-def build_model(config):
+def build_diffeomappingnet(config):
     if config.DiffeoMappingNet_model == 'UNet':
         warp_predictor = UNet(
             num_filters=config.num_filters,
@@ -177,7 +177,7 @@ def flip_rot(image, fliplr: bool, rot_angle: Literal[0, 90, 180, 270]):
 
     return image
 
-def predict_flipping_rotation(image_fixed: torch.Tensor, image_moving: torch.Tensor):
+def predict_flipping_rotation(image_fixed: torch.Tensor, image_moving: torch.Tensor, metric='MI'):
     '''
     Predict the flipping and rotation transformation:
     image_fixed \approx flipping_rotation_transform(image_moving).
@@ -189,9 +189,14 @@ def predict_flipping_rotation(image_fixed: torch.Tensor, image_moving: torch.Ten
     '''
 
     assert image_fixed.shape == image_moving.shape
+    assert metric in ['MI', 'NCC']
 
-    cross_corr_op = NCC(image_fixed)
-    cross_corr_list = []
+    metric_arr = []
+    if metric == 'MI':
+        pass
+    elif metric == 'NCC':
+        cross_corr_op = NCC(image_fixed)
+
     transform_forward_list, transform_reverse_list = [], []
 
     for fliplr_forward, fliplr_reverse in zip([False, True], [False, True]):
@@ -205,14 +210,21 @@ def predict_flipping_rotation(image_fixed: torch.Tensor, image_moving: torch.Ten
             transform_reverse_list.append(transform_func_reverse)
             transformed_image = transform_func_forward(image_moving)
 
-            cross_corr_list.append(torch.max(torch.max(cross_corr_op(transformed_image), dim=1)[0], dim=1)[0])
+            if metric == 'MI':
+                metric_arr.append(MI_batched_image(image_fixed.detach().cpu().numpy(),
+                                                   transformed_image.detach().cpu().numpy()))
+            elif metric == 'NCC':
+                metric_arr.append(torch.max(torch.max(cross_corr_op(transformed_image), dim=1)[0], dim=1)[0])
 
-    cross_corr = torch.stack(cross_corr_list)
+    metric_arr = np.stack(metric_arr)
     transform_arr_forward = np.array(transform_forward_list)
     transform_arr_reverse = np.array(transform_reverse_list)
 
-    # Use cross correlation to decide which transformed image is the best match.
-    best_transform_indices = cross_corr.argmax(0).cpu().numpy()
+    # Decide which transformed image is the best match.
+    if metric == 'MI':
+        best_transform_indices = metric_arr.argmax(0)
+    elif metric == 'NCC':
+        best_transform_indices = metric_arr.argmax(0).cpu().numpy()
 
     flip_rot_transform_forward = transform_arr_forward[best_transform_indices]
     flip_rot_transform_reverse = transform_arr_reverse[best_transform_indices]
@@ -235,14 +247,20 @@ def train(config, wandb_run=None):
     dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
 
     # Build the model
-    warp_predictor = build_model(config)
+    warp_predictor = build_diffeomappingnet(config)
     warp_predictor = warp_predictor.to(device)
 
     warper = Warper(size=config.target_dim)
     warper = warper.to(device)
 
     optimizer = torch.optim.AdamW(warp_predictor.parameters(), lr=config.learning_rate, weight_decay=1e-4)
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=5)
+    # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=5)
+    lr_scheduler = LinearWarmupCosineAnnealingLR(
+        optimizer=optimizer,
+        warmup_epochs=config.max_epochs//5,
+        warmup_start_lr=float(config.learning_rate) / 100,
+        max_epochs=config.max_epochs,
+        eta_min=0)
 
     loss_fn_mse = torch.nn.MSELoss()
     loss_fn_smoothness = SmoothnessLoss('l2').loss
@@ -258,7 +276,7 @@ def train(config, wandb_run=None):
 
         warp_predictor.train()
         plot_freq = int(len(train_loader) // config.n_plot_per_epoch)
-        for iter_idx, (_, _, image_n_view, label_n_view, _, _) in enumerate(tqdm(train_loader)):
+        for iter_idx, (_, _, image_n_view, label_n_view, _, _, _) in enumerate(tqdm(train_loader)):
 
             assert image_n_view.shape[1] == 2
             curr_batch_size = image_n_view.shape[0]
@@ -421,7 +439,7 @@ def train(config, wandb_run=None):
             val_metric_ref_dict, val_metric_fliprot_dict, val_metric_ours_dict = {}, {}, {}
 
             plot_freq = int(len(val_loader) // config.n_plot_per_epoch)
-            for iter_idx, (_, _, image_n_view, label_n_view, _, _) in enumerate(tqdm(val_loader)):
+            for iter_idx, (_, _, image_n_view, label_n_view, _, _, _) in enumerate(tqdm(val_loader)):
 
                 assert image_n_view.shape[1] == 2
                 curr_batch_size = image_n_view.shape[0]
@@ -581,7 +599,7 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
     dataset, train_loader, val_loader, test_loader = prepare_dataset(config=config)
 
     # Build the model
-    warp_predictor = build_model(config)
+    warp_predictor = build_diffeomappingnet(config)
     warp_predictor.load_weights(config.DiffeoMappingNet_model_save_path, device=device)
     warp_predictor = warp_predictor.to(device)
 
@@ -602,7 +620,7 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
     test_metric_ref_dict, test_metric_fliprot_dict, test_metric_ours_dict = {}, {}, {}
 
     plot_freq = int(len(test_loader) // config.n_plot_per_epoch)
-    for iter_idx, (_, _, image_n_view, label_n_view, _, _) in enumerate(tqdm(test_loader)):
+    for iter_idx, (_, _, image_n_view, label_n_view, _, _, _) in enumerate(tqdm(test_loader)):
 
         assert image_n_view.shape[1] == 2
         curr_batch_size = image_n_view.shape[0]
@@ -850,197 +868,7 @@ def eval_stitched(pred_folder, true_folder, organ='Colon', dataset_name='MoNuSeg
     return eval_results
 
 
-import shutil
-
-@torch.no_grad()
-def infer(config, wandb_run=None):
-    '''
-        Given input pair of images, infer the warping field.
-        pair input is a cvs file with columns:
-            - test_image_path
-            - closest_image_path
-            - distance
-            - source (original or augmented)
-        e.g.:
-        warp_predictor = warp_predictor(torch.cat([closest_image, test_image], dim=1))
-        warp_field_forward = warp_predicted[:, :2, ...]
-        warp_field_reverse = warp_predicted[:, 2:, ...]
-
-        test_label = warper(closest_label, flow=warp_field_forward)
-    '''
-    # NOTE: maybe we can even train on fly, for each pair.
-    device = torch.device(
-        'cuda:%d' % config.gpu_id if torch.cuda.is_available() else 'cpu')
-    _, _, _, test_set = prepare_dataset(config=config)
-
-    pred_label_folder = os.path.join(config.output_save_root, model_name, 'pred_patches')
-    # delete pred_label_folder
-    if os.path.exists(pred_label_folder):
-        shutil.rmtree(pred_label_folder)
-        os.makedirs(pred_label_folder)
-    else:
-        os.makedirs(pred_label_folder)
-
-    # Build the model
-    warp_predictor = build_model(config)
-    warp_predictor.load_weights(config.DiffeoMappingNet_model_save_path, device=device)
-    warp_predictor = warp_predictor.to(device)
-
-    warper = Warper(size=config.target_dim)
-    warper = warper.to(device)
-
-    # Step 1: Load matched pairs.
-    load_results = load_match_pairs(config.matched_pair_path_root, mode='infer', config=config)
-    (test_images, test_labels, closest_images, closest_labels, test_image_paths) = load_results
-
-    print('=====test_image_path====: ', test_image_paths[:10])
-    if test_labels is not None:
-        dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_labels, test_labels)
-    else:
-        dataset = torch.utils.data.TensorDataset(closest_images, test_images, closest_labels)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=config.batch_size, shuffle=False)
-
-    # Step 2: Predict & Apply the warping field.
-    warp_predictor.eval()
-    pred_label_list = []
-    print(f'Starting inference for {test_images.shape[0]} test images ...')
-    for iter_idx, batch in enumerate(tqdm(dataloader)):
-        # [N, H, W] -> [N, 1, H, W]
-        if test_labels is not None:
-            (bclosest_images, btest_images, bclosest_labels, btest_labels) = batch
-        else:
-            (bclosest_images, btest_images, bclosest_labels) = batch
-
-        if len(bclosest_labels.shape) == 3:
-            bclosest_labels = bclosest_labels[:, None, ...]
-
-        btest_images = btest_images.float().to(device)
-        bclosest_images = bclosest_images.float().to(device)
-        bclosest_labels = bclosest_labels.float().to(device)
-
-        # Predict the warping field.
-        warp_predicted = warp_predictor(torch.cat([bclosest_images, btest_images], dim=1))
-        warp_field_forward = warp_predicted[:, :2, ...]
-        warp_field_reverse = warp_predicted[:, 2:, ...]
-        #print(warp_field_forward.shape, warp_field_reverse.shape)
-
-        # Apply the warping field.
-        images_U2A = warper(btest_images, flow=warp_field_forward)
-        images_U2A_A2U = warper(images_U2A, flow=warp_field_reverse)
-        pred_labels = warper(bclosest_labels, flow=warp_field_reverse)
-        bpred_label_list = [m.cpu().detach().numpy() for m in pred_labels]
-        pred_label_list.extend(bpred_label_list)
-
-        plot_freq = 10
-        shall_plot = iter_idx % plot_freq == 0
-        #print('shall_plot: ', shall_plot, iter_idx, plot_freq, len(dataset))
-        if shall_plot and test_labels is not None:
-            save_path_fig_sbs = '%s/infer/figure_sample%s.png' % (
-                save_folder, str(iter_idx).zfill(5))
-
-            plot_side_by_side(save_path_fig_sbs, *numpy_variables(
-                btest_images[0], bclosest_images[0],
-                images_U2A_A2U[0], images_U2A[0],
-                btest_labels[0] > 0.5, bclosest_labels[0] > 0.5,
-                pred_labels[0] > 0.5))
-
-    print('Completed inference.')
-
-    print('Saving pred labels to disk ...')
-    for i in range(len(pred_label_list)):
-        # save to disk
-        fname = os.path.join(pred_label_folder, os.path.basename(test_image_paths[i]))
-        cv2.imwrite(fname, np.squeeze((pred_label_list[i] > 0.5).astype(np.uint8)))
-
-    # Stitch the labels together.
-    stitched_label_list, stitched_folder = stitch_patches(pred_label_folder)
-    test_label_folder = config.groudtruth_folder
-    stitched_results = eval_stitched(stitched_folder, test_label_folder, organ=config.organ, dataset_name=dataset_name)
-
-    for k, v in stitched_results.items():
-        log(F'[Eval] Stitched {k}: {v}', filepath=config.log_path, to_console=True)
-
-    # if wandb_run is not None:
-    #     for k, v in stitched_results.items():
-    #         wandb_run.log({F'infer/stitched_{k}': v})
-
-    if test_labels is not None:
-        assert len(pred_label_list) == len(test_labels)
-        print('len(test_labels), len(pred_label_list): ', len(test_labels), len(pred_label_list))
-
-        # Step 3: Evaluation. Compute Dice Coeff.
-        print(f'Computing Dice Coeff for {len(pred_label_list)} total labels...')
-        dice_list = []
-        iou_list = []
-
-        # convert between torch Tensor & np array
-        if 'torch' in str(type(test_labels)):
-            test_labels = test_labels.cpu().detach().numpy()
-
-        for i in range(len(pred_label_list)):
-            # print('test_labels[i].shape, pred_label_list[i].shape: ', \
-            #       test_labels[i].shape, pred_label_list[i].shape)
-            dice_list.append(
-                dice_coeff((np.expand_dims(test_labels[i], 0) > 0.5).transpose(1, 2, 0),
-                        (pred_label_list[i] > 0.5).transpose(1, 2, 0)))
-            iou_list.append(
-                IoU((np.expand_dims(test_labels[i], 0) > 0.5).transpose(1, 2, 0),
-                        (pred_label_list[i] > 0.5).transpose(1, 2, 0)))
-
-        log('[Eval] Dice coeff (ours): %.3f \u00B1 %.3f.'
-            % (np.mean(dice_list), np.std(dice_list)),
-            filepath=config.log_path,
-            to_console=True)
-        log('[Eval] IoU (ours): %.3f \u00B1 %.3f.'
-            % (np.mean(iou_list), np.std(iou_list)),
-            filepath=config.log_path,
-            to_console=True)
-
-        if wandb_run is not None:
-            wandb_run.log(
-                {'infer/dice_seg_mean': np.mean(dice_list),
-                 'infer/dice_seg_std': np.std(dice_list),
-                 'infer/iou_seg_mean': np.mean(iou_list),
-                 'infer/iou_seg_std': np.std(iou_list)})
-
-    return
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Entry point.')
-    parser.add_argument('--mode', help='train|test|infer?', default='train')
-    parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
-    parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
-
-    parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
-    parser.add_argument('--random-seed', default=1, type=int)
-
-    parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
-    parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
-
-    parser.add_argument('--DiffeoMappingNet-model', default='VM-Diff', type=str)
-    parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
-    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg2018TrainData_patch_96x96/', type=str)
-    parser.add_argument('--percentage', default=100, type=float)
-    parser.add_argument('--organ', default=None, type=str)
-    parser.add_argument('--depth', default=4, type=int)
-    parser.add_argument('--latent-loss', default='SimCLR', type=str)
-
-    parser.add_argument('--learning-rate', default=1e-3, type=float)
-    parser.add_argument('--hard-example-ratio', default=0, type=float)
-    parser.add_argument('--patience', default=100, type=int)
-    parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
-    parser.add_argument('--max-epochs', default=50, type=int)
-    parser.add_argument('--batch-size', default=16, type=int)
-    parser.add_argument('--num-filters', default=32, type=int)
-    parser.add_argument('--coeff-smoothness', default=0, type=float)
-    parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
-    parser.add_argument('--n-plot-per-epoch', default=2, type=int)
-
-    parser.add_argument('--use-wandb', action='store_true')
-    parser.add_argument('--wandb-username', default='yale-cl2482', type=str)
-
-    config = parser.parse_args()
+def main(config):
     assert config.mode in ['train', 'test', 'infer']
 
     # fix path issues
@@ -1052,9 +880,9 @@ if __name__ == '__main__':
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
     DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_hard-{config.hard_example_ratio}_epoch-{config.max_epochs}_smoothness-{config.coeff_smoothness}_seed{config.random_seed}'
-    config.DiffeoMappingNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoMappingNet_str + '.ckpt')
     config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, '')
-    config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, 'log.txt')
+    config.DiffeoMappingNet_model_save_path = os.path.join(config.output_save_path, 'model.ckpt')
+    config.log_path = os.path.join(config.output_save_path, 'log.txt')
 
     # `config.n_views` set to 2 for DiffeoMappingNet training.
     config.n_views = 2
@@ -1089,3 +917,44 @@ if __name__ == '__main__':
 
     if wandb_run is not None:
         wandb_run.finish()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Entry point.')
+    parser.add_argument('--mode', help='train|test|infer?', default='train')
+    parser.add_argument('--gpu-id', help='Index of GPU device', default=0)
+    parser.add_argument('--num-workers', help='Number of workers, e.g. use number of cores', default=4, type=int)
+
+    parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
+    parser.add_argument('--random-seed', default=1, type=int)
+
+    parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
+    parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
+
+    parser.add_argument('--DiffeoMappingNet-model', default='VM-Diff', type=str)
+    parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
+    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/', type=str)
+    parser.add_argument('--percentage', default=100, type=float)
+    parser.add_argument('--organ', default=None, type=str)
+    parser.add_argument('--depth', default=4, type=int)
+    parser.add_argument('--latent-loss', default='SimCLR', type=str)
+    parser.add_argument('--learning-rate', default=3e-3, type=float)
+    parser.add_argument('--hard-example-ratio', default=0.25, type=float)
+    parser.add_argument('--patience', default=100, type=int)
+    parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
+    parser.add_argument('--max-epochs', default=100, type=int)
+    parser.add_argument('--batch-size', default=64, type=int)
+    parser.add_argument('--num-filters', default=32, type=int)
+    parser.add_argument('--coeff-smoothness', default=0, type=float)
+    parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
+    parser.add_argument('--n-plot-per-epoch', default=2, type=int)
+
+    parser.add_argument('--use-wandb', action='store_true')
+    parser.add_argument('--wandb-username', default='yale-cl2482', type=str)
+
+    config = parser.parse_args()
+
+    # Do not want background samples to train DiffeoMappingNet.
+    config.no_background = True
+
+    main(config)

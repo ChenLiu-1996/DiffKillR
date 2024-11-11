@@ -153,7 +153,8 @@ class A28AxisDataset(Dataset):
         return (image_aug, label_aug,
                 image_n_view, label_n_view,
                 canonical_pose_image,
-                canonical_pose_label)
+                canonical_pose_label,
+                True)
 
 
     # def sample_views(self, split: str, patch_id: str, cnt: int = 1) -> Tuple[np.array, np.array]:

@@ -1,12 +1,9 @@
-import itertools
 import os
 import sys
-from typing import Literal
 from glob import glob
 from typing import List, Tuple
 
 import cv2
-import pandas as pd
 import random
 import numpy as np
 import torch
@@ -19,54 +16,61 @@ from aug_rotation import augment_rotation
 from aug_stretch import augment_uniform_stretch, augment_directional_stretch, augment_volume_preserving_stretch
 from aug_partial_stretch import augment_partial_stretch
 from center_crop import center_crop
-sys.path.insert(0, import_dir + '/preprocessing/')
-from Metas import MoNuSeg_Organ2FileID
 
 ROOT_DIR = '/'.join(os.path.realpath(__file__).split('/')[:-3])
 
 
 class MoNuSegDataset(Dataset):
     def __init__(self,
-                 augmentation_methods: List[str],
-                 organ: str = None,
-                 base_path: str = ROOT_DIR + '/data/MoNuSeg2018TrainData_patch_96x96/',
+                 subset: str,
+                 no_background: bool = False,
+                 augmentation_methods: List[str] = None,
+                 organ: str = 'Colon',
+                 base_path: str = ROOT_DIR + '/data/MoNuSeg/MoNuSegByCancer_patch_96x96/',
                  target_dim: Tuple[int] = (32, 32),
-                 n_views: int = None):
+                 n_views: int = None,
+                 percentage: int = 100):
 
         super().__init__()
 
         '''
         Find the list of relevant files.
         '''
+        self.subset = subset
+        self.no_background = no_background
         self.organ = organ
         self.target_dim = target_dim
         self.augmentation_methods = augmentation_methods
         self.n_views = n_views
+        self.percentage = percentage
         self.deterministic = False  # For infinite possibilities during training.
 
-        self.img_paths = sorted(glob('%s/image/*.png' % base_path))
-        self.label_paths = sorted(glob('%s/label/*.png' % base_path))
+        self.img_paths = sorted(glob(os.path.join(base_path, organ, subset, 'images', '*.png')))
+        self.label_paths = sorted(glob(os.path.join(base_path, organ, subset, 'masks', '*.png')))
+        self.background_img_paths = sorted(glob(os.path.join(base_path, organ, subset, 'background_images', '*.png')))
 
-        if self.organ is not None:
-            print('Organ: ', self.organ)
-            organ_files = MoNuSeg_Organ2FileID[self.organ]['train'] # TOOD: may want to use test set as well.
+        background_ratio = len(self.background_img_paths) / len(self.img_paths)
 
-            self.img_paths = [path for path in self.img_paths if any([file_id in path for file_id in organ_files])]
-            self.label_paths = [path for path in self.label_paths if any([file_id in path for file_id in organ_files])]
-        
-        # Read class labelcsv file.
-        self.class_labels_pd = pd.read_csv(f'{base_path}/class_labels.csv')
-        self.patchID2Class = {row['patch_id']: row['type'] for _, row in self.class_labels_pd.iterrows()}
-        self.num_cells = np.sum([self.patchID2Class[patchID] == 'cell' for patchID in self.patchID2Class])
-        self.num_background = np.sum([self.patchID2Class[patchID] == 'background' for patchID in self.patchID2Class])
-        print(f'Number of cells: {self.num_cells}')
-        print(f'Number of background: {self.num_background}')
-        print(f'Number of images: {len(self.img_paths)}')
-        print(f'Number of labels: {len(self.label_paths)}')
-        assert len(self.img_paths) == len(self.label_paths) + self.num_background
+        if self.subset == 'train':
+            self.num_cells = int(np.floor(len(self.img_paths) * (self.percentage/100)))
+            self.num_backgrounds = int(self.num_cells * background_ratio)
+            print(f'Train set. Taking {self.percentage}% of the data: {self.num_cells}.')
+            self.img_paths = self.img_paths[:self.num_cells]
+            self.label_paths = self.label_paths[:self.num_cells]
+            self.background_img_paths = self.background_img_paths[:self.num_backgrounds]
+        else:
+            self.num_cells = len(self.img_paths)
+            self.num_backgrounds = len(self.background_img_paths)
+            print(f'Test set. Taking all test data: {self.num_cells}.')
+
+        assert len(self.img_paths) == len(self.label_paths) == self.num_cells
+        assert len(self.background_img_paths) == self.num_backgrounds
 
     def __len__(self) -> int:
-        return len(self.img_paths)
+        if self.no_background:
+            return self.num_cells
+        else:
+            return self.num_cells + self.num_backgrounds
 
     def __str__(self) -> str:
         return 'MoNuseg Dataset: %d images' % len(self)
@@ -74,16 +78,26 @@ class MoNuSegDataset(Dataset):
     def set_deterministic(self, deterministic: bool):
         self.deterministic = deterministic
 
-    def __getitem__(self, idx) -> Tuple[np.array, np.array, np.array, np.array, np.array, np.array]:
+    def __getitem__(self, idx) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
-        # NOTE: we will not downsample the canonical images or labels.
-        canonical_pose_image = load_image(path=self.img_paths[idx], target_dim=None)
-        if idx < self.num_cells:
+        is_foreground = idx < self.num_cells
+
+        if is_foreground:
+            # NOTE: we will not downsample the canonical images or labels.
+            canonical_pose_image = load_image(path=self.img_paths[idx], target_dim=None)
             # Load the label for the cell.
             canonical_pose_label = load_label(path=self.label_paths[idx], target_dim=None)
         else:
+            # NOTE: we will not downsample the canonical images or labels.
+            canonical_pose_image = load_image(path=self.background_img_paths[idx - self.num_cells], target_dim=None)
             # Load dummy label for background, since label is not used for DiffeoInvariantNet.
-            canonical_pose_label = load_label(path=self.label_paths[self.num_cells-1], target_dim=None) # Dummy label to pass augmentation methods. This label will be ignored during training.
+            # Dummy label to pass augmentation methods. This label will be ignored during training.
+            canonical_pose_label = np.ones_like(load_label(path=self.label_paths[0], target_dim=None))
+
+        if canonical_pose_label.shape[-1] == 3:
+            assert (canonical_pose_label[..., 0] == canonical_pose_label[..., 1]).all()
+            assert (canonical_pose_label[..., 0] == canonical_pose_label[..., 2]).all()
+            canonical_pose_label = canonical_pose_label[..., 0]
 
         if self.deterministic:
             # Set a fixed random seed for validation and testing.
@@ -126,7 +140,7 @@ class MoNuSegDataset(Dataset):
 
         # [1, C, H, W]
         image_aug = fix_channel_dimension(normalize_image(image_aug))
-        label_aug = fix_channel_dimension(normalize_image(label_aug)) # axis label, need to be normalized.
+        label_aug = fix_channel_dimension(normalize_label(label_aug))
 
         image_n_view, label_n_view = None, None
         if self.n_views is not None:
@@ -145,7 +159,7 @@ class MoNuSegDataset(Dataset):
                 image_new_view = center_crop(image_new_view, output_size=self.target_dim[0])
                 image_new_view = fix_channel_dimension(normalize_image(image_new_view))
                 label_new_view = center_crop(label_new_view, output_size=self.target_dim[0])
-                label_new_view = fix_channel_dimension(normalize_image(label_new_view))
+                label_new_view = fix_channel_dimension(normalize_label(label_new_view))
 
                 image_n_view.append(image_new_view[np.newaxis, ...])
                 label_n_view.append(label_new_view[np.newaxis, ...])
@@ -159,17 +173,16 @@ class MoNuSegDataset(Dataset):
         canonical_pose_label = center_crop(canonical_pose_label, output_size=self.target_dim[0])
 
         canonical_pose_image = fix_channel_dimension(normalize_image(canonical_pose_image))
-        canonical_pose_label = fix_channel_dimension(normalize_image(canonical_pose_label))
-
-        #import pdb; pdb.set_trace()
+        canonical_pose_label = fix_channel_dimension(normalize_label(canonical_pose_label))
 
         return (image_aug, label_aug,
                 image_n_view, label_n_view,
                 canonical_pose_image,
-                canonical_pose_label)
+                canonical_pose_label,
+                is_foreground)
 
 
-def load_image(path: str, target_dim: Tuple[int] = None) -> np.array:
+def load_image(path: str, target_dim: Tuple[int] = None) -> np.ndarray:
     ''' Load image as numpy array from a path string.'''
 
     if target_dim is not None:
@@ -184,7 +197,7 @@ def load_image(path: str, target_dim: Tuple[int] = None) -> np.array:
 
     return image
 
-def load_label(path: str, target_dim: Tuple[int] = None) -> np.array:
+def load_label(path: str, target_dim: Tuple[int] = None) -> np.ndarray:
     ''' Load image as numpy array from a path string.'''
 
     if target_dim is not None:
@@ -196,13 +209,19 @@ def load_label(path: str, target_dim: Tuple[int] = None) -> np.array:
 
     return label
 
-def normalize_image(image: np.array) -> np.array:
+def normalize_image(image: np.ndarray) -> np.ndarray:
     '''
-    [0, 255] to [-1, 1]
+    [0, 255] to [-1.0, 1.0]
     '''
     return image / 255.0 * 2 - 1
 
-def fix_channel_dimension(arr: np.array) -> np.array:
+def normalize_label(label: np.ndarray) -> np.ndarray:
+    '''
+    [0, 255] to [0, 1]
+    '''
+    return np.uint8(label / 255)
+
+def fix_channel_dimension(arr: np.ndarray) -> np.ndarray:
     if len(arr.shape) == 3:
         # Channel last to channel first to comply with Torch.
         arr = np.moveaxis(arr, -1, 0)
@@ -221,7 +240,7 @@ if __name__ == '__main__':
                  'volume_preserving_stretch',
                  'partial_stretch']
 
-    dataset = MoNuSeg(augmentation_methods=aug_lists, organ='Breast', target_dim=(32, 32), n_views=2)
+    dataset = MoNuSegDataset(augmentation_methods=aug_lists, organ='Breast', target_dim=(32, 32), n_views=2)
     print(len(dataset))
 
     dataloader = DataLoader(dataset=dataset, batch_size=4, shuffle=True, num_workers=0)

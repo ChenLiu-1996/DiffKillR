@@ -79,7 +79,7 @@ def train(config, wandb_run=None):
         model.train()
         dataset.set_deterministic(False)
 
-        for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(train_loader):
+        for iter_idx, (images, _, image_n_view, _, canonical_images, _, _) in enumerate(train_loader):
             images = images.float().to(device)  # [batch_size, C, H, W]
 
             # [batch_size, n_views, C, H, W] -> [batch_size * n_views, C, H, W]
@@ -158,7 +158,7 @@ def train(config, wandb_run=None):
         dataset.set_deterministic(True)
         with torch.no_grad():
             val_loss, val_latent_loss, val_recon_loss = 0, 0, 0
-            for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(val_loader):
+            for iter_idx, (images, _, image_n_view, _, canonical_images, _, _) in enumerate(val_loader):
                 images = images.float().to(device)  # [batch_size, C, H, W]
 
                 # [batch_size, n_views, C, H, W] -> [batch_size * n_views, C, H, W]
@@ -275,7 +275,7 @@ def test(config):
     dataset.set_deterministic(True)
     with torch.no_grad():
         test_loss, test_latent_loss, test_recon_loss = 0, 0, 0
-        for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(test_loader):
+        for iter_idx, (images, _, image_n_view, _, canonical_images, _, _) in enumerate(test_loader):
             images = images.float().to(device)  # [batch_size, C, H, W]
 
             # [batch_size, n_views, C, H, W] -> [batch_size * n_views, C, H, W]
@@ -315,17 +315,15 @@ def test(config):
 
             test_latent_loss += latent_loss.item()
             test_recon_loss += recon_loss.item()
-            test_loss += test_latent_loss + test_recon_loss
 
-    test_loss /= (iter_idx + 1)
     test_latent_loss /= (iter_idx + 1)
     test_recon_loss /= (iter_idx + 1)
+    test_loss = test_latent_loss + test_recon_loss
 
     log('Test loss: %.3f, contrastive: %.3f, recon: %.3f\n'
         % (test_loss, test_latent_loss, test_recon_loss),
         filepath=config.log_path,
         to_console=False)
-
 
     # Visualize latent embeddings.
     embeddings = {split: None for split in ['train', 'val', 'test']}
@@ -357,7 +355,7 @@ def test(config):
         for split, split_set in zip(['train', 'val', 'test'], [train_loader_no_shuffle, val_loader, test_loader]):
             # NOTE (quite arbitrary): Repeat for 5 random augmentations.
             for _ in range(1):
-                for iter_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(split_set):
+                for iter_idx, (images, _, image_n_view, _, canonical_images, _, _) in enumerate(split_set):
                     # NOTE (quite arbitrary): Limit the computation.
                     batch_size = images.shape[0]
                     if iter_idx * batch_size > 400:
@@ -481,10 +479,10 @@ def main(config):
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
-    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_epoch-{config.max_epochs}_seed{config.random_seed}'
-    config.DiffeoInvariantNet_model_save_path = os.path.join(config.model_save_folder, model_name, DiffeoInvariantNet_str + '.ckpt')
+    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_nviews-{config.n_views}_epoch-{config.max_epochs}_seed-{config.random_seed}'
     config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str, '')
-    config.log_path = os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str, 'log.txt')
+    config.DiffeoInvariantNet_model_save_path = os.path.join(config.output_save_path, 'model.ckpt')
+    config.log_path = os.path.join(config.output_save_path, 'log.txt')
 
     print(config)
 
@@ -526,15 +524,14 @@ if __name__ == '__main__':
     parser.add_argument('--target-dim', default='(32, 32)', type=ast.literal_eval)
     parser.add_argument('--random-seed', default=1, type=int)
 
-    parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
+    # parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
     parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
 
     parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
     parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
-    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg2018TrainData_patch_96x96/', type=str)
-    parser.add_argument('--percentage', default=100, type=float)
+    parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/', type=str)
     parser.add_argument('--organ', default='Breast', type=str)
-
+    parser.add_argument('--percentage', default=100, type=float) # NOTE: this is the percentage of the training data.
     parser.add_argument('--learning-rate', default=1e-3, type=float)
     parser.add_argument('--patience', default=50, type=int)
     parser.add_argument('--depth', default=4, type=int)
@@ -542,12 +539,12 @@ if __name__ == '__main__':
     parser.add_argument('--margin', default=0.2, type=float, help='Only relevant if latent-loss is `triplet`.')
     parser.add_argument('--temp', default=1.0, type=float)
     parser.add_argument('--base-temp', default=1.0, type=float)
-    parser.add_argument('--n-views', default=2, type=int)
+    parser.add_argument('--n-views', default=10, type=int)
     parser.add_argument('--num-pos', default=1, type=int)
     parser.add_argument('--num-neg', default=1, type=int)
     parser.add_argument('--contrastive-mode', default='one', type=str)
     parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
-    parser.add_argument('--max-epochs', default=50, type=int)
+    parser.add_argument('--max-epochs', default=100, type=int)
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--num-filters', default=32, type=int)
     parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
@@ -557,7 +554,7 @@ if __name__ == '__main__':
 
     config = parser.parse_args()
 
-    if config.organ is not None:
-        config.dataset_path = f'{config.dataset_path}_{config.organ}'
+    # Need background samples to train DiffeoInvariantNet.
+    config.no_background = False
 
     main(config)

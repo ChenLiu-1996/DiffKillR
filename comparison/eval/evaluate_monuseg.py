@@ -9,16 +9,17 @@ if __name__ == '__main__':
 
     for folder in [
         'MoNuSegByCancer_200x200',
-        'MoNuSegByCancer_intraimage5pct_200x200',
-        'MoNuSegByCancer_intraimage20pct_200x200',
-        'MoNuSegByCancer_intraimage50pct_200x200',
+        # 'MoNuSegByCancer_intraimage5pct_200x200',
+        # 'MoNuSegByCancer_intraimage20pct_200x200',
+        # 'MoNuSegByCancer_intraimage50pct_200x200',
     ]:
 
         directory_list = sorted(glob('../results/%s/*/' % folder))
         for directory in directory_list:
             subset = directory.split('/')[-2]
 
-            for model in ['UNet', 'nnUNet', 'MedT', 'LACSS', 'PSM', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM']:
+            # for model in ['UNet', 'nnUNet', 'MedT', 'LACSS', 'PSM', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM', 'Ours_gt_loc', 'Ours']:
+            for model in ['Ours_gt_loc', 'Ours']:
                 for seed in range(1, 4):
                     pred_folder = '%s/%s_seed%d_stitched/' % (directory, model, seed)
 
@@ -32,10 +33,10 @@ if __name__ == '__main__':
 
                     if 'intraimage' in folder:
                         cancer_type, img_id = subset.split('_')
-                        true_folder = '../../external_data/MoNuSeg/%s/%s/%s_test/' % (folder, cancer_type, img_id)
+                        true_folder = '../../data/MoNuSeg/%s/%s/%s_test/' % (folder, cancer_type, img_id)
                         true_list = sorted(glob(true_folder + '*_effective_mask.png'))
                     else:
-                        true_folder = '../../external_data/MoNuSeg/MoNuSegByCancer/%s/test/masks/' % subset
+                        true_folder = '../../data/MoNuSeg/MoNuSegByCancer/%s/test/masks/' % subset
                         true_list = sorted(glob(true_folder + '*.png'))
 
                     assert len(pred_list) == len(true_list)

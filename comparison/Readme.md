@@ -3,40 +3,40 @@
 ```
 cd MedT
 
-# colon
-python train.py --train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/" \
---direc "../results/MoNuSegByCancer_200x200/colon/MedT/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "MedT" \
+# Colon
+python train.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/" \
+--direc "../results/MoNuSegByCancer_200x200/Colon/MedT/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "MedT" \
 --learning_rate 0.001 --imgsize 200 --gray "no"
 
-python test.py --loaddirec "../results/MoNuSegByCancer_200x200/colon/MedT/final_model.pth" \
---train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/test/" \
---direc "../results/MoNuSegByCancer_200x200/colon/MedT/" \
+python test.py --loaddirec "../results/MoNuSegByCancer_200x200/Colon/MedT/final_model.pth" \
+--train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Colon/MedT/" \
 --batch_size 1 --modelname "MedT" --imgsize 200 --gray "no"
 
-# breast
-python train.py --train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/" \
---direc "../results/MoNuSegByCancer_200x200/breast/MedT/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "MedT" \
+# Breast
+python train.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/" \
+--direc "../results/MoNuSegByCancer_200x200/Breast/MedT/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "MedT" \
 --learning_rate 0.001 --imgsize 200 --gray "no"
 
-python test.py --loaddirec "../results/MoNuSegByCancer_200x200/breast/MedT/final_model.pth" \
---train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/test/" \
---direc "../results/MoNuSegByCancer_200x200/breast/MedT/" \
+python test.py --loaddirec "../results/MoNuSegByCancer_200x200/Breast/MedT/final_model.pth" \
+--train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Breast/MedT/" \
 --batch_size 1 --modelname "MedT" --imgsize 200 --gray "no"
 
-# prostate
-python train.py --train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/" \
---direc "../results/MoNuSegByCancer_200x200/prostate/MedT/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "MedT" \
+# Prostate
+python train.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/" \
+--direc "../results/MoNuSegByCancer_200x200/Prostate/MedT/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "MedT" \
 --learning_rate 0.001 --imgsize 200 --gray "no"
 
-python test.py --loaddirec "../results/MoNuSegByCancer_200x200/prostate/MedT/final_model.pth" \
---train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/" \
---direc "../results/MoNuSegByCancer_200x200/prostate/MedT/" \
+python test.py --loaddirec "../results/MoNuSegByCancer_200x200/Prostate/MedT/final_model.pth" \
+--train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Prostate/MedT/" \
 --batch_size 1 --modelname "MedT" --imgsize 200 --gray "no"
 ```
 
@@ -46,40 +46,40 @@ python test.py --loaddirec "../results/MoNuSegByCancer_200x200/prostate/MedT/fin
 ```
 cd MedT
 
-# colon
-python train_unet.py --train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/" \
---direc "../results/MoNuSegByCancer_200x200/colon/UNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "UNet" \
+# Colon
+python train_unet.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/" \
+--direc "../results/MoNuSegByCancer_200x200/Colon/UNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "UNet" \
 --learning_rate 0.001 --imgsize 200 --gray "no"
 
-python test_unet.py --loaddirec "../results/MoNuSegByCancer_200x200/colon/UNet/final_model.pth" \
---train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/test/" \
---direc "../results/MoNuSegByCancer_200x200/colon/UNet/" \
+python test_unet.py --loaddirec "../results/MoNuSegByCancer_200x200/Colon/UNet/final_model.pth" \
+--train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Colon/UNet/" \
 --batch_size 1 --modelname "UNet" --imgsize 200 --gray "no"
 
-# breast
-python train_unet.py --train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/" \
---direc "../results/MoNuSegByCancer_200x200/breast/UNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "UNet" \
+# Breast
+python train_unet.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/" \
+--direc "../results/MoNuSegByCancer_200x200/Breast/UNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "UNet" \
 --learning_rate 0.001 --imgsize 200 --gray "no"
 
-python test_unet.py --loaddirec "../results/MoNuSegByCancer_200x200/breast/UNet/final_model.pth" \
---train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/test/" \
---direc "../results/MoNuSegByCancer_200x200/breast/UNet/" \
+python test_unet.py --loaddirec "../results/MoNuSegByCancer_200x200/Breast/UNet/final_model.pth" \
+--train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Breast/UNet/" \
 --batch_size 1 --modelname "UNet" --imgsize 200 --gray "no"
 
-# prostate
-python train_unet.py --train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/" \
---direc "../results/MoNuSegByCancer_200x200/prostate/UNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "UNet" \
+# Prostate
+python train_unet.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/" \
+--direc "../results/MoNuSegByCancer_200x200/Prostate/UNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "UNet" \
 --learning_rate 0.001 --imgsize 200 --gray "no"
 
-python test_unet.py --loaddirec "../results/MoNuSegByCancer_200x200/prostate/UNet/final_model.pth" \
---train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/" \
---direc "../results/MoNuSegByCancer_200x200/prostate/UNet/" \
+python test_unet.py --loaddirec "../results/MoNuSegByCancer_200x200/Prostate/UNet/final_model.pth" \
+--train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Prostate/UNet/" \
 --batch_size 1 --modelname "UNet" --imgsize 200 --gray "no"
 ```
 
@@ -88,40 +88,40 @@ python test_unet.py --loaddirec "../results/MoNuSegByCancer_200x200/prostate/UNe
 ```
 cd MedT
 
-# colon
-python train_nnunet.py --train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/" \
---direc "../results/MoNuSegByCancer_200x200/colon/nnUNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "nnUNet" \
+# Colon
+python train_nnunet.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/" \
+--direc "../results/MoNuSegByCancer_200x200/Colon/nnUNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "nnUNet" \
 --learning_rate 0.001 --imgsize 200 --gray "no"
 
-python test_nnunet.py --loaddirec "../results/MoNuSegByCancer_200x200/colon/nnUNet/final_model.pth" \
---train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/test/" \
---direc "../results/MoNuSegByCancer_200x200/colon/nnUNet/" \
+python test_nnunet.py --loaddirec "../results/MoNuSegByCancer_200x200/Colon/nnUNet/final_model.pth" \
+--train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Colon/nnUNet/" \
 --batch_size 1 --modelname "nnUNet" --imgsize 200 --gray "no"
 
-# breast
-python train_nnunet.py --train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/" \
---direc "../results/MoNuSegByCancer_200x200/breast/nnUNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "nnUNet" \
+# Breast
+python train_nnunet.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/" \
+--direc "../results/MoNuSegByCancer_200x200/Breast/nnUNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "nnUNet" \
 --learning_rate 0.001 --imgsize 200 --gray "no"
 
-python test_nnunet.py --loaddirec "../results/MoNuSegByCancer_200x200/breast/nnUNet/final_model.pth" \
---train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/test/" \
---direc "../results/MoNuSegByCancer_200x200/breast/nnUNet/" \
+python test_nnunet.py --loaddirec "../results/MoNuSegByCancer_200x200/Breast/nnUNet/final_model.pth" \
+--train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Breast/nnUNet/" \
 --batch_size 1 --modelname "nnUNet" --imgsize 200 --gray "no"
 
-# prostate
-python train_nnunet.py --train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/" \
---direc "../results/MoNuSegByCancer_200x200/prostate/nnUNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "nnUNet" \
+# Prostate
+python train_nnunet.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/" \
+--direc "../results/MoNuSegByCancer_200x200/Prostate/nnUNet/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "nnUNet" \
 --learning_rate 0.001 --imgsize 200 --gray "no"
 
-python test_nnunet.py --loaddirec "../results/MoNuSegByCancer_200x200/prostate/nnUNet/final_model.pth" \
---train_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/" \
---val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/" \
---direc "../results/MoNuSegByCancer_200x200/prostate/nnUNet/" \
+python test_nnunet.py --loaddirec "../results/MoNuSegByCancer_200x200/Prostate/nnUNet/final_model.pth" \
+--train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/" \
+--val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Prostate/nnUNet/" \
 --batch_size 1 --modelname "nnUNet" --imgsize 200 --gray "no"
 ```
 
@@ -130,26 +130,26 @@ python test_nnunet.py --loaddirec "../results/MoNuSegByCancer_200x200/prostate/n
 ```
 cd PSM
 
-python main_monuseg.py --mode 'train_base' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/colon --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/test/
-python main_monuseg.py --mode 'generate_label' --method 'gradcam' --dataset_name MoNuSegByCancer_200x200/colon --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/test/
-python main_monuseg.py --mode 'train_second_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/colon --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/test/
-python main_monuseg.py --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/colon --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/test/
-python main_monuseg.py --mode 'train_final_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/colon --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/test/
-python main_monuseg.py --mode 'test' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/colon --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/test/
+python main_monuseg.py --mode 'train_base' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Colon --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/test/
+python main_monuseg.py --mode 'generate_label' --method 'gradcam' --dataset_name MoNuSegByCancer_200x200/Colon --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/test/
+python main_monuseg.py --mode 'train_second_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Colon --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/test/
+python main_monuseg.py --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Colon --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/test/
+python main_monuseg.py --mode 'train_final_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Colon --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/test/
+python main_monuseg.py --mode 'test' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Colon --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/test/
 
-python main_monuseg.py --mode 'train_base' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/breast --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/test/
-python main_monuseg.py --mode 'generate_label' --method 'gradcam' --dataset_name MoNuSegByCancer_200x200/breast --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/test/
-python main_monuseg.py --mode 'train_second_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/breast --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/test/
-python main_monuseg.py --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/breast --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/test/
-python main_monuseg.py --mode 'train_final_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/breast --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/test/
-python main_monuseg.py --mode 'test' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/breast --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/test/
+python main_monuseg.py --mode 'train_base' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Breast --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/test/
+python main_monuseg.py --mode 'generate_label' --method 'gradcam' --dataset_name MoNuSegByCancer_200x200/Breast --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/test/
+python main_monuseg.py --mode 'train_second_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Breast --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/test/
+python main_monuseg.py --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Breast --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/test/
+python main_monuseg.py --mode 'train_final_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Breast --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/test/
+python main_monuseg.py --mode 'test' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Breast --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/test/
 
-python main_monuseg.py --mode 'train_base' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/prostate --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/
-python main_monuseg.py --mode 'generate_label' --method 'gradcam' --dataset_name MoNuSegByCancer_200x200/prostate --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/
-python main_monuseg.py --mode 'train_second_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/prostate --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/
-python main_monuseg.py --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/prostate --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/
-python main_monuseg.py --mode 'train_final_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/prostate --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/
-python main_monuseg.py --mode 'test' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/prostate --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/
+python main_monuseg.py --mode 'train_base' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Prostate --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/test/
+python main_monuseg.py --mode 'generate_label' --method 'gradcam' --dataset_name MoNuSegByCancer_200x200/Prostate --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/test/
+python main_monuseg.py --mode 'train_second_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Prostate --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/test/
+python main_monuseg.py --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Prostate --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/test/
+python main_monuseg.py --mode 'train_final_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Prostate --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/test/
+python main_monuseg.py --mode 'test' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/Prostate --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/test/
 
 ```
 
@@ -159,15 +159,15 @@ python main_monuseg.py --mode 'test' --crop_edge_size 200 --dataset_name MoNuSeg
 ```
 cd SAM
 
-# colon
-python test.py --val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/colon/test/" \
---direc "../results/MoNuSegByCancer_200x200/colon/SAM/" --imgsize 200 --gray "no"
+# Colon
+python test.py --val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Colon/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Colon/SAM/" --imgsize 200 --gray "no"
 
-# breast
-python test.py --val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/breast/test/" \
---direc "../results/MoNuSegByCancer_200x200/breast/SAM/" --imgsize 200 --gray "no"
+# Breast
+python test.py --val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Breast/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Breast/SAM/" --imgsize 200 --gray "no"
 
-# prostate
-python test.py --val_dataset "../../external_data/MoNuSeg/MoNuSegByCancer_200x200/prostate/test/" \
---direc "../results/MoNuSegByCancer_200x200/prostate/SAM/" --imgsize 200 --gray "no"
+# Prostate
+python test.py --val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/Prostate/test/" \
+--direc "../results/MoNuSegByCancer_200x200/Prostate/SAM/" --imgsize 200 --gray "no"
 ```
