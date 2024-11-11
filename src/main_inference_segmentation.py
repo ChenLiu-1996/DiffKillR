@@ -5,7 +5,6 @@ import torch
 import cv2
 import ast
 import os
-# from model.scheduler import LinearWarmupCosineAnnealingLR
 from tqdm import tqdm
 from matplotlib import pyplot as plt
 from functools import partial
@@ -15,6 +14,7 @@ import skimage.measure
 from skimage import morphology
 
 from main_DiffeoMappingNet import build_diffeomappingnet, apply_flipping_rotation, predict_flipping_rotation
+from blob_detector import detect_nuclei as blob_detect_nuclei
 
 from model.autoencoder import AutoEncoder
 from registration.spatial_transformer import SpatialTransformer as Warper
@@ -189,15 +189,15 @@ def detect_cells(image: np.array, model: torch.nn.Module,
     dists = torch.cdist(patch_embeddings, cell_bank_embeddings) # [M, N]
     if voting_k == 1:
         closest_idx = torch.argmin(dists, dim=1) # [M]
-        labels = cell_bank_is_foreground[closest_idx]
+        is_foreground_arr = cell_bank_is_foreground[closest_idx]
     else:
         closest_idx = torch.topk(dists, k=voting_k, dim=1, largest=False)[1] # [M, k]
-        labels = cell_bank_is_foreground[closest_idx] # [M, k]
-        labels = labels.mode(dim=1)[0] # [M]
+        is_foreground_arr = cell_bank_is_foreground[closest_idx] # [M, k]
+        is_foreground_arr = is_foreground_arr.mean(axis=1) # [M]
 
     # Calculate uncertainty based on the distance to the closest cell and background embeddings
     cell_dists = dists[:, cell_bank_is_foreground == 1]
-    background_dists = dists[:,  cell_bank_is_foreground == 0]
+    background_dists = dists[:, cell_bank_is_foreground == 0]
     #import pdb; pdb.set_trace()
     closest_cell_dist, _ = torch.min(cell_dists, dim=1) # [M]
     closest_background_dist, _ = torch.min(background_dists, dim=1) # [M]
@@ -205,18 +205,23 @@ def detect_cells(image: np.array, model: torch.nn.Module,
     # if closest_cell_dist is large, closest_background_dist is small, uncertainty is large
     # uncertainty = closest_cell_dist / (closest_cell_dist + closest_background_dist)
     probs = np.exp(-closest_cell_dist) / (np.exp(-closest_cell_dist) + np.exp(-closest_background_dist) + 1e-6)
-    print(f"Cell percentage: {labels.mean()}")
+    print(f"Cell percentage: {is_foreground_arr.mean()}")
     print(f"Probs: {probs.mean()}")
 
     # Discard background patches.
     detections = []
-    for i, label in enumerate(labels):
-        if label == 1:
+    for i, is_foreground in enumerate(is_foreground_arr):
+        if is_foreground > 0.5:
             min_x, min_y, max_x, max_y = coordinates[i]
-            score = -dists[i, closest_idx[i]]
+            if voting_k == 1:
+                score = -dists[i, closest_idx[i]]
+            else:
+                score = -dists[i, closest_idx[i, ...]].mean()
             detections.append((min_x, min_y, max_x, max_y, score.item()))
+            # detections.append((min_x, min_y, max_x, max_y, probs[i]))
+    print(f"[Step] Begins with {len(detections)} detections.")
 
-    # Filter out detections with low probs.
+    # Filter out detections with low foreground probs.
     before_filtering = len(detections)
     for i, det in enumerate(detections):
         if probs[i] < 0.5:
@@ -224,7 +229,7 @@ def detect_cells(image: np.array, model: torch.nn.Module,
     after_filtering = len(detections)
     print(f"[Step] Filtered out {before_filtering - after_filtering} detections with low cell probability.")
 
-    # Filter out detections with low scores.
+    # Filter out detections with low scores (large distance).
     before_filtering = len(detections)
     score_mean, score_std = torch.tensor(np.array(detections)[:, 4]).mean(), torch.tensor(np.array(detections)[:, 4]).std()
     print(f"Score mean: {score_mean}, score std: {score_std} before filtering out detections with low scores...")
@@ -316,18 +321,23 @@ def infer(config: AttributeHashmap, n_plot_per_epoch: int = None):
     dataset_trainval, _, _, _ = prepare_dataset(config=config)
     loader = torch.utils.data.DataLoader(dataset_trainval, batch_size=1, shuffle=False)
     bank_is_foreground, bank_images, bank_fg_images, bank_fg_labels, bank_fg_embeddings = [], [], [], [], []
-    for (_, _, _, _, images_canonical, labels_canonical, is_foreground) in loader:
-        images = images_canonical.float().to(device)  # [B, C, H, W]
-        labels = labels_canonical.to(device)  # [B, C, H, W]
+    for (_, _, images_n_view, labels_n_view, _, _, is_foreground) in loader:
+        images_n_view = images_n_view.float().to(device)  # [B, n_view, C, H, W]
+        labels_n_view = labels_n_view.to(device)  # [B, n_view, C, H, W]
+        _B, _NV, _C, _H, _W = images_n_view.shape
+        images = images_n_view.reshape(_B * _NV, _C, _H, _W)
+        _B, _NV, _C, _H, _W = labels_n_view.shape
+        labels = labels_n_view.reshape(_B * _NV, _C, _H, _W)
+        del _B, _NV, _C, _H, _W
         _, latent_features = latent_extractor(images)
         latent_features = torch.flatten(latent_features, start_dim=1)
         latent_features = latent_features.cpu().numpy()
 
         for batch_idx in range(len(images)):
-            bank_is_foreground.append(1 if is_foreground[batch_idx].item() else 0)
+            bank_is_foreground.append(1 if is_foreground.item() else 0)
             bank_images.append(images[batch_idx])
 
-            if is_foreground[batch_idx].item():
+            if is_foreground.item():
                 bank_fg_images.append(images[batch_idx])
                 bank_fg_labels.append(labels[batch_idx])
                 bank_fg_embeddings.append(latent_features[batch_idx])
@@ -355,8 +365,10 @@ def infer(config: AttributeHashmap, n_plot_per_epoch: int = None):
             save_path = f'../comparison/results/{dataset_folder}/{config.organ}/Ours_seed{config.random_seed}/{os.path.basename(infer_image_path)}'
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             detections = detect_cells(infer_image, latent_extractor, torch.cat([item[None, ...] for item in bank_images], dim=0), bank_is_foreground,
-                                      config.target_dim[0], stride=1, nms_threshold=0.05, voting_k=1)
+                                      config.target_dim[0], stride=2, nms_threshold=0.1)
             cell_centroid_list = [((item[0] + item[2])//2, (item[1] + item[3])//2) for item in detections]
+            # detections = blob_detect_nuclei(np.uint8((infer_image + 1) / 2 * 255), return_overlay=False)
+            # cell_centroid_list = [((item[0] + item[2])//2, (item[1] + item[3])//2) for item in detections]
 
         infer_patches = get_patches(infer_image, cell_centroid_list)
 
@@ -444,7 +456,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--DiffeoInvariantNet-model', default='AutoEncoder', type=str)
     parser.add_argument('--DiffeoMappingNet-model', default='VM-Diff', type=str)
-    parser.add_argument('--DiffeoInvariantNet-max-epochs', default=25, type=int)
+    parser.add_argument('--DiffeoInvariantNet-max-epochs', default=100, type=int)
     parser.add_argument('--DiffeoMappingNet-max-epochs', default=100, type=int)
     parser.add_argument('--percentage', default=10, type=float)
     parser.add_argument('--organ', default='Breast', type=str)
@@ -452,8 +464,7 @@ if __name__ == '__main__':
     parser.add_argument('--latent-loss', default='SimCLR', type=str)
     parser.add_argument('--use-gt-loc', action='store_true')
 
-    parser.add_argument('--learning-rate', default=1e-3, type=float)
-    parser.add_argument('--hard-example-ratio', default=0.1, type=float)
+    parser.add_argument('--hard-example-ratio', default=0.25, type=float)
     parser.add_argument('--patience', default=50, type=int)
     parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
     parser.add_argument('--batch-size', default=8, type=int)
@@ -461,7 +472,7 @@ if __name__ == '__main__':
     parser.add_argument('--coeff-smoothness', default=0, type=float)
     parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
     parser.add_argument('--n-plot-per-epoch', default=2, type=int)
-    parser.add_argument('--n-views', default=2, type=int)
+    parser.add_argument('--n-views', default=10, type=int)
 
     config = parser.parse_args()
     assert config.mode in ['train', 'test', 'infer']
@@ -474,7 +485,7 @@ if __name__ == '__main__':
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
-    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_epoch-{config.DiffeoInvariantNet_max_epochs}_seed-{config.random_seed}'
+    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_nviews-{config.n_views}_epoch-{config.DiffeoInvariantNet_max_epochs}_seed-{config.random_seed}'
     config.DiffeoInvariantNet_model_save_path = os.path.join(os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str, ''), 'model.ckpt')
     DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_hard-{config.hard_example_ratio}_epoch-{config.DiffeoMappingNet_max_epochs}_smoothness-{config.coeff_smoothness}_seed{config.random_seed}'
     config.DiffeoMappingNet_model_save_path = os.path.join(os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, ''), 'model.ckpt')

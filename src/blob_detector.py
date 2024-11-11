@@ -33,14 +33,14 @@ def detect_nuclei(img: np.array, return_overlay: bool = False):
     params.minThreshold = 5
     params.maxThreshold = 220
 
-    # params.filterByArea = True
-    params.minArea = 150
+    params.filterByArea = True
+    params.minArea = 100
     params.maxArea = 10000.0
 
-    # params.filterByCircularity = False
-    # params.filterByConvexity = False
+    params.filterByCircularity = False
+    params.filterByConvexity = False
     # params.filterByInertia = False
-    params.minConvexity = 0.8 #0.9499
+    params.minConvexity = 0.5#0.9499
     params.minDistBetweenBlobs = 1
 
     # # Create a detector with the parameters
@@ -81,7 +81,7 @@ if __name__ == '__main__':
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     nuclei_list, im_with_keypoints = detect_nuclei(image, return_overlay=True)
-    
+
     print('Number of detected nuclei: ', len(nuclei_list))
     cv2.imwrite('../data/nuclei_detected.png', im_with_keypoints)
 
@@ -111,7 +111,7 @@ if __name__ == '__main__':
         name = f'patch_{i}.png'
         save_path = os.path.join(save_dir, name)
         cv2.imwrite(save_path, patch)
-        
+
         i += 1
-    
+
     print(f'Patched {len(sampled_idxs)} nuclei to {save_dir}')
