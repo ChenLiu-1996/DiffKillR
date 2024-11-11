@@ -14,6 +14,7 @@ python preprocess_A28.py
 python preprocess_A28_axis.py
 ```
 
+### Orientation Prediction
 
 Train and test DiffeoInvariantNet. (Remove `--use-wandb` if you don't want to use Weights and Biases.)
 ```
@@ -21,23 +22,43 @@ cd src/
 python main_DiffeoInvariantNet.py --dataset-name A28 --dataset-path '$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_patch_96x96/' --DiffeoInvariantNet-model AutoEncoder --use-wandb --wandb-username yale-cl2482
 ```
 
-
 Train and test DiffeoMappingNet.
 ```
 cd src/
 python main_DiffeoMappingNet.py --dataset-name A28 --dataset-path '$ROOT/data/A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_patch_96x96/' --DiffeoMappingNet-model VoxelMorph --use-wandb --wandb-username yale-cl2482
 ```
 
+### Segmentation on MoNuSeg
 
-Run the pipeline on MoNuSeg.
+Train and test DiffeoInvariantNet.
+```
+cd src/
+python main_DiffeoInvariantNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Breast --percentage 10 --random-seed 1
+python main_DiffeoInvariantNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Colon --percentage 10 --random-seed 1
+python main_DiffeoInvariantNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Prostate --percentage 10 --random-seed 1
+```
+
+Train and test DiffeoMappingNet.
+```
+cd src/
+python main_DiffeoMappingNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Breast --percentage 10 --random-seed 1
+python main_DiffeoMappingNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Colon --percentage 10 --random-seed 1
+python main_DiffeoMappingNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Prostate --percentage 10 --random-seed 1
+```
+
+Run Inference
 ```
 cd src
-python main_DiffeoInvariantNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' \
---organ Breast --percentage 10
+python main_inference_segmentation.py --organ Breast --use-gt-loc --random-seed 1
+python main_inference_segmentation.py --organ Colon --use-gt-loc --random-seed 1
+python main_inference_segmentation.py --organ Prostate --use-gt-loc --random-seed 1
+python main_inference_segmentation.py --organ Breast --random-seed 1
+python main_inference_segmentation.py --organ Colon --random-seed 1
+python main_inference_segmentation.py --organ Prostate --random-seed 1
 ```
 
 ### Comparison
-1. First train/infer the models. Can refer to `bash/baseline_medt.sh`, `bash/baseline_medt_intra.sh`, `bash/baseline_psm.sh`, `bash/baseline_psm_intra.sh`, `bash/baseline_sam.sh`, `bash/baseline_sam_intra.sh`.
+1. First train/infer the models. Can refer to `bash/baseline_medt.sh`, `bash/baseline_psm.sh`, `bash/baseline_sam.sh`.
 
 2. Then, stitch the images and run evaluation.
 ```
