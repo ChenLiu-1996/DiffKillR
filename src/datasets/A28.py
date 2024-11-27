@@ -73,6 +73,13 @@ class A28Dataset(Dataset):
         # NOTE: we will not downsample the canonical images or labels.
         canonical_pose_image = load_image(path=self.img_paths[idx], target_dim=None)
         canonical_pose_label = load_label(path=self.label_paths[idx], target_dim=None)
+        # NOTE: Assuming label is in [0, 1, 2, 3, 4]
+        canonical_pose_label = (canonical_pose_label > 0.5) * 255
+
+        if canonical_pose_label.shape[-1] == 3:
+            assert (canonical_pose_label[..., 0] == canonical_pose_label[..., 1]).all()
+            assert (canonical_pose_label[..., 0] == canonical_pose_label[..., 2]).all()
+            canonical_pose_label = canonical_pose_label[..., 0]
 
         if self.deterministic:
             # Set a fixed random seed for validation and testing.
@@ -133,7 +140,7 @@ class A28Dataset(Dataset):
                 image_new_view = center_crop(image_new_view, output_size=self.target_dim[0])
                 image_new_view = fix_channel_dimension(normalize_image(image_new_view))
                 label_new_view = center_crop(label_new_view, output_size=self.target_dim[0])
-                label_new_view = fix_channel_dimension(label_new_view)
+                label_new_view = fix_channel_dimension(normalize_label(label_new_view))
 
                 image_n_view.append(image_new_view[np.newaxis, ...])
                 label_n_view.append(label_new_view[np.newaxis, ...])
@@ -147,7 +154,7 @@ class A28Dataset(Dataset):
         canonical_pose_label = center_crop(canonical_pose_label, output_size=self.target_dim[0])
 
         canonical_pose_image = fix_channel_dimension(normalize_image(canonical_pose_image))
-        canonical_pose_label = fix_channel_dimension(canonical_pose_label)
+        canonical_pose_label = fix_channel_dimension(normalize_label(canonical_pose_label))
 
         return (image_aug, label_aug,
                 image_n_view, label_n_view,
@@ -188,6 +195,12 @@ def normalize_image(image: np.array) -> np.array:
     [0, 255] to [-1, 1]
     '''
     return image / 255.0 * 2 - 1
+
+def normalize_label(label: np.ndarray) -> np.ndarray:
+    '''
+    [0, 255] to [0, 1]
+    '''
+    return np.uint8(label / 255)
 
 def fix_channel_dimension(arr: np.array) -> np.array:
     if len(arr.shape) == 3:
