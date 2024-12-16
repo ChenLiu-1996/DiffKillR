@@ -13,60 +13,7 @@ from tqdm import tqdm
 from glob import glob
 from matplotlib import pyplot as plt
 import scipy.io
-
-
-data_partition_map = {
-    'tumor': {
-        'train': [
-                'AGC1_tumor_1',
-                'AGC1_tumor_3',
-                'AGC1_tumor_5',
-                'AGC1_tumor_7',
-                'AGC1_tumor_8',
-                'AGC1_tumor_9',
-                'AGC1_tumor_10',
-                'DB-0001_tumor_1',
-                'DB-0001_tumor_3',
-                'DB-0003_tumor_1',
-                'DB-0003_tumor_2',
-                'DB-0466_tumor_2',
-                'DB-0466_tumor_3',
-        ],
-        'test': [
-                'AGC1_tumor_2',
-                'AGC1_tumor_4',
-                'AGC1_tumor_11',
-                'DB-0001_tumor_2',
-                'DB-0466_tumor_1',
-                'EGC1_new_tumor_1',
-                'EGC1_new_tumor_2',
-                'EGC1_new_tumor_3',
-                'EGC1_new_tumor_4',
-                'EGC1_new_tumor_5',
-                'EGC1_new_tumor_6',
-                'EGC1_new_tumor_7',
-                'EGC1_new_tumor_10',
-                'EGC1_new_tumor_11',
-        ],
-    },
-    'normal': {
-        'train': [
-                'DB-0001_normal_2',
-                'DB-0003_normal_1',
-                'DB-0466_normal_1',
-                'DB-0466_normal_2',
-                'DB-0466_normal_3',
-                'EGC1_new_normal_1',
-                'EGC1_new_normal_3',
-        ],
-        'test': [
-                'DB-0001_normal_1',
-                'DB-0037_normal_1',
-                'EGC1_new_normal_2',
-                'EGC1_new_normal_5',
-        ],
-    }
-}
+from Metas import GLySAC_Organ2FileID
 
 
 def load_GLySAC_annotation(mat_path: str) -> list[np.ndarray]:
@@ -180,7 +127,7 @@ def patchify_GLySAC_data_by_tumor_cell_centric(patch_size: int, background_ratio
     images are in .tif format, RGB, 1000x1000.
     '''
 
-    for tumor_type in ['tumor', 'normal']:
+    for tumor_type in ['Tumor', 'Normal']:
         for subset in ['test', 'train']:
 
             if subset == 'train':
@@ -356,9 +303,9 @@ def subset_GLySAC_data_by_tumor():
 
     target_folder = '../../data/GLySAC/GLySACByTumor/'
 
-    for tumor_type in ['tumor', 'normal']:
-        train_list = data_partition_map[tumor_type]['train']
-        test_list = data_partition_map[tumor_type]['test']
+    for tumor_type in ['Tumor', 'Normal']:
+        train_list = GLySAC_Organ2FileID[tumor_type]['train']
+        test_list = GLySAC_Organ2FileID[tumor_type]['test']
 
         for train_item in tqdm(train_list):
             image_path_from = train_image_folder + train_item + '.png'
@@ -400,9 +347,9 @@ def subset_patchify_GLySAC_data_by_tumor(imsize: int):
 
     target_folder = '../../data/GLySAC/GLySACByTumor_%sx%s/' % (imsize, imsize)
 
-    for tumor_type in ['tumor', 'normal']:
-        train_list = data_partition_map[tumor_type]['train']
-        test_list = data_partition_map[tumor_type]['test']
+    for tumor_type in ['Tumor', 'Normal']:
+        train_list = GLySAC_Organ2FileID[tumor_type]['train']
+        test_list = GLySAC_Organ2FileID[tumor_type]['test']
 
         for train_item in tqdm(train_list):
             image_path_from = train_image_folder + train_item + '.png'
@@ -416,10 +363,14 @@ def subset_patchify_GLySAC_data_by_tumor(imsize: int):
                 for w_chunk in range(image_w // imsize):
                     h = h_chunk * imsize
                     w = w_chunk * imsize
+
                     image_path_to = os.path.join(target_folder, tumor_type, 'train/images/', train_item + '_H%sW%s.png' % (h, w))
                     label_path_to = os.path.join(target_folder, tumor_type, 'train/labels/', train_item + '_H%sW%s.png' % (h, w))
+                    mask_path_to = os.path.join(target_folder, tumor_type, 'train/masks/', train_item + '_H%sW%s.png' % (h, w))
+
                     os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
                     os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+                    os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
 
                     h_begin = max(h, 0)
                     w_begin = max(w, 0)
@@ -428,9 +379,11 @@ def subset_patchify_GLySAC_data_by_tumor(imsize: int):
 
                     image_patch = image[h_begin:h_end, w_begin:w_end, :]
                     label_patch = label[h_begin:h_end, w_begin:w_end]
+                    mask_patch = label_patch > 0
 
                     cv2.imwrite(image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
                     cv2.imwrite(label_path_to, label_patch)
+                    cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
 
         for test_item in tqdm(test_list):
             image_path_from = test_image_folder + test_item + '.png'
@@ -447,8 +400,11 @@ def subset_patchify_GLySAC_data_by_tumor(imsize: int):
 
                     image_path_to = os.path.join(target_folder, tumor_type, 'test/images/', test_item + '_H%sW%s.png' % (h, w))
                     label_path_to = os.path.join(target_folder, tumor_type, 'test/labels/', test_item + '_H%sW%s.png' % (h, w))
+                    mask_path_to = os.path.join(target_folder, tumor_type, 'test/masks/', test_item + '_H%sW%s.png' % (h, w))
+
                     os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
                     os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+                    os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
 
                     h_begin = max(h, 0)
                     w_begin = max(w, 0)
@@ -457,16 +413,21 @@ def subset_patchify_GLySAC_data_by_tumor(imsize: int):
 
                     image_patch = image[h_begin:h_end, w_begin:w_end, :]
                     label_patch = label[h_begin:h_end, w_begin:w_end]
+                    mask_patch = label_patch > 0
 
                     cv2.imwrite(image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
                     cv2.imwrite(label_path_to, label_patch)
+                    cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
+
     return
 
 
 if __name__ == '__main__':
+
+    # For comparisons
     process_GLySAC_data()
     subset_GLySAC_data_by_tumor()
-    # subset_patchify_GLySAC_data_by_tumor(imsize=200)
+    subset_patchify_GLySAC_data_by_tumor(imsize=200)
 
     # For our pipeline
     patchify_GLySAC_data_by_tumor_cell_centric(patch_size=96)

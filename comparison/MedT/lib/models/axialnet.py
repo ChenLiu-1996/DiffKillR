@@ -578,11 +578,11 @@ class medt_net(nn.Module):
                                        dilate=replace_stride_with_dilation[2])
 
         # Decoder
-        self.decoder1_p = nn.Conv2d(int(1024 *2*s)      ,        int(1024*2*s), kernel_size=3, stride=2, padding=1)
-        self.decoder2_p = nn.Conv2d(int(1024  *2*s)     , int(1024*s), kernel_size=3, stride=1, padding=1)
-        self.decoder3_p = nn.Conv2d(int(1024*s),  int(512*s), kernel_size=3, stride=1, padding=1)
-        self.decoder4_p = nn.Conv2d(int(512*s) ,  int(256*s), kernel_size=3, stride=1, padding=1)
-        self.decoder5_p = nn.Conv2d(int(256*s) , int(128*s) , kernel_size=3, stride=1, padding=1)
+        self.decoder1_p = nn.Conv2d(int(512 *2*s)      ,        int(512*2*s), kernel_size=3, stride=2, padding=1)
+        self.decoder2_p = nn.Conv2d(int(512  *2*s)     , int(512*s), kernel_size=3, stride=1, padding=1)
+        self.decoder3_p = nn.Conv2d(int(512*s),  int(256*s), kernel_size=3, stride=1, padding=1)
+        self.decoder4_p = nn.Conv2d(int(256*s) ,  int(128*s), kernel_size=3, stride=1, padding=1)
+        self.decoder5_p = nn.Conv2d(int(128*s) , int(64*s) , kernel_size=3, stride=1, padding=1)
 
         self.decoderf = nn.Conv2d(int(128*s) , int(128*s) , kernel_size=3, stride=1, padding=1)
         self.adjust_p   = nn.Conv2d(int(128*s) , num_classes, kernel_size=1, stride=1, padding=0)

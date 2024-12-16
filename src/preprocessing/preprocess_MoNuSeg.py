@@ -192,7 +192,7 @@ def patchify_MoNuSeg_data_by_cancer_cell_centric(patch_size: int, background_rat
     images are in .tif format, RGB, 1000x1000.
     '''
 
-    for cancer_type in ['Breast', 'Colon', 'Prostate']:
+    for cancer_type in MoNuSeg_Organ2FileID.keys():
         for subset in ['test', 'train']:
 
             if subset == 'train':
@@ -355,7 +355,7 @@ def subset_MoNuSeg_data_by_cancer():
 
     target_folder = '../../data/MoNuSeg/MoNuSegByCancer/'
 
-    for cancer_type in ['Breast', 'Colon', 'Prostate']:
+    for cancer_type in MoNuSeg_Organ2FileID.keys():
 
         train_list = MoNuSeg_Organ2FileID[cancer_type]['train']
         test_list = MoNuSeg_Organ2FileID[cancer_type]['test']
@@ -395,12 +395,14 @@ def subset_MoNuSeg_data_by_cancer():
 def subset_patchify_MoNuSeg_data_by_cancer(imsize: int):
     train_image_folder = '../../data/MoNuSeg/train/images/'
     train_label_folder = '../../data/MoNuSeg/train/labels/'
+    train_mask_folder = '../../data/MoNuSeg/train/masks/'
     test_image_folder = '../../data/MoNuSeg/test/images/'
     test_label_folder = '../../data/MoNuSeg/test/labels/'
+    test_mask_folder = '../../data/MoNuSeg/test/masks/'
 
     target_folder = '../../data/MoNuSeg/MoNuSegByCancer_%sx%s/' % (imsize, imsize)
 
-    for cancer_type in ['Breast', 'Colon', 'Prostate']:
+    for cancer_type in MoNuSeg_Organ2FileID.keys():
         train_list = MoNuSeg_Organ2FileID[cancer_type]['train']
         test_list = MoNuSeg_Organ2FileID[cancer_type]['test']
 
@@ -410,6 +412,7 @@ def subset_patchify_MoNuSeg_data_by_cancer(imsize: int):
 
             image = cv2.cvtColor(cv2.imread(image_path_from, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
             label = cv2.imread(label_path_from, cv2.IMREAD_UNCHANGED)
+
             image_h, image_w = image.shape[:2]
 
             for h_chunk in range(image_h // imsize):
@@ -424,14 +427,18 @@ def subset_patchify_MoNuSeg_data_by_cancer(imsize: int):
 
                     image_path_to = os.path.join(target_folder, cancer_type, 'train', 'images', train_item + f'_H{h}W{w}.png')
                     label_path_to = os.path.join(target_folder, cancer_type, 'train', 'labels', train_item + f'_H{h}W{w}.png')
+                    mask_path_to = os.path.join(target_folder, cancer_type, 'train', 'masks', train_item + f'_H{h}W{w}.png')
                     os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
                     os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+                    os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
 
                     image_patch = image[h : h+imsize, w : w+imsize, :]
                     label_patch = label[h : h+imsize, w : w+imsize]
+                    mask_patch = label_patch > 0
 
                     cv2.imwrite(image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
                     cv2.imwrite(label_path_to, label_patch)
+                    cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
 
         for test_item in tqdm(test_list):
             image_path_from = os.path.join(test_image_folder, test_item + '.png')
@@ -453,14 +460,18 @@ def subset_patchify_MoNuSeg_data_by_cancer(imsize: int):
 
                     image_path_to = os.path.join(target_folder, cancer_type, 'test', 'images', test_item + f'_H{h}W{w}.png')
                     label_path_to = os.path.join(target_folder, cancer_type, 'test', 'labels', test_item + f'_H{h}W{w}.png')
+                    mask_path_to = os.path.join(target_folder, cancer_type, 'test', 'masks', test_item + f'_H{h}W{w}.png')
                     os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
                     os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+                    os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
 
                     image_patch = image[h : h+imsize, w : w+imsize, :]
                     label_patch = label[h : h+imsize, w : w+imsize]
+                    mask_patch = label_patch > 0
 
                     cv2.imwrite(image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
                     cv2.imwrite(label_path_to, label_patch)
+                    cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
     return
 
 def test():
@@ -472,9 +483,11 @@ def test():
 
 if __name__ == '__main__':
     # test()
+
+    # For comparisons
     process_MoNuSeg_data()
     subset_MoNuSeg_data_by_cancer()
-    # subset_patchify_MoNuSeg_data_by_cancer(imsize=200)
+    subset_patchify_MoNuSeg_data_by_cancer(imsize=200)
 
     # For our pipeline
     patchify_MoNuSeg_data_by_cancer_cell_centric(patch_size=96)

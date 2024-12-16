@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=medt-mn
-#SBATCH --partition=gpu
+#SBATCH --partition=pi_krishnaswamy
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=9
 #SBATCH --time=2-00:00:00
@@ -29,11 +29,11 @@ cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/MedT/
 
 for i in $(seq 1 3);
 do
-    for cancer in breast colon prostate;
+    for cancer in Breast Colon Prostate;
     do
         time python train.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer/$cancer/train/" \
         --val_dataset "../../data/MoNuSeg/MoNuSegByCancer/$cancer/train/" \
-        --direc "../results/MoNuSegByCancer/$cancer/MedT_seed$i/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "MedT" \
+        --direc "../results/MoNuSegByCancer/$cancer/MedT_seed$i/" --batch_size 1 --epoch 400 --save_freq 200 --modelname "MedT" \
         --learning_rate 0.001 --imgsize 1000 --gray "no" --seed $i
 
         time python test.py --loaddirec "../results/MoNuSegByCancer/$cancer/MedT_seed$i/final_model.pth" \
@@ -44,7 +44,7 @@ do
 
         time python train_unet.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer/$cancer/train/" \
         --val_dataset "../../data/MoNuSeg/MoNuSegByCancer/$cancer/train/" \
-        --direc "../results/MoNuSegByCancer/$cancer/UNet_seed$i/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "UNet" \
+        --direc "../results/MoNuSegByCancer/$cancer/UNet_seed$i/" --batch_size 1 --epoch 400 --save_freq 200 --modelname "UNet" \
         --learning_rate 0.001 --imgsize 1000 --gray "no" --seed $i
 
         time python test_unet.py --loaddirec "../results/MoNuSegByCancer/$cancer/UNet_seed$i/final_model.pth" \
@@ -55,7 +55,7 @@ do
 
         time python train_nnunet.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer/$cancer/train/" \
         --val_dataset "../../data/MoNuSeg/MoNuSegByCancer/$cancer/train/" \
-        --direc "../results/MoNuSegByCancer/$cancer/nnUNet_seed$i/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "nnUNet" \
+        --direc "../results/MoNuSegByCancer/$cancer/nnUNet_seed$i/" --batch_size 1 --epoch 400 --save_freq 200 --modelname "nnUNet" \
         --learning_rate 0.001 --imgsize 1000 --gray "no" --seed $i
 
         time python test_nnunet.py --loaddirec "../results/MoNuSegByCancer/$cancer/nnUNet_seed$i/final_model.pth" \
@@ -73,7 +73,7 @@ do
     do
         time python train.py --train_dataset "../../data/GLySAC/GLySACByTumor/$cancer/train/" \
         --val_dataset "../../data/GLySAC/GLySACByTumor/$cancer/train/" \
-        --direc "../results/GLySACByTumor/$cancer/MedT_seed$i/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "MedT" \
+        --direc "../results/GLySACByTumor/$cancer/MedT_seed$i/" --batch_size 1 --epoch 400 --save_freq 200 --modelname "MedT" \
         --learning_rate 0.001 --imgsize 1000 --gray "no" --seed $i
 
         time python test.py --loaddirec "../results/GLySACByTumor/$cancer/MedT_seed$i/final_model.pth" \
@@ -84,7 +84,7 @@ do
 
         time python train_unet.py --train_dataset "../../data/GLySAC/GLySACByTumor/$cancer/train/" \
         --val_dataset "../../data/GLySAC/GLySACByTumor/$cancer/train/" \
-        --direc "../results/GLySACByTumor/$cancer/UNet_seed$i/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "UNet" \
+        --direc "../results/GLySACByTumor/$cancer/UNet_seed$i/" --batch_size 1 --epoch 400 --save_freq 200 --modelname "UNet" \
         --learning_rate 0.001 --imgsize 1000 --gray "no" --seed $i
 
         time python test_unet.py --loaddirec "../results/GLySACByTumor/$cancer/UNet_seed$i/final_model.pth" \
@@ -95,7 +95,7 @@ do
 
         time python train_nnunet.py --train_dataset "../../data/GLySAC/GLySACByTumor/$cancer/train/" \
         --val_dataset "../../data/GLySAC/GLySACByTumor/$cancer/train/" \
-        --direc "../results/GLySACByTumor/$cancer/nnUNet_seed$i/" --batch_size 4 --epoch 400 --save_freq 50 --modelname "nnUNet" \
+        --direc "../results/GLySACByTumor/$cancer/nnUNet_seed$i/" --batch_size 1 --epoch 400 --save_freq 200 --modelname "nnUNet" \
         --learning_rate 0.001 --imgsize 1000 --gray "no" --seed $i
 
         time python test_nnunet.py --loaddirec "../results/GLySACByTumor/$cancer/nnUNet_seed$i/final_model.pth" \
