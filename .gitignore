@@ -1,6 +1,12 @@
 *.zip
 /src/outputs/
 .DS_Store
+/results_2
+*.json
+/*zip
+/src/outputs
+/src/*.png
+/src/*/*png
 /results/*
 /checkpoints/
 /external_data
