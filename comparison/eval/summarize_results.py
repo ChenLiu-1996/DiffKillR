@@ -7,16 +7,10 @@ def get_folder_list(dataset: str):
     if dataset == 'glysac':
         folder_list = [
             'GLySACByTumor_200x200',
-            # 'GLySACByTumor_intraimage5pct_200x200',
-            # 'GLySACByTumor_intraimage20pct_200x200',
-            # 'GLySACByTumor_intraimage50pct_200x200',
         ]
     elif dataset == 'monuseg':
         folder_list = [
             'MoNuSegByCancer_200x200',
-            # 'MoNuSegByCancer_intraimage5pct_200x200',
-            # 'MoNuSegByCancer_intraimage20pct_200x200',
-            # 'MoNuSegByCancer_intraimage50pct_200x200',
         ]
     return folder_list
 

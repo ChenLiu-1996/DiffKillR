@@ -2,7 +2,6 @@
 Meta stats for the datasets
 '''
 
-import pandas as pd
 
 GLySAC_Organ2FileID = {
     'Normal': {
@@ -35,8 +34,8 @@ GLySAC_Organ2FileID = {
             'DB-0001_tumor_3',
             'DB-0003_tumor_1',
             'DB-0003_tumor_2',
-            'DB-0446_tumor_2',
-            'DB-0446_tumor_3'
+            'DB-0466_tumor_2',
+            'DB-0466_tumor_3'
         ],
         'test': [
             'AGC1_tumor_2',
@@ -57,15 +56,20 @@ GLySAC_Organ2FileID = {
     }
 }
 
+# NOTE: For MoNuSeg, we mostly followed the train/test partitioning
+# in the official event (https://drive.google.com/file/d/1v8ksTITOA3CsSlelBeXYJ9GJSxebJKtb/view).
+# We split the samples for organs that were used exclusively for train or test.
+
 MoNuSeg_Organ2FileID = {
-    'Colon': {
+    'Bladdar': {
         'train': [
-            'TCGA-AY-A8YK-01A-01-TS1',
-            'TCGA-NH-A8F7-01A-01-TS1'
-            ],
+            'TCGA-DK-A2I6-01A-01-TS1',
+            'TCGA-G2-A2EK-01A-02-TSB',
+        ],
         'test': [
-            'TCGA-A6-6782-01A-01-BS1'
-            ]
+            'TCGA-CU-A0YN-01A-02-BSB',
+            'TCGA-ZF-A9R5-01A-01-TS1'
+        ],
     },
     'Breast': {
         'train': [
@@ -79,6 +83,30 @@ MoNuSeg_Organ2FileID = {
         'test': [
             'TCGA-AC-A2FO-01A-01-TS1',
             'TCGA-AO-A0J2-01A-01-BSA'
+        ]
+    },
+    'Colon': {
+        'train': [
+            'TCGA-AY-A8YK-01A-01-TS1',
+            'TCGA-NH-A8F7-01A-01-TS1'
+            ],
+        'test': [
+            'TCGA-A6-6782-01A-01-BS1'
+            ]
+    },
+    'Kidney': {
+        'train': [
+            'TCGA-B0-5711-01Z-00-DX1',
+            'TCGA-HE-7128-01Z-00-DX1',
+            'TCGA-HE-7129-01Z-00-DX1',
+            'TCGA-HE-7130-01Z-00-DX1',
+            'TCGA-B0-5710-01Z-00-DX1',
+            'TCGA-B0-5698-01Z-00-DX1'
+        ],
+        'test': [
+            'TCGA-2Z-A9J9-01A-01-TS1',
+            'TCGA-GL-6846-01A-01-BS1',
+            'TCGA-IZ-8196-01A-01-BS1'
         ]
     },
     'Prostate': {
@@ -95,19 +123,44 @@ MoNuSeg_Organ2FileID = {
             'TCGA-HC-7209-01A-01-TS1',
         ]
     },
-    'Kidney': {
+    # NOTE: Brain used to be test-only. Split!
+    'Brain': {
         'train': [
-            'TCGA-B0-5711-01Z-00-DX1',
-            'TCGA-HE-7128-01Z-00-DX1',
-            'TCGA-HE-7129-01Z-00-DX1',
-            'TCGA-HE-7130-01Z-00-DX1',
-            'TCGA-B0-5710-01Z-00-DX1',
-            'TCGA-B0-5698-01Z-00-DX1'
+            'TCGA-FG-A4MU-01B-01-TS1',
         ],
         'test': [
-            'TCGA-2Z-A9J9-01A-01-TS1',
-            'TCGA-GL-6846-01A-01-BS1',
-            'TCGA-IZ-8196-01A-01-BS1'
-        ]
+            'TCGA-HT-8564-01Z-00-DX1',
+        ],
+    },
+    # NOTE: Liver used to be train-only. Split!
+    'Liver': {
+        'train': [
+            'TCGA-18-5592-01Z-00-DX1',
+            'TCGA-38-6178-01Z-00-DX1',
+            'TCGA-49-4488-01Z-00-DX1',
+            'TCGA-50-5931-01Z-00-DX1',
+        ],
+        'test': [
+            'TCGA-21-5784-01Z-00-DX1',
+            'TCGA-21-5786-01Z-00-DX1',
+        ],
+    },
+    # NOTE: Lung used to be test-only. Split!
+    'Lung': {
+        'train': [
+            'TCGA-44-2665-01B-06-BS6',
+        ],
+        'test': [
+            'TCGA-69-7764-01A-01-TS1',
+        ],
+    },
+    # NOTE: Stomach used to be train-only. Split!
+    'Stomach': {
+        'train': [
+            'TCGA-KB-A93J-01A-01-TS1',
+        ],
+        'test': [
+            'TCGA-RD-A8N9-01A-01-TS1',
+        ],
     },
 }

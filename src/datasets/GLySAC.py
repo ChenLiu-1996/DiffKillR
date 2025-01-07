@@ -20,61 +20,79 @@ from center_crop import center_crop
 ROOT_DIR = '/'.join(os.path.realpath(__file__).split('/')[:-3])
 
 
-class A28Dataset(Dataset):
+class GLySACDataset(Dataset):
     def __init__(self,
-                 augmentation_methods: List[str],
-                 cell_types: List[str] = ['EpithelialCell', 'EndothelialCell', 'Myocyte', 'Fibroblast'],
-                 base_path: str = ROOT_DIR + '/data/A28-A28-87_CP_lvl1_HandE_1_Merged_RAW_ch00_patch_96x96/',
+                 subset: str,
+                 no_background: bool = False,
+                 augmentation_methods: List[str] = None,
+                 organ: str = 'Colon',
+                 base_path: str = ROOT_DIR + '/data/GLySAC/',
                  target_dim: Tuple[int] = (32, 32),
-                 n_views: int = None):
+                 n_views: int = None,
+                 percentage: int = 100):
 
         super().__init__()
 
         '''
         Find the list of relevant files.
         '''
-
+        self.subset = subset
+        self.no_background = no_background
+        self.organ = organ
         self.target_dim = target_dim
-        self.cell_types = cell_types
-        self.cell_type_to_idx = {cell_type: idx for idx, cell_type in enumerate(self.cell_types)}
         self.augmentation_methods = augmentation_methods
         self.n_views = n_views
+        self.percentage = percentage
         self.deterministic = False  # For infinite possibilities during training.
 
-        self.image_paths_by_celltype = {
-            celltype: [] for celltype in self.cell_types
-        }
-        self.label_paths_by_celltype = {
-            celltype: [] for celltype in self.cell_types
-        }
+        self.img_paths = sorted(glob(os.path.join(base_path, organ, subset, 'images', '*.png')))
+        self.label_paths = sorted(glob(os.path.join(base_path, organ, subset, 'masks', '*.png')))
+        self.background_img_paths = sorted(glob(os.path.join(base_path, organ, subset, 'background_images', '*.png')))
 
-        self.img_paths = sorted(glob('%s/image/*.png' % base_path))
-        self.label_paths = sorted(glob('%s/label/*.png' % base_path))
+        background_ratio = len(self.background_img_paths) / len(self.img_paths)
 
-        assert len(self.img_paths) == len(self.label_paths)
+        if self.subset == 'train':
+            self.num_cells = int(np.floor(len(self.img_paths) * (self.percentage/100)))
+            self.num_backgrounds = int(self.num_cells * background_ratio)
+            print(f'Train set. Taking {self.percentage}% of the data: {self.num_cells}.')
+            self.img_paths = self.img_paths[:self.num_cells]
+            self.label_paths = self.label_paths[:self.num_cells]
+            self.background_img_paths = self.background_img_paths[:self.num_backgrounds]
+        else:
+            self.num_cells = len(self.img_paths)
+            self.num_backgrounds = len(self.background_img_paths)
+            print(f'Test set. Taking all test data: {self.num_cells}.')
 
-        for img_path, label_path in zip(self.img_paths, self.label_paths):
-            file_name = img_path.split('/')[-1]
-            celltype = file_name.split('_')[0] # e.g. 'EndotheliaCell'
-            self.image_paths_by_celltype[celltype].append(img_path)
-            self.label_paths_by_celltype[celltype].append(label_path)
+        assert len(self.img_paths) == len(self.label_paths) == self.num_cells
+        assert len(self.background_img_paths) == self.num_backgrounds
 
     def __len__(self) -> int:
-        return len(self.img_paths)
+        if self.no_background:
+            return self.num_cells
+        else:
+            return self.num_cells + self.num_backgrounds
 
     def __str__(self) -> str:
-        return 'AugmentedDataset: %d images' % len(self)
+        return 'MoNuseg Dataset: %d images' % len(self)
 
     def set_deterministic(self, deterministic: bool):
         self.deterministic = deterministic
 
-    def __getitem__(self, idx) -> Tuple[np.array, np.array, str]:
+    def __getitem__(self, idx) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
-        # NOTE: we will not downsample the canonical images or labels.
-        canonical_pose_image = load_image(path=self.img_paths[idx], target_dim=None)
-        canonical_pose_label = load_label(path=self.label_paths[idx], target_dim=None)
-        # NOTE: Assuming label is in [0, 1, 2, 3, 4]
-        canonical_pose_label = (canonical_pose_label > 0.5) * 255
+        is_foreground = idx < self.num_cells
+
+        if is_foreground:
+            # NOTE: we will not downsample the canonical images or labels.
+            canonical_pose_image = load_image(path=self.img_paths[idx], target_dim=None)
+            # Load the label for the cell.
+            canonical_pose_label = load_label(path=self.label_paths[idx], target_dim=None)
+        else:
+            # NOTE: we will not downsample the canonical images or labels.
+            canonical_pose_image = load_image(path=self.background_img_paths[idx - self.num_cells], target_dim=None)
+            # Load dummy label for background, since label is not used for DiffeoInvariantNet.
+            # Dummy label to pass augmentation methods. This label will be ignored during training.
+            canonical_pose_label = np.ones_like(load_label(path=self.label_paths[0], target_dim=None))
 
         if canonical_pose_label.shape[-1] == 3:
             assert (canonical_pose_label[..., 0] == canonical_pose_label[..., 1]).all()
@@ -98,9 +116,10 @@ class A28Dataset(Dataset):
             os.environ['PYTHONHASHSEED'] = str(seed)
         else:
             # TODO: How to unseed the other random generators?
-            # torch.manual_seed and torch.cuda.manual_seed do not accept None Type.
             random.seed(None)
             np.random.seed(None)
+            #torch.manual_seed(None)
+            #torch.cuda.manual_seed(None)
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
             torch.use_deterministic_algorithms(False)
@@ -110,7 +129,7 @@ class A28Dataset(Dataset):
         aug_seed = np.random.randint(low=0, high=self.__len__() * 100)
 
         assert self.target_dim[0] == self.target_dim[1], \
-            'A28Dataset: currently only supporting square shape.'
+            'AugmentedA28AxisDataset: currently only supporting square shape.'
 
         image_aug, label_aug = globals()['augment_' + augmentation_method](
             image=canonical_pose_image,
@@ -121,7 +140,7 @@ class A28Dataset(Dataset):
 
         # [1, C, H, W]
         image_aug = fix_channel_dimension(normalize_image(image_aug))
-        label_aug = fix_channel_dimension(label_aug)
+        label_aug = fix_channel_dimension(normalize_label(label_aug))
 
         image_n_view, label_n_view = None, None
         if self.n_views is not None:
@@ -160,10 +179,10 @@ class A28Dataset(Dataset):
                 image_n_view, label_n_view,
                 canonical_pose_image,
                 canonical_pose_label,
-                True)
+                is_foreground)
 
 
-def load_image(path: str, target_dim: Tuple[int] = None) -> np.array:
+def load_image(path: str, target_dim: Tuple[int] = None) -> np.ndarray:
     ''' Load image as numpy array from a path string.'''
 
     if target_dim is not None:
@@ -178,7 +197,7 @@ def load_image(path: str, target_dim: Tuple[int] = None) -> np.array:
 
     return image
 
-def load_label(path: str, target_dim: Tuple[int] = None) -> np.array:
+def load_label(path: str, target_dim: Tuple[int] = None) -> np.ndarray:
     ''' Load image as numpy array from a path string.'''
 
     if target_dim is not None:
@@ -190,9 +209,9 @@ def load_label(path: str, target_dim: Tuple[int] = None) -> np.array:
 
     return label
 
-def normalize_image(image: np.array) -> np.array:
+def normalize_image(image: np.ndarray) -> np.ndarray:
     '''
-    [0, 255] to [-1, 1]
+    [0, 255] to [-1.0, 1.0]
     '''
     return image / 255.0 * 2 - 1
 
@@ -202,7 +221,7 @@ def normalize_label(label: np.ndarray) -> np.ndarray:
     '''
     return np.uint8(label / 255)
 
-def fix_channel_dimension(arr: np.array) -> np.array:
+def fix_channel_dimension(arr: np.ndarray) -> np.ndarray:
     if len(arr.shape) == 3:
         # Channel last to channel first to comply with Torch.
         arr = np.moveaxis(arr, -1, 0)
@@ -221,14 +240,14 @@ if __name__ == '__main__':
                  'volume_preserving_stretch',
                  'partial_stretch']
 
-    dataset = A28Dataset(augmentation_methods=aug_lists)
+    dataset = MoNuSegDataset(augmentation_methods=aug_lists, organ='Breast', target_dim=(32, 32), n_views=2)
     print(len(dataset))
 
     dataloader = DataLoader(dataset=dataset, batch_size=4, shuffle=True, num_workers=0)
 
-    for batch_idx, (images, labels, image_paths) in enumerate(dataloader):
+    for batch_idx, (images, _, image_n_view, _, canonical_images, _) in enumerate(dataloader):
         print(images.shape)
-        print(labels.shape)
-        print(image_paths)
+        print(image_n_view.shape)
+        print(canonical_images.shape)
         break
 

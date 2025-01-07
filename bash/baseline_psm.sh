@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=psm
-#SBATCH --partition=gpu
+#SBATCH --partition=pi_krishnaswamy
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=9
 #SBATCH --time=2-00:00:00
@@ -25,30 +25,30 @@ module load git/2.28.0-GCCcore-10.2.0-nodocs
 source ~/.zshrc
 conda activate cellseg
 
-cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/CellSeg/comparison/PSM/
+cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/PSM/
 
 for i in $(seq 1 3);
 do
-    for cancer in colon breast prostate;
+    for cancer in Bladdar Brain Breast Colon Kidney Liver Lung Prostate Stomach;
     do
-        time python main_train_test.py --seed $i --mode 'train_base' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
-        time python main_train_test.py --seed $i --mode 'generate_label' --method 'gradcam' --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
-        time python main_train_test.py --seed $i --mode 'train_second_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
-        time python main_train_test.py --seed $i --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
-        time python main_train_test.py --seed $i --mode 'train_final_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
-        time python main_train_test.py --seed $i --mode 'test' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../external_data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'train_base' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'generate_label' --method 'gradcam' --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'train_second_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'train_final_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'test' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
     done
 done
 
 for i in $(seq 1 3);
 do
-    for cancer in normal tumor;
+    for cancer in Tumor Normal;
     do
-        time python main_train_test.py --seed $i --mode 'train_base' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/test/
-        time python main_train_test.py --seed $i --mode 'generate_label' --method 'gradcam' --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/test/
-        time python main_train_test.py --seed $i --mode 'train_second_stage' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/test/
-        time python main_train_test.py --seed $i --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/test/
-        time python main_train_test.py --seed $i --mode 'train_final_stage' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/test/
-        time python main_train_test.py --seed $i --mode 'test' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../external_data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'train_base' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'generate_label' --method 'gradcam' --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'train_second_stage' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'train_final_stage' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'test' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
     done
 done

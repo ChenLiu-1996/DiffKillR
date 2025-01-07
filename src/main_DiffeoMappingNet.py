@@ -938,7 +938,7 @@ if __name__ == '__main__':
     parser.add_argument('--organ', default=None, type=str)
     parser.add_argument('--depth', default=4, type=int)
     parser.add_argument('--latent-loss', default='SimCLR', type=str)
-    parser.add_argument('--learning-rate', default=3e-3, type=float)
+    parser.add_argument('--learning-rate', default=1e-3, type=float)
     parser.add_argument('--hard-example-ratio', default=0.25, type=float)
     parser.add_argument('--patience', default=100, type=int)
     parser.add_argument('--aug-methods', default='rotation,uniform_stretch,directional_stretch,volume_preserving_stretch,partial_stretch', type=str)
