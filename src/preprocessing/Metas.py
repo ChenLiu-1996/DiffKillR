@@ -34,8 +34,8 @@ GLySAC_Organ2FileID = {
             'DB-0001_tumor_3',
             'DB-0003_tumor_1',
             'DB-0003_tumor_2',
-            'DB-0446_tumor_2',
-            'DB-0446_tumor_3'
+            'DB-0466_tumor_2',
+            'DB-0466_tumor_3'
         ],
         'test': [
             'AGC1_tumor_2',
@@ -58,7 +58,7 @@ GLySAC_Organ2FileID = {
 
 # NOTE: For MoNuSeg, we mostly followed the train/test partitioning
 # in the official event (https://drive.google.com/file/d/1v8ksTITOA3CsSlelBeXYJ9GJSxebJKtb/view).
-# We shuffled for organs that were used exclusively for train or test.
+# We split the samples for organs that were used exclusively for train or test.
 
 MoNuSeg_Organ2FileID = {
     'Bladdar': {
@@ -123,7 +123,7 @@ MoNuSeg_Organ2FileID = {
             'TCGA-HC-7209-01A-01-TS1',
         ]
     },
-    # NOTE: Brain used to be test-only. Shuffled.
+    # NOTE: Brain used to be test-only. Split!
     'Brain': {
         'train': [
             'TCGA-FG-A4MU-01B-01-TS1',
@@ -132,7 +132,7 @@ MoNuSeg_Organ2FileID = {
             'TCGA-HT-8564-01Z-00-DX1',
         ],
     },
-    # NOTE: Liver used to be train-only. Shuffled.
+    # NOTE: Liver used to be train-only. Split!
     'Liver': {
         'train': [
             'TCGA-18-5592-01Z-00-DX1',
@@ -145,7 +145,7 @@ MoNuSeg_Organ2FileID = {
             'TCGA-21-5786-01Z-00-DX1',
         ],
     },
-    # NOTE: Lung used to be test-only. Shuffled.
+    # NOTE: Lung used to be test-only. Split!
     'Lung': {
         'train': [
             'TCGA-44-2665-01B-06-BS6',
@@ -154,7 +154,7 @@ MoNuSeg_Organ2FileID = {
             'TCGA-69-7764-01A-01-TS1',
         ],
     },
-    # NOTE: Stomach used to be train-only. Shuffled.
+    # NOTE: Stomach used to be train-only. Split!
     'Stomach': {
         'train': [
             'TCGA-KB-A93J-01A-01-TS1',

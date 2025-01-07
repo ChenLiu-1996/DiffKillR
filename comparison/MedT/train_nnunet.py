@@ -87,10 +87,10 @@ model = torch.nn.Sequential(
         spatial_dims=2,
         in_channels=3,
         out_channels=1,
-        kernel_size=[5, 5, 5, 5],
-        filters=[16, 32, 64, 128],
-        strides=[1, 1, 1, 1],
-        upsample_kernel_size=[1, 1, 1, 1]),
+        kernel_size=[5, 5, 5, 5, 5],
+        filters=[16, 32, 64, 128, 256],
+        strides=[1, 1, 1, 1, 1],
+        upsample_kernel_size=[1, 1, 1, 1, 1]),
     torch.nn.Sigmoid()
 )
 
