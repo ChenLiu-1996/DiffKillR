@@ -72,33 +72,26 @@ Train and test DiffeoInvariantNet.
 ```
 cd src/
 python main_DiffeoInvariantNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Breast --percentage 10 --random-seed 1
-python main_DiffeoInvariantNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Colon --percentage 10 --random-seed 1
-python main_DiffeoInvariantNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Prostate --percentage 10 --random-seed 1
 ```
 
 Train and test DiffeoMappingNet.
 ```
 cd src/
 python main_DiffeoMappingNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Breast --percentage 10 --random-seed 1
-python main_DiffeoMappingNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Colon --percentage 10 --random-seed 1
-python main_DiffeoMappingNet.py --dataset-name MoNuSeg --dataset-path '$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/' --organ Prostate --percentage 10 --random-seed 1
 ```
 
 Run Inference
 ```
-cd src
 python main_inference_segmentation.py --organ Breast --use-gt-loc --random-seed 1
-python main_inference_segmentation.py --organ Colon --use-gt-loc --random-seed 1
-python main_inference_segmentation.py --organ Prostate --use-gt-loc --random-seed 1
 python main_inference_segmentation.py --organ Breast --random-seed 1
-python main_inference_segmentation.py --organ Colon --random-seed 1
-python main_inference_segmentation.py --organ Prostate --random-seed 1
 ```
 
 ### Comparison
 1. First train/infer the models.
 
-1.1 MedT, UNet, nnUNet.
+<details>
+<summary>1.1 MedT, UNet, nnUNet.</summary>
+
 ```
 cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/MedT/
 
@@ -141,7 +134,6 @@ do
     done
 done
 
-
 for i in $(seq 1 3);
 do
     for cancer in Tumor Normal;
@@ -181,8 +173,11 @@ do
     done
 done
 ```
+</details>
 
-1.2 PSM.
+<details>
+<summary>1.2 PSM.</summary>
+
 ```
 for i in $(seq 1 3);
 do
@@ -210,7 +205,10 @@ do
     done
 done
 ```
+</details>
 
+<details>
+<summary>1.3 SAM, MedSAM, SAM-Med2D, SAM2.</summary>
 
 ```
 for cancer in Bladdar Brain Breast Colon Kidney Liver Lung Prostate Stomach;
@@ -251,7 +249,7 @@ do
     --direc "../results/GLySACByTumor/$cancer/MedSAM/" --imgsize 1000 --gray "no"
 done
 ```
-
+</details>
 
 
 2. Then, stitch the images and run evaluation.
@@ -290,82 +288,6 @@ download from https://drive.google.com/file/d/1ARiB5RkSsWmAB_8mqWnwDF8ZKTtFwsjl/
 download from https://drive.google.com/file/d/1ARiB5RkSsWmAB_8mqWnwDF8ZKTtFwsjl/view
 ```
 
-
-
-## Naming Conventions
-```
-    # The output of the model will be saved in the following directory
-    # e.g. 0.100_Colon_m2_MoNuSeg_depth5_seed1_SimCLR
-    # -- reg2seg: Reg2Seg results
-    # -- reg2seg.ckpt: Reg2Seg model
-    # -- aiae.ckpt: AIAE model
-    # -- test_pairs.csv: test pairs
-    # -- train_pairs.csv: training pairs
-    model_name = f'{config.percentage:.3f}_{config.organ}_m{config.multiplier}_MoNuSeg_depth{config.depth}_seed{config.random_seed}_{config.latent_loss}'
-```
-
-## Train on MoNuSeg
-```
-# prepare data
-cd src/
-# This will extract annotations & patches from the MoNuSeg dataset
-python preprocessing/prepare_MoNuseg.py --patch_size 96 --aug_patch_size 32
-# This will subsample and augment the dataset, and output data yaml config file in '../config/MoNuSeg_data.yaml'
-python preprocessing/augment_MoNuseg.py \
-                  --patch_size {patch_size} \
-                  --augmented_patch_size {aug_patch_size} \
-                  --percentage {percent} \
-                  --multiplier {multiplier} \
-                  --organ {organ_type}
-
-# train AIAE
-python train_unsupervised_AE.py \
-              --mode train \
-              --data-config  '../config/MoNuSeg_data.yaml' \
-              --model-config '../config/MoNuSeg_AIAE.yaml' \
-              --num-workers {num_workers}
-
-# infer & generate training & test pairs for Reg2Seg
-python train_unsupervised_AE.py \
-              --mode infer \
-              --data-config '../config/MoNuSeg_data.yaml' \
-              --model-config '../config/MoNuSeg_reg2seg.yaml' \
-              --num-workers {num_workers}
-
-# train Reg2Seg using matched pairs
-python train_reg2seg.py --mode train --config ../config/MoNuSeg_reg2seg.yaml
-
-# infer segmentation using Reg2Seg
-python train_reg2seg.py --config ../config/MoNuSeg_reg2seg.yaml --mode infer
-
-```
-
-### External Dataset
-
-#### TissueNet
-```
-cd external_data/TissueNet
-# Download from https://datasets.deepcell.org/data
-unzip tissuenet_v1.1.zip
-
-python preprocess_tissuenet.py
-```
-
-
-#### MoNuSeg
-```
-cd external_data/MoNuSeg
-
-cd src/preprocessing
-python preprocess_MoNuSeg.py
-```
-
-
-#### GLySAC
-```
-cd src/preprocessing
-python preprocess_GLySAC.py
-```
 
 ### Environment
 We developed the codebase in a miniconda environment.
