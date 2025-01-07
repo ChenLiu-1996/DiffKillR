@@ -349,14 +349,3 @@ source $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
 
 ```
 
-## Train Augmentation-agonostic network
-```
-python train_AE.py --mode train --config {config} --num-workers 4
-```
-
-
-
-```
-cd src/scripts/
-python match_cells.py --config ../../config/aug_AutoEncoder_depth5_seed1_simCLR.yaml
-```
