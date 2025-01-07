@@ -308,6 +308,7 @@ python -m pip install antspyx
 # python -m pip install dipy
 python -m pip install opencv-python
 python -m pip install python-dotenv
+python -m pip install simple-lama-inpainting
 
 # MoNuSeg
 python -m pip install xmltodict
