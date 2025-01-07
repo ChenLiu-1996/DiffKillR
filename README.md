@@ -43,7 +43,7 @@ The official version is maintained in the [Lab GitHub repo](https://github.com/K
 }
 ```
 
-## [New] Usage
+## Usage
 Preprocess datasets.
 ```
 cd src/preprocessing
@@ -96,7 +96,163 @@ python main_inference_segmentation.py --organ Prostate --random-seed 1
 ```
 
 ### Comparison
-1. First train/infer the models. Can refer to `bash/baseline_medt.sh`, `bash/baseline_psm.sh`, `bash/baseline_sam.sh`.
+1. First train/infer the models.
+
+1.1 MedT, UNet, nnUNet.
+```
+cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/MedT/
+
+for i in $(seq 1 3);
+do
+    for cancer in Bladdar Brain Breast Colon Kidney Liver Lung Prostate Stomach;
+    do
+        time python train.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/" \
+        --val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/" \
+        --direc "../results/MoNuSegByCancer_200x200/$cancer/MedT_seed$i/" --batch_size 4 --epoch 100 --save_freq 100 --modelname "MedT" \
+        --learning_rate 0.001 --imgsize 200 --gray "no" --seed $i
+
+        time python test.py --loaddirec "../results/MoNuSegByCancer_200x200/$cancer/MedT_seed$i/final_model.pth" \
+        --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/" \
+        --val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/" \
+        --direc "../results/MoNuSegByCancer_200x200/$cancer/MedT_seed$i/" \
+        --batch_size 4 --modelname "MedT" --imgsize 200 --gray "no"
+
+        time python train_unet.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/" \
+        --val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/" \
+        --direc "../results/MoNuSegByCancer_200x200/$cancer/UNet_seed$i/" --batch_size 4 --epoch 100 --save_freq 100 --modelname "UNet" \
+        --learning_rate 0.001 --imgsize 200 --gray "no" --seed $i
+
+        time python test_unet.py --loaddirec "../results/MoNuSegByCancer_200x200/$cancer/UNet_seed$i/final_model.pth" \
+        --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/" \
+        --val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/" \
+        --direc "../results/MoNuSegByCancer_200x200/$cancer/UNet_seed$i/" \
+        --batch_size 4 --modelname "UNet" --imgsize 200 --gray "no"
+
+        time python train_nnunet.py --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/" \
+        --val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/" \
+        --direc "../results/MoNuSegByCancer_200x200/$cancer/nnUNet_seed$i/" --batch_size 4 --epoch 100 --save_freq 100 --modelname "nnUNet" \
+        --learning_rate 0.001 --imgsize 200 --gray "no" --seed $i
+
+        time python test_nnunet.py --loaddirec "../results/MoNuSegByCancer_200x200/$cancer/nnUNet_seed$i/final_model.pth" \
+        --train_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/" \
+        --val_dataset "../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/" \
+        --direc "../results/MoNuSegByCancer_200x200/$cancer/nnUNet_seed$i/" \
+        --batch_size 4 --modelname "nnUNet" --imgsize 200 --gray "no"
+    done
+done
+
+
+for i in $(seq 1 3);
+do
+    for cancer in Tumor Normal;
+    do
+        time python train.py --train_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/" \
+        --val_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/" \
+        --direc "../results/GLySACByTumor_200x200/$cancer/MedT_seed$i/" --batch_size 4 --epoch 100 --save_freq 100 --modelname "MedT" \
+        --learning_rate 0.001 --imgsize 200 --gray "no" --seed $i
+
+        time python test.py --loaddirec "../results/GLySACByTumor_200x200/$cancer/MedT_seed$i/final_model.pth" \
+        --train_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/" \
+        --val_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/" \
+        --direc "../results/GLySACByTumor_200x200/$cancer/MedT_seed$i/" \
+        --batch_size 4 --modelname "MedT" --imgsize 200 --gray "no"
+
+        time python train_unet.py --train_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/" \
+        --val_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/" \
+        --direc "../results/GLySACByTumor_200x200/$cancer/UNet_seed$i/" --batch_size 4 --epoch 100 --save_freq 100 --modelname "UNet" \
+        --learning_rate 0.001 --imgsize 200 --gray "no" --seed $i
+
+        time python test_unet.py --loaddirec "../results/GLySACByTumor_200x200/$cancer/UNet_seed$i/final_model.pth" \
+        --train_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/" \
+        --val_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/" \
+        --direc "../results/GLySACByTumor_200x200/$cancer/UNet_seed$i/" \
+        --batch_size 4 --modelname "UNet" --imgsize 200 --gray "no"
+
+        time python train_nnunet.py --train_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/" \
+        --val_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/" \
+        --direc "../results/GLySACByTumor_200x200/$cancer/nnUNet_seed$i/" --batch_size 4 --epoch 100 --save_freq 100 --modelname "nnUNet" \
+        --learning_rate 0.001 --imgsize 200 --gray "no" --seed $i
+
+        time python test_nnunet.py --loaddirec "../results/GLySACByTumor_200x200/$cancer/nnUNet_seed$i/final_model.pth" \
+        --train_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/" \
+        --val_dataset "../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/" \
+        --direc "../results/GLySACByTumor_200x200/$cancer/nnUNet_seed$i/" \
+        --batch_size 4 --modelname "nnUNet" --imgsize 200 --gray "no"
+    done
+done
+```
+
+1.2 PSM.
+```
+for i in $(seq 1 3);
+do
+    for cancer in Bladdar Brain Breast Colon Kidney Liver Lung Prostate Stomach;
+    do
+        time python main_train_test.py --seed $i --mode 'train_base' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'generate_label' --method 'gradcam' --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'train_second_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'train_final_stage' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'test' --crop_edge_size 200 --dataset_name MoNuSegByCancer_200x200/$cancer --data_train ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/train/ --data_test ../../data/MoNuSeg/MoNuSegByCancer_200x200/$cancer/test/
+    done
+done
+
+for i in $(seq 1 3);
+do
+    for cancer in Tumor Normal;
+    do
+        time python main_train_test.py --seed $i --mode 'train_base' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'generate_label' --method 'gradcam' --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'train_second_stage' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'generate_voronoi' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'train_final_stage' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+        time python main_train_test.py --seed $i --mode 'test' --crop_edge_size 200 --dataset_name GLySACByTumor_200x200/$cancer --data_train ../../data/GLySAC/GLySACByTumor_200x200/$cancer/train/ --data_test ../../data/GLySAC/GLySACByTumor_200x200/$cancer/test/
+    done
+done
+```
+
+
+```
+for cancer in Bladdar Brain Breast Colon Kidney Liver Lung Prostate Stomach;
+do
+    cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/SAM/
+    time python test.py --val_dataset "../../data/MoNuSeg/MoNuSegByCancer/$cancer/test/" \
+    --direc "../results/MoNuSegByCancer/$cancer/SAM/" --imgsize 1000 --gray "no"
+
+    cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/SAM2/
+    time python test.py --val_dataset "../../data/MoNuSeg/MoNuSegByCancer/$cancer/test/" \
+    --direc "../results/MoNuSegByCancer/$cancer/SAM2/" --imgsize 1000 --gray "no"
+
+    cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/SAM_Med2D/
+    time python test.py --val_dataset "../../data/MoNuSeg/MoNuSegByCancer/$cancer/test/" \
+    --direc "../results/MoNuSegByCancer/$cancer/SAM_Med2D/" --imgsize 1000 --gray "no"
+
+    cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/MedSAM/
+    time python test.py --val_dataset "../../data/MoNuSeg/MoNuSegByCancer/$cancer/test/" \
+    --direc "../results/MoNuSegByCancer/$cancer/MedSAM/" --imgsize 1000 --gray "no"
+done
+
+for cancer in Tumor Normal;
+do
+    cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/SAM/
+    time python test.py --val_dataset "../../data/GLySAC/GLySACByTumor/$cancer/test/" \
+    --direc "../results/GLySACByTumor/$cancer/SAM/" --imgsize 1000 --gray "no"
+
+    cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/SAM2/
+    time python test.py --val_dataset "../../data/GLySAC/GLySACByTumor/$cancer/test/" \
+    --direc "../results/GLySACByTumor/$cancer/SAM2/" --imgsize 1000 --gray "no"
+
+    cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/SAM_Med2D/
+    time python test.py --val_dataset "../../data/GLySAC/GLySACByTumor/$cancer/test/" \
+    --direc "../results/GLySACByTumor/$cancer/SAM_Med2D/" --imgsize 1000 --gray "no"
+
+    cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/MedSAM/
+    time python test.py --val_dataset "../../data/GLySAC/GLySACByTumor/$cancer/test/" \
+    --direc "../results/GLySACByTumor/$cancer/MedSAM/" --imgsize 1000 --gray "no"
+done
+```
+
+
 
 2. Then, stitch the images and run evaluation.
 ```
