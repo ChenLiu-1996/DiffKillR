@@ -98,7 +98,6 @@ def train(config, wandb_run=None):
             '''
             Latent embedding loss.
             '''
-
             latent_loss = None
             if config.latent_loss == 'supcontrast' or config.latent_loss == 'SimCLR':
                 _, latent_features = model(image_n_view) # (batch_size * n_views, C_dim, H_dim, W_dim)
@@ -548,6 +547,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', default=64, type=int)
     parser.add_argument('--num-filters', default=32, type=int)
     parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
+    parser.add_argument('--cell-isolation', action='store_true')
 
     parser.add_argument('--use-wandb', action='store_true')
     parser.add_argument('--wandb-username', default='yale-cl2482', type=str)

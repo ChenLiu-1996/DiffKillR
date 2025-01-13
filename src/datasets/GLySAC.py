@@ -16,6 +16,8 @@ from aug_rotation import augment_rotation
 from aug_stretch import augment_uniform_stretch, augment_directional_stretch, augment_volume_preserving_stretch
 from aug_partial_stretch import augment_partial_stretch
 from center_crop import center_crop
+sys.path.insert(0, import_dir + '/utils/')
+from cell_isolation import isolate_cell, nonzero_value_closest_to_center
 
 ROOT_DIR = '/'.join(os.path.realpath(__file__).split('/')[:-3])
 
@@ -25,11 +27,12 @@ class GLySACDataset(Dataset):
                  subset: str,
                  no_background: bool = False,
                  augmentation_methods: List[str] = None,
-                 organ: str = 'Colon',
-                 base_path: str = ROOT_DIR + '/data/GLySAC/',
+                 organ: str = 'Normal',
+                 base_path: str = ROOT_DIR + '/data/GLySAC/GLySACbyTumor_patch_96x96/',
                  target_dim: Tuple[int] = (32, 32),
                  n_views: int = None,
-                 percentage: int = 100):
+                 percentage: int = 100,
+                 cell_isolation: bool = False):
 
         super().__init__()
 
@@ -43,10 +46,11 @@ class GLySACDataset(Dataset):
         self.augmentation_methods = augmentation_methods
         self.n_views = n_views
         self.percentage = percentage
+        self.cell_isolation = cell_isolation
         self.deterministic = False  # For infinite possibilities during training.
 
         self.img_paths = sorted(glob(os.path.join(base_path, organ, subset, 'images', '*.png')))
-        self.label_paths = sorted(glob(os.path.join(base_path, organ, subset, 'masks', '*.png')))
+        self.label_paths = sorted(glob(os.path.join(base_path, organ, subset, 'labels', '*.png')))
         self.background_img_paths = sorted(glob(os.path.join(base_path, organ, subset, 'background_images', '*.png')))
 
         background_ratio = len(self.background_img_paths) / len(self.img_paths)
@@ -87,6 +91,11 @@ class GLySACDataset(Dataset):
             canonical_pose_image = load_image(path=self.img_paths[idx], target_dim=None)
             # Load the label for the cell.
             canonical_pose_label = load_label(path=self.label_paths[idx], target_dim=None)
+            if self.cell_isolation:
+                # This image patch only contains the center cell.
+                canonical_pose_image = isolate_cell(image=canonical_pose_image, label=canonical_pose_label)
+            center_cell_idx = nonzero_value_closest_to_center(canonical_pose_label)
+            canonical_pose_label = np.uint8(canonical_pose_label == center_cell_idx * 255)
         else:
             # NOTE: we will not downsample the canonical images or labels.
             canonical_pose_image = load_image(path=self.background_img_paths[idx - self.num_cells], target_dim=None)
@@ -129,7 +138,7 @@ class GLySACDataset(Dataset):
         aug_seed = np.random.randint(low=0, high=self.__len__() * 100)
 
         assert self.target_dim[0] == self.target_dim[1], \
-            'AugmentedA28AxisDataset: currently only supporting square shape.'
+            'GLySACDataset: currently only supporting square shape.'
 
         image_aug, label_aug = globals()['augment_' + augmentation_method](
             image=canonical_pose_image,
@@ -240,7 +249,7 @@ if __name__ == '__main__':
                  'volume_preserving_stretch',
                  'partial_stretch']
 
-    dataset = MoNuSegDataset(augmentation_methods=aug_lists, organ='Breast', target_dim=(32, 32), n_views=2)
+    dataset = GLySACDataset(augmentation_methods=aug_lists, organ='Normal', target_dim=(32, 32), n_views=2)
     print(len(dataset))
 
     dataloader = DataLoader(dataset=dataset, batch_size=4, shuffle=True, num_workers=0)

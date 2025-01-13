@@ -13,6 +13,7 @@ from tqdm import tqdm
 from glob import glob
 from matplotlib import pyplot as plt
 import scipy.io
+import skimage.measure
 from Metas import GLySAC_Organ2FileID
 
 
@@ -20,12 +21,21 @@ def load_GLySAC_annotation(mat_path: str) -> list[np.ndarray]:
     '''
     Return the instance label and centroid array.
     '''
+    centroids = []
+
     mat = scipy.io.loadmat(mat_path)
+    instance_label = mat['inst_map']
+    assert len(np.unique(instance_label)) < 2**16
+    instance_label = instance_label.astype(np.uint16)  # uint16 is essential!
 
-    instance_label = mat['inst_map'].astype(np.uint16)  # uint16 is essential!
-    centroid_arr = mat['inst_centroid']
+    for label_idx in np.unique(instance_label):
+        if label_idx == 0:
+            continue
+        cell_label = instance_label == label_idx
+        centroid = skimage.measure.centroid(cell_label)
+        centroids.append((int(centroid[0]), int(centroid[1])))
 
-    return instance_label, centroid_arr
+    return instance_label, centroids
 
 
 def process_GLySAC_data():
@@ -65,9 +75,8 @@ def process_GLySAC_data():
             assert image.shape[-1] == 3
 
             # Read the annotation mat.
-            label, centroid_arr = load_GLySAC_annotation(annotation_file)
+            label, _ = load_GLySAC_annotation(annotation_file)
             print('Done reading annotation for image %s' % image_id)
-            print('Number of annotated cells: %d' % len(centroid_arr))
 
             os.makedirs(out_image_folder, exist_ok=True)
             os.makedirs(out_label_folder, exist_ok=True)
@@ -77,7 +86,7 @@ def process_GLySAC_data():
             out_label_path = os.path.join(out_label_folder, image_id + '.png')
             out_mask_path = os.path.join(out_mask_folder, image_id + '.png')
 
-            assert np.max(label) < 2**16
+            assert label.dtype == 'uint16'
             mask = label > 0
 
             cv2.imwrite(out_image_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
@@ -122,6 +131,138 @@ def process_GLySAC_data():
 
     return
 
+def subset_GLySAC_data_by_tumor():
+    train_image_folder = '../../data/GLySAC/train/images/'
+    train_label_folder = '../../data/GLySAC/train/labels/'
+    train_mask_folder = '../../data/GLySAC/train/masks/'
+    test_image_folder = '../../data/GLySAC/test/images/'
+    test_label_folder = '../../data/GLySAC/test/labels/'
+    test_mask_folder = '../../data/GLySAC/test/masks/'
+
+    target_folder = '../../data/GLySAC/GLySACByTumor/'
+
+    for tumor_type in ['Tumor', 'Normal']:
+        train_list = GLySAC_Organ2FileID[tumor_type]['train']
+        test_list = GLySAC_Organ2FileID[tumor_type]['test']
+
+        for train_item in tqdm(train_list):
+            image_path_from = train_image_folder + train_item + '.png'
+            label_path_from = train_label_folder + train_item + '.png'
+            mask_path_from = train_mask_folder + train_item + '.png'
+            image_path_to = os.path.join(target_folder, tumor_type, 'train/images/', train_item + '.png')
+            label_path_to = os.path.join(target_folder, tumor_type, 'train/labels/', train_item + '.png')
+            mask_path_to = os.path.join(target_folder, tumor_type, 'train/masks/', train_item + '.png')
+
+            os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+            os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+            os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+            os.system('cp %s %s' % (image_path_from, image_path_to))
+            os.system('cp %s %s' % (label_path_from, label_path_to))
+            os.system('cp %s %s' % (mask_path_from, mask_path_to))
+
+        for test_item in tqdm(test_list):
+            image_path_from = test_image_folder + test_item + '.png'
+            label_path_from = test_label_folder + test_item + '.png'
+            mask_path_from = test_mask_folder + test_item + '.png'
+            image_path_to = os.path.join(target_folder, tumor_type, 'test/images/', test_item + '.png')
+            label_path_to = os.path.join(target_folder, tumor_type, 'test/labels/', test_item + '.png')
+            mask_path_to = os.path.join(target_folder, tumor_type, 'test/masks/', test_item + '.png')
+
+            os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+            os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+            os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+            os.system('cp %s %s' % (image_path_from, image_path_to))
+            os.system('cp %s %s' % (label_path_from, label_path_to))
+            os.system('cp %s %s' % (mask_path_from, mask_path_to))
+
+    return
+
+def subset_patchify_GLySAC_data_by_tumor(imsize: int):
+    train_image_folder = '../../data/GLySAC/train/images/'
+    train_label_folder = '../../data/GLySAC/train/labels/'
+    test_image_folder = '../../data/GLySAC/test/images/'
+    test_label_folder = '../../data/GLySAC/test/labels/'
+
+    target_folder = '../../data/GLySAC/GLySACByTumor_%sx%s/' % (imsize, imsize)
+
+    for tumor_type in ['Tumor', 'Normal']:
+        train_list = GLySAC_Organ2FileID[tumor_type]['train']
+        test_list = GLySAC_Organ2FileID[tumor_type]['test']
+
+        for train_item in tqdm(train_list):
+            image_path_from = train_image_folder + train_item + '.png'
+            label_path_from = train_label_folder + train_item + '.png'
+
+            image = cv2.cvtColor(cv2.imread(image_path_from, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
+            label = cv2.imread(label_path_from, cv2.IMREAD_UNCHANGED)
+            assert label.dtype == 'uint16'
+            image_h, image_w = image.shape[:2]
+
+            for h_chunk in range(image_h // imsize):
+                for w_chunk in range(image_w // imsize):
+                    h = h_chunk * imsize
+                    w = w_chunk * imsize
+
+                    image_path_to = os.path.join(target_folder, tumor_type, 'train/images/', train_item + '_H%sW%s.png' % (h, w))
+                    label_path_to = os.path.join(target_folder, tumor_type, 'train/labels/', train_item + '_H%sW%s.png' % (h, w))
+                    mask_path_to = os.path.join(target_folder, tumor_type, 'train/masks/', train_item + '_H%sW%s.png' % (h, w))
+
+                    os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                    os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+                    os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+
+                    h_begin = max(h, 0)
+                    w_begin = max(w, 0)
+                    h_end = min(h + imsize, image_h)
+                    w_end = min(w + imsize, image_w)
+
+                    image_patch = image[h_begin:h_end, w_begin:w_end, :]
+                    label_patch = label[h_begin:h_end, w_begin:w_end]
+                    mask_patch = label_patch > 0
+                    assert label_patch.dtype == 'uint16'
+
+                    cv2.imwrite(image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
+                    cv2.imwrite(label_path_to, label_patch)
+                    cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
+
+        for test_item in tqdm(test_list):
+            image_path_from = test_image_folder + test_item + '.png'
+            label_path_from = test_label_folder + test_item + '.png'
+
+            image = cv2.cvtColor(cv2.imread(image_path_from, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
+            label = cv2.imread(label_path_from, cv2.IMREAD_UNCHANGED)
+            assert label.dtype == 'uint16'
+            image_h, image_w = image.shape[:2]
+
+            for h_chunk in range(image_h // imsize):
+                for w_chunk in range(image_w // imsize):
+                    h = h_chunk * imsize
+                    w = w_chunk * imsize
+
+                    image_path_to = os.path.join(target_folder, tumor_type, 'test/images/', test_item + '_H%sW%s.png' % (h, w))
+                    label_path_to = os.path.join(target_folder, tumor_type, 'test/labels/', test_item + '_H%sW%s.png' % (h, w))
+                    mask_path_to = os.path.join(target_folder, tumor_type, 'test/masks/', test_item + '_H%sW%s.png' % (h, w))
+
+                    os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                    os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+                    os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+
+                    h_begin = max(h, 0)
+                    w_begin = max(w, 0)
+                    h_end = min(h + imsize, image_h)
+                    w_end = min(w + imsize, image_w)
+
+                    image_patch = image[h_begin:h_end, w_begin:w_end, :]
+                    label_patch = label[h_begin:h_end, w_begin:w_end]
+                    mask_patch = label_patch > 0
+                    assert label_patch.dtype == 'uint16'
+
+                    cv2.imwrite(image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
+                    cv2.imwrite(label_path_to, label_patch)
+                    cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
+
+    return
+
 def patchify_GLySAC_data_by_tumor_cell_centric(patch_size: int, background_ratio: float = 0.5):
     '''
     images are in .tif format, RGB, 1000x1000.
@@ -139,6 +280,7 @@ def patchify_GLySAC_data_by_tumor_cell_centric(patch_size: int, background_ratio
 
             out_image_folder = f'../../data/GLySAC/GLySACByTumor_patch_{patch_size}x{patch_size}/{tumor_type}/{subset}/images/'
             out_label_folder = f'../../data/GLySAC/GLySACByTumor_patch_{patch_size}x{patch_size}/{tumor_type}/{subset}/labels/'
+            out_mask_folder = f'../../data/GLySAC/GLySACByTumor_patch_{patch_size}x{patch_size}/{tumor_type}/{subset}/masks/'
             out_bg_image_folder = f'../../data/GLySAC/GLySACByTumor_patch_{patch_size}x{patch_size}/{tumor_type}/{subset}/background_images/'
             out_stats_folder = f'../../data/GLySAC/GLySACByTumor/{tumor_type}/{subset}/stats/'
 
@@ -161,24 +303,13 @@ def patchify_GLySAC_data_by_tumor_cell_centric(patch_size: int, background_ratio
                 image_h, image_w = image.shape[:2]
 
                 # Read the annotation mat.
-                label, centroid_arr = load_GLySAC_annotation(annotation_file)
-                num_cells = len(centroid_arr)
+                label, centroids_list = load_GLySAC_annotation(annotation_file)
+                num_cells = len(centroids_list)
                 print('Done reading annotation for image %s' % image_id)
                 print('Number of annotated cells: %d' % num_cells)
 
-                os.makedirs(out_image_folder, exist_ok=True)
-                os.makedirs(out_label_folder, exist_ok=True)
-
-                out_image_path = os.path.join(out_image_folder, image_id + '.png')
-                out_label_path = os.path.join(out_label_folder, image_id + '.png')
-
-                assert np.max(label) < 2**16
-
-                cv2.imwrite(out_image_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-                cv2.imwrite(out_label_path, label)
-
                 # Patchify and save the cell images and labels.
-                for coord in centroid_arr:
+                for coord in centroids_list:
                     h = int(coord[0] - patch_size // 2)
                     w = int(coord[1] - patch_size // 2)
 
@@ -187,19 +318,23 @@ def patchify_GLySAC_data_by_tumor_cell_centric(patch_size: int, background_ratio
                     w = min(w, image_w - patch_size)
                     w = max(w, 0)
 
+                    os.makedirs(out_image_folder, exist_ok=True)
+                    os.makedirs(out_label_folder, exist_ok=True)
+                    os.makedirs(out_mask_folder, exist_ok=True)
+
                     cell_file_name = f'{image_id}_H{h}W{w}_patch_{patch_size}x{patch_size}.png'
                     bg_image_path_to = os.path.join(out_image_folder, cell_file_name)
                     label_path_to = os.path.join(out_label_folder, cell_file_name)
-                    os.makedirs(os.path.dirname(bg_image_path_to), exist_ok=True)
-                    os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+                    mask_path_to = os.path.join(out_mask_folder, cell_file_name)
 
                     image_patch = image[h : h+patch_size, w : w+patch_size, :]
                     label_patch = label[h : h+patch_size, w : w+patch_size]
-
-                    assert np.max(label_patch) < 2**16
+                    mask_patch = label_patch > 0
+                    assert label_patch.dtype == 'uint16'
 
                     cv2.imwrite(bg_image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
                     cv2.imwrite(label_path_to, label_patch)
+                    cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
 
                 # Find background patches that do not contain cells.
                 background_locs = find_background_patch_locs(label, patch_size=patch_size)
@@ -217,10 +352,10 @@ def patchify_GLySAC_data_by_tumor_cell_centric(patch_size: int, background_ratio
 
                 # Save background patches.
                 for (h, w) in selected_background_locs:
-                    bg_file_name = f'{image_id}_H{h}W{w}_patch_{patch_size}x{patch_size}.png'
+                    cell_file_name = f'{image_id}_H{h}W{w}_patch_{patch_size}x{patch_size}.png'
                     bg_image_patch = image[h : h+patch_size, w : w+patch_size]
 
-                    bg_image_path_to = os.path.join(out_bg_image_folder, bg_file_name)
+                    bg_image_path_to = os.path.join(out_bg_image_folder, cell_file_name)
                     os.makedirs(os.path.dirname(bg_image_path_to), exist_ok=True)
                     cv2.imwrite(bg_image_path_to, cv2.cvtColor(bg_image_patch, cv2.COLOR_RGB2BGR))
 
@@ -292,134 +427,6 @@ def find_background_patch_locs(label, patch_size) -> list[str]:
     print('[Background] Number of candidate patches: %d' % len(candidate_patches))
 
     return candidate_patches
-
-def subset_GLySAC_data_by_tumor():
-    train_image_folder = '../../data/GLySAC/train/images/'
-    train_label_folder = '../../data/GLySAC/train/labels/'
-    train_mask_folder = '../../data/GLySAC/train/masks/'
-    test_image_folder = '../../data/GLySAC/test/images/'
-    test_label_folder = '../../data/GLySAC/test/labels/'
-    test_mask_folder = '../../data/GLySAC/test/masks/'
-
-    target_folder = '../../data/GLySAC/GLySACByTumor/'
-
-    for tumor_type in ['Tumor', 'Normal']:
-        train_list = GLySAC_Organ2FileID[tumor_type]['train']
-        test_list = GLySAC_Organ2FileID[tumor_type]['test']
-
-        for train_item in tqdm(train_list):
-            image_path_from = train_image_folder + train_item + '.png'
-            label_path_from = train_label_folder + train_item + '.png'
-            mask_path_from = train_mask_folder + train_item + '.png'
-            image_path_to = os.path.join(target_folder, tumor_type, 'train/images/', train_item + '.png')
-            label_path_to = os.path.join(target_folder, tumor_type, 'train/labels/', train_item + '.png')
-            mask_path_to = os.path.join(target_folder, tumor_type, 'train/masks/', train_item + '.png')
-
-            os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
-            os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
-            os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
-            os.system('cp %s %s' % (image_path_from, image_path_to))
-            os.system('cp %s %s' % (label_path_from, label_path_to))
-            os.system('cp %s %s' % (mask_path_from, mask_path_to))
-
-        for test_item in tqdm(test_list):
-            image_path_from = test_image_folder + test_item + '.png'
-            label_path_from = test_label_folder + test_item + '.png'
-            mask_path_from = test_mask_folder + test_item + '.png'
-            image_path_to = os.path.join(target_folder, tumor_type, 'test/images/', test_item + '.png')
-            label_path_to = os.path.join(target_folder, tumor_type, 'test/labels/', test_item + '.png')
-            mask_path_to = os.path.join(target_folder, tumor_type, 'test/masks/', test_item + '.png')
-
-            os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
-            os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
-            os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
-            os.system('cp %s %s' % (image_path_from, image_path_to))
-            os.system('cp %s %s' % (label_path_from, label_path_to))
-            os.system('cp %s %s' % (mask_path_from, mask_path_to))
-
-    return
-
-def subset_patchify_GLySAC_data_by_tumor(imsize: int):
-    train_image_folder = '../../data/GLySAC/train/images/'
-    train_label_folder = '../../data/GLySAC/train/labels/'
-    test_image_folder = '../../data/GLySAC/test/images/'
-    test_label_folder = '../../data/GLySAC/test/labels/'
-
-    target_folder = '../../data/GLySAC/GLySACByTumor_%sx%s/' % (imsize, imsize)
-
-    for tumor_type in ['Tumor', 'Normal']:
-        train_list = GLySAC_Organ2FileID[tumor_type]['train']
-        test_list = GLySAC_Organ2FileID[tumor_type]['test']
-
-        for train_item in tqdm(train_list):
-            image_path_from = train_image_folder + train_item + '.png'
-            label_path_from = train_label_folder + train_item + '.png'
-
-            image = cv2.cvtColor(cv2.imread(image_path_from, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
-            label = cv2.imread(label_path_from, cv2.IMREAD_UNCHANGED)
-            image_h, image_w = image.shape[:2]
-
-            for h_chunk in range(image_h // imsize):
-                for w_chunk in range(image_w // imsize):
-                    h = h_chunk * imsize
-                    w = w_chunk * imsize
-
-                    image_path_to = os.path.join(target_folder, tumor_type, 'train/images/', train_item + '_H%sW%s.png' % (h, w))
-                    label_path_to = os.path.join(target_folder, tumor_type, 'train/labels/', train_item + '_H%sW%s.png' % (h, w))
-                    mask_path_to = os.path.join(target_folder, tumor_type, 'train/masks/', train_item + '_H%sW%s.png' % (h, w))
-
-                    os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
-                    os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
-                    os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
-
-                    h_begin = max(h, 0)
-                    w_begin = max(w, 0)
-                    h_end = min(h + imsize, image_h)
-                    w_end = min(w + imsize, image_w)
-
-                    image_patch = image[h_begin:h_end, w_begin:w_end, :]
-                    label_patch = label[h_begin:h_end, w_begin:w_end]
-                    mask_patch = label_patch > 0
-
-                    cv2.imwrite(image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
-                    cv2.imwrite(label_path_to, label_patch)
-                    cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
-
-        for test_item in tqdm(test_list):
-            image_path_from = test_image_folder + test_item + '.png'
-            label_path_from = test_label_folder + test_item + '.png'
-
-            image = cv2.cvtColor(cv2.imread(image_path_from, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
-            label = cv2.imread(label_path_from, cv2.IMREAD_UNCHANGED)
-            image_h, image_w = image.shape[:2]
-
-            for h_chunk in range(image_h // imsize):
-                for w_chunk in range(image_w // imsize):
-                    h = h_chunk * imsize
-                    w = w_chunk * imsize
-
-                    image_path_to = os.path.join(target_folder, tumor_type, 'test/images/', test_item + '_H%sW%s.png' % (h, w))
-                    label_path_to = os.path.join(target_folder, tumor_type, 'test/labels/', test_item + '_H%sW%s.png' % (h, w))
-                    mask_path_to = os.path.join(target_folder, tumor_type, 'test/masks/', test_item + '_H%sW%s.png' % (h, w))
-
-                    os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
-                    os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
-                    os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
-
-                    h_begin = max(h, 0)
-                    w_begin = max(w, 0)
-                    h_end = min(h + imsize, image_h)
-                    w_end = min(w + imsize, image_w)
-
-                    image_patch = image[h_begin:h_end, w_begin:w_end, :]
-                    label_patch = label[h_begin:h_end, w_begin:w_end]
-                    mask_patch = label_patch > 0
-
-                    cv2.imwrite(image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
-                    cv2.imwrite(label_path_to, label_patch)
-                    cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
-
-    return
 
 
 if __name__ == '__main__':

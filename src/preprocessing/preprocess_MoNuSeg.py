@@ -84,11 +84,13 @@ def annotation_to_label(verts_list: list[np.ndarray],
         # cell is shape (n, 2)
 
         cell_label = polygon2mask(label.shape, cell) * (i + 1)
+        cell_label = cell_label.astype(np.uint16)  # uint16 is essential!
         label = np.maximum(label, cell_label)
 
         centroid = skimage.measure.centroid(cell_label)
         centroids.append((int(centroid[0]), int(centroid[1])))
 
+    assert len(centroids) < 2**16
     return label, centroids
 
 def process_MoNuSeg_data():
@@ -143,7 +145,7 @@ def process_MoNuSeg_data():
             out_label_path = os.path.join(out_label_folder, image_id + '.png')
             out_mask_path = os.path.join(out_mask_folder, image_id + '.png')
 
-            assert np.max(label) < 2**16
+            assert label.dtype == 'uint16'
             mask = label > 0
 
             cv2.imwrite(out_image_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
@@ -187,6 +189,110 @@ def process_MoNuSeg_data():
 
     return
 
+def subset_MoNuSeg_data_by_cancer():
+    train_image_folder = '../../data/MoNuSeg/train/images/'
+    train_label_folder = '../../data/MoNuSeg/train/labels/'
+    train_mask_folder = '../../data/MoNuSeg/train/masks/'
+    test_image_folder = '../../data/MoNuSeg/test/images/'
+    test_label_folder = '../../data/MoNuSeg/test/labels/'
+    test_mask_folder = '../../data/MoNuSeg/test/masks/'
+
+    target_folder = '../../data/MoNuSeg/MoNuSegByCancer/'
+
+    for cancer_type in MoNuSeg_Organ2FileID.keys():
+        for subset in ['train', 'test']:
+            train_list = MoNuSeg_Organ2FileID[cancer_type]['train']
+            test_list = MoNuSeg_Organ2FileID[cancer_type]['test']
+
+            # NOTE: When we partition by cancer,
+            # we split the samples for organs that were used exclusively for train or test.
+            # Therefore, the original "train" or "test" split no longer hold true.
+            for item in tqdm(train_list + test_list):
+                try:
+                    image_path_from = os.path.join(train_image_folder, item + '.png')
+                    label_path_from = os.path.join(train_label_folder, item + '.png')
+                    mask_path_from = os.path.join(train_mask_folder, item + '.png')
+                    assert os.path.isfile(image_path_from) and os.path.isfile(label_path_from) and os.path.isfile(mask_path_from)
+                except:
+                    image_path_from = os.path.join(test_image_folder, item + '.png')
+                    label_path_from = os.path.join(test_label_folder, item + '.png')
+                    mask_path_from = os.path.join(test_mask_folder, item + '.png')
+                    assert os.path.isfile(image_path_from) and os.path.isfile(label_path_from) and os.path.isfile(mask_path_from)
+
+                image_path_to = os.path.join(target_folder, cancer_type, subset, 'images', item + '.png')
+                label_path_to = os.path.join(target_folder, cancer_type, subset, 'labels', item + '.png')
+                mask_path_to = os.path.join(target_folder, cancer_type, subset, 'masks', item + '.png')
+
+                os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+                os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+                os.system('cp %s %s' % (image_path_from, image_path_to))
+                os.system('cp %s %s' % (label_path_from, label_path_to))
+                os.system('cp %s %s' % (mask_path_from, mask_path_to))
+
+    return
+
+def subset_patchify_MoNuSeg_data_by_cancer(imsize: int):
+    train_image_folder = '../../data/MoNuSeg/train/images/'
+    train_label_folder = '../../data/MoNuSeg/train/labels/'
+    test_image_folder = '../../data/MoNuSeg/test/images/'
+    test_label_folder = '../../data/MoNuSeg/test/labels/'
+
+    target_folder = '../../data/MoNuSeg/MoNuSegByCancer_%sx%s/' % (imsize, imsize)
+
+    for cancer_type in MoNuSeg_Organ2FileID.keys():
+        for subset in ['train', 'test']:
+            train_list = MoNuSeg_Organ2FileID[cancer_type]['train']
+            test_list = MoNuSeg_Organ2FileID[cancer_type]['test']
+
+            # NOTE: When we partition by cancer,
+            # we split the samples for organs that were used exclusively for train or test.
+            # Therefore, the original "train" or "test" split no longer hold true.
+            for item in tqdm(train_list + test_list):
+                try:
+                    image_path_from = os.path.join(train_image_folder, item + '.png')
+                    label_path_from = os.path.join(train_label_folder, item + '.png')
+                    assert os.path.isfile(image_path_from) and os.path.isfile(label_path_from)
+                except:
+                    image_path_from = os.path.join(test_image_folder, item + '.png')
+                    label_path_from = os.path.join(test_label_folder, item + '.png')
+                    assert os.path.isfile(image_path_from) and os.path.isfile(label_path_from)
+
+                image = cv2.cvtColor(cv2.imread(image_path_from, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
+                label = cv2.imread(label_path_from, cv2.IMREAD_UNCHANGED)
+                assert label.dtype == 'uint16'
+
+                image_h, image_w = image.shape[:2]
+
+                for h_chunk in range(image_h // imsize):
+                    for w_chunk in range(image_w // imsize):
+                        h = h_chunk * imsize
+                        w = w_chunk * imsize
+
+                        h = min(h, image_h - imsize)
+                        h = max(h, 0)
+                        w = min(w, image_w - imsize)
+                        w = max(w, 0)
+
+                        image_path_to = os.path.join(target_folder, cancer_type, subset, 'images', item + f'_H{h}W{w}.png')
+                        label_path_to = os.path.join(target_folder, cancer_type, subset, 'labels', item + f'_H{h}W{w}.png')
+                        mask_path_to = os.path.join(target_folder, cancer_type, subset, 'masks', item + f'_H{h}W{w}.png')
+
+                        os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
+                        os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+                        os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
+
+                        image_patch = image[h : h+imsize, w : w+imsize, :]
+                        label_patch = label[h : h+imsize, w : w+imsize]
+                        mask_patch = label_patch > 0
+                        assert label_patch.dtype == 'uint16'
+
+                        cv2.imwrite(image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
+                        cv2.imwrite(label_path_to, label_patch)
+                        cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
+
+    return
+
 def patchify_MoNuSeg_data_by_cancer_cell_centric(patch_size: int, background_ratio: float = 0.5):
     '''
     images are in .tif format, RGB, 1000x1000.
@@ -205,6 +311,7 @@ def patchify_MoNuSeg_data_by_cancer_cell_centric(patch_size: int, background_rat
 
             out_image_folder = f'../../data/MoNuSeg/MoNuSegByCancer_patch_{patch_size}x{patch_size}/{cancer_type}/{subset}/images/'
             out_label_folder = f'../../data/MoNuSeg/MoNuSegByCancer_patch_{patch_size}x{patch_size}/{cancer_type}/{subset}/labels/'
+            out_mask_folder = f'../../data/MoNuSeg/MoNuSegByCancer_patch_{patch_size}x{patch_size}/{cancer_type}/{subset}/masks/'
             out_bg_image_folder = f'../../data/MoNuSeg/MoNuSegByCancer_patch_{patch_size}x{patch_size}/{cancer_type}/{subset}/background_images/'
             out_stats_folder = f'../../data/MoNuSeg/MoNuSegByCancer/{cancer_type}/{subset}/stats/'
 
@@ -246,19 +353,23 @@ def patchify_MoNuSeg_data_by_cancer_cell_centric(patch_size: int, background_rat
                     w = min(w, image_w - patch_size)
                     w = max(w, 0)
 
+                    os.makedirs(out_image_folder, exist_ok=True)
+                    os.makedirs(out_label_folder, exist_ok=True)
+                    os.makedirs(out_mask_folder, exist_ok=True)
+
                     cell_file_name = f'{image_id}_H{h}W{w}_patch_{patch_size}x{patch_size}.png'
                     bg_image_path_to = os.path.join(out_image_folder, cell_file_name)
                     label_path_to = os.path.join(out_label_folder, cell_file_name)
-                    os.makedirs(os.path.dirname(bg_image_path_to), exist_ok=True)
-                    os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
+                    mask_path_to = os.path.join(out_mask_folder, cell_file_name)
 
                     image_patch = image[h : h+patch_size, w : w+patch_size, :]
                     label_patch = label[h : h+patch_size, w : w+patch_size]
-
-                    assert np.max(label_patch) < 2**16
+                    mask_patch = label_patch > 0
+                    assert label_patch.dtype == 'uint16'
 
                     cv2.imwrite(bg_image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
                     cv2.imwrite(label_path_to, label_patch)
+                    cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
 
                 # Find background patches that do not contain cells.
                 background_locs = find_background_patch_locs(label, patch_size=patch_size)
@@ -351,108 +462,6 @@ def find_background_patch_locs(label, patch_size) -> list[str]:
 
     return candidate_patches
 
-
-def subset_MoNuSeg_data_by_cancer():
-    train_image_folder = '../../data/MoNuSeg/train/images/'
-    train_label_folder = '../../data/MoNuSeg/train/labels/'
-    train_mask_folder = '../../data/MoNuSeg/train/masks/'
-    test_image_folder = '../../data/MoNuSeg/test/images/'
-    test_label_folder = '../../data/MoNuSeg/test/labels/'
-    test_mask_folder = '../../data/MoNuSeg/test/masks/'
-
-    target_folder = '../../data/MoNuSeg/MoNuSegByCancer/'
-
-    for cancer_type in MoNuSeg_Organ2FileID.keys():
-        for subset in ['train', 'test']:
-            train_list = MoNuSeg_Organ2FileID[cancer_type]['train']
-            test_list = MoNuSeg_Organ2FileID[cancer_type]['test']
-
-            # NOTE: When we partition by cancer,
-            # we split the samples for organs that were used exclusively for train or test.
-            # Therefore, the original "train" or "test" split no longer hold true.
-            for item in tqdm(train_list + test_list):
-                try:
-                    image_path_from = os.path.join(train_image_folder, item + '.png')
-                    label_path_from = os.path.join(train_label_folder, item + '.png')
-                    mask_path_from = os.path.join(train_mask_folder, item + '.png')
-                    assert os.path.isfile(image_path_from) and os.path.isfile(label_path_from) and os.path.isfile(mask_path_from)
-                except:
-                    image_path_from = os.path.join(test_image_folder, item + '.png')
-                    label_path_from = os.path.join(test_label_folder, item + '.png')
-                    mask_path_from = os.path.join(test_mask_folder, item + '.png')
-                    assert os.path.isfile(image_path_from) and os.path.isfile(label_path_from) and os.path.isfile(mask_path_from)
-
-                image_path_to = os.path.join(target_folder, cancer_type, subset, 'images', item + '.png')
-                label_path_to = os.path.join(target_folder, cancer_type, subset, 'labels', item + '.png')
-                mask_path_to = os.path.join(target_folder, cancer_type, subset, 'masks', item + '.png')
-
-                os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
-                os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
-                os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
-                os.system('cp %s %s' % (image_path_from, image_path_to))
-                os.system('cp %s %s' % (label_path_from, label_path_to))
-                os.system('cp %s %s' % (mask_path_from, mask_path_to))
-
-    return
-
-def subset_patchify_MoNuSeg_data_by_cancer(imsize: int):
-    train_image_folder = '../../data/MoNuSeg/train/images/'
-    train_label_folder = '../../data/MoNuSeg/train/labels/'
-    test_image_folder = '../../data/MoNuSeg/test/images/'
-    test_label_folder = '../../data/MoNuSeg/test/labels/'
-
-    target_folder = '../../data/MoNuSeg/MoNuSegByCancer_%sx%s/' % (imsize, imsize)
-
-    for cancer_type in MoNuSeg_Organ2FileID.keys():
-        for subset in ['train', 'test']:
-            train_list = MoNuSeg_Organ2FileID[cancer_type]['train']
-            test_list = MoNuSeg_Organ2FileID[cancer_type]['test']
-
-            # NOTE: When we partition by cancer,
-            # we split the samples for organs that were used exclusively for train or test.
-            # Therefore, the original "train" or "test" split no longer hold true.
-            for item in tqdm(train_list + test_list):
-                try:
-                    image_path_from = os.path.join(train_image_folder, item + '.png')
-                    label_path_from = os.path.join(train_label_folder, item + '.png')
-                    assert os.path.isfile(image_path_from) and os.path.isfile(label_path_from)
-                except:
-                    image_path_from = os.path.join(test_image_folder, item + '.png')
-                    label_path_from = os.path.join(test_label_folder, item + '.png')
-                    assert os.path.isfile(image_path_from) and os.path.isfile(label_path_from)
-
-                image = cv2.cvtColor(cv2.imread(image_path_from, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
-                label = cv2.imread(label_path_from, cv2.IMREAD_UNCHANGED)
-
-                image_h, image_w = image.shape[:2]
-
-                for h_chunk in range(image_h // imsize):
-                    for w_chunk in range(image_w // imsize):
-                        h = h_chunk * imsize
-                        w = w_chunk * imsize
-
-                        h = min(h, image_h - imsize)
-                        h = max(h, 0)
-                        w = min(w, image_w - imsize)
-                        w = max(w, 0)
-
-                        image_path_to = os.path.join(target_folder, cancer_type, subset, 'images', item + f'_H{h}W{w}.png')
-                        label_path_to = os.path.join(target_folder, cancer_type, subset, 'labels', item + f'_H{h}W{w}.png')
-                        mask_path_to = os.path.join(target_folder, cancer_type, subset, 'masks', item + f'_H{h}W{w}.png')
-
-                        os.makedirs(os.path.dirname(image_path_to), exist_ok=True)
-                        os.makedirs(os.path.dirname(label_path_to), exist_ok=True)
-                        os.makedirs(os.path.dirname(mask_path_to), exist_ok=True)
-
-                        image_patch = image[h : h+imsize, w : w+imsize, :]
-                        label_patch = label[h : h+imsize, w : w+imsize]
-                        mask_patch = label_patch > 0
-
-                        cv2.imwrite(image_path_to, cv2.cvtColor(image_patch, cv2.COLOR_RGB2BGR))
-                        cv2.imwrite(label_path_to, label_patch)
-                        cv2.imwrite(mask_path_to, np.uint8(mask_patch * 255))
-
-    return
 
 def test():
     aaa = '../../data/MoNuSeg/train/labels/'

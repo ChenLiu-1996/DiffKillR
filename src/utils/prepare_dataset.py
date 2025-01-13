@@ -5,7 +5,8 @@ from datasets.A28 import A28Dataset
 from datasets.A28Axis import A28AxisDataset
 # from datasets.tissuenet import TissueNetDataset
 from datasets.MoNuSeg import MoNuSegDataset
-from datasets.augmented_GLySAC import AugmentedGLySACDataset
+from datasets.GLySAC import GLySACDataset
+# from datasets.augmented_GLySAC import AugmentedGLySACDataset
 from datasets.BCCD_augmented import BCCD_augmentedDataset
 from utils.split import split_dataset
 from utils.attribute_hashmap import AttributeHashmap
@@ -50,7 +51,8 @@ def prepare_dataset(config: AttributeHashmap):
                                           base_path=config.dataset_path,
                                           target_dim=config.target_dim,
                                           n_views=config.n_views,
-                                          percentage=config.percentage)
+                                          percentage=config.percentage,
+                                          cell_isolation=config.cell_isolation)
         dataset_test = MoNuSegDataset(subset='test',
                                       no_background=config.no_background,
                                       augmentation_methods=aug_lists,
@@ -58,13 +60,30 @@ def prepare_dataset(config: AttributeHashmap):
                                       base_path=config.dataset_path,
                                       target_dim=config.target_dim,
                                       n_views=config.n_views,
-                                      percentage=config.percentage)
+                                      percentage=config.percentage,
+                                      cell_isolation=config.cell_isolation)
 
     elif config.dataset_name == 'GLySAC':
         aug_lists = config.aug_methods.split(',')
-        dataset = AugmentedGLySACDataset(augmentation_methods=aug_lists,
-                                        base_path=config.dataset_path,
-                                        target_dim=config.target_dim)
+        dataset_trainval = GLySACDataset(subset='train',
+                                         no_background=config.no_background,
+                                         augmentation_methods=aug_lists,
+                                         organ=config.organ,
+                                         base_path=config.dataset_path,
+                                         target_dim=config.target_dim,
+                                         n_views=config.n_views,
+                                         percentage=config.percentage,
+                                         cell_isolation=config.cell_isolation)
+        dataset_test = GLySACDataset(subset='test',
+                                     no_background=config.no_background,
+                                     augmentation_methods=aug_lists,
+                                     organ=config.organ,
+                                     base_path=config.dataset_path,
+                                     target_dim=config.target_dim,
+                                     n_views=config.n_views,
+                                     percentage=config.percentage,
+                                     cell_isolation=config.cell_isolation)
+
     elif config.dataset_name == 'BCCD':
         aug_lists = config.aug_methods.split(',')
         dataset = BCCD_augmentedDataset(augmentation_methods=aug_lists,
@@ -74,7 +93,7 @@ def prepare_dataset(config: AttributeHashmap):
         raise ValueError(
             'Dataset not found. Check `dataset_name` in config yaml file.')
 
-    if config.dataset_name in ['MoNuSeg']:
+    if config.dataset_name in ['MoNuSeg', 'GLySAC']:
         dataset = dataset_trainval  # for compatibility
         ratios = [float(c) for c in config.train_val_test_ratio.split(':')]
         ratios = tuple([c / sum(ratios) for c in ratios])
