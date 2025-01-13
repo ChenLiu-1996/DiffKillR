@@ -948,6 +948,7 @@ if __name__ == '__main__':
     parser.add_argument('--coeff-smoothness', default=0, type=float)
     parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
     parser.add_argument('--n-plot-per-epoch', default=2, type=int)
+    parser.add_argument('--cell-isolation', action='store_true')
 
     parser.add_argument('--use-wandb', action='store_true')
     parser.add_argument('--wandb-username', default='yale-cl2482', type=str)

@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 
 import_dir = '/'.join(os.path.realpath(__file__).split('/')[:-2])
 sys.path.insert(0, import_dir + '/utils/')
-from archetype_cleaning import archetype_remove_background
+from cell_isolation import isolate_cell
 
 
 if __name__ == '__main__':
@@ -27,7 +27,7 @@ if __name__ == '__main__':
         label = cv2.imread(label_path, cv2.IMREAD_UNCHANGED)
 
         image, background_image, inpainted_image, cleaned_image = \
-            archetype_remove_background(image, label, return_intermediates=True)
+            isolate_cell(image, label, return_intermediates=True)
 
         ax = fig.add_subplot(4, 4, 1 + 4 * row_idx)
         ax.imshow(image)
@@ -50,4 +50,4 @@ if __name__ == '__main__':
         if row_idx == 0:
             ax.set_title('Final Cleaned Image')
         fig.tight_layout(pad=2)
-        fig.savefig('archetype_cleaning.png')
+        fig.savefig('cell_isolation.png')

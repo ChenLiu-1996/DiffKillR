@@ -3,12 +3,12 @@ import numpy as np
 from simple_lama_inpainting import SimpleLama
 
 
-__all__ = ['archetype_remove_background']
+__all__ = ['isolate_cell', 'nonzero_value_closest_to_center']
 
 
-def archetype_remove_background(image: np.ndarray, label: np.ndarray, return_intermediates: bool = False) -> np.ndarray:
+def isolate_cell(image: np.ndarray, label: np.ndarray, return_intermediates: bool = False) -> np.ndarray:
     '''
-    This function aims to clean the archetype images by removing any other cell in the region.
+    This function aims to clean the archetype cell image by removing any other cell in the region.
 
     Step 1. Find the location of archetype cell as well as the other cells.
             If only the archtype cell is present, do nothing and return image.
@@ -86,4 +86,4 @@ if __name__ == '__main__':
     image = cv2.cvtColor(cv2.imread(image_path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB)
     label = cv2.imread(label_path, cv2.IMREAD_UNCHANGED)
 
-    archetype_remove_background(image, label)
+    isolate_cell(image, label)
