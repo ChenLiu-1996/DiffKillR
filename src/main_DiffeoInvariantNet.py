@@ -478,7 +478,7 @@ def main(config):
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
-    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_nviews-{config.n_views}_epoch-{config.max_epochs}_seed-{config.random_seed}'
+    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_cellIsolation-{config.cell_isolation}_latentLoss-{config.latent_loss}_nviews-{config.n_views}_epoch-{config.max_epochs}_seed-{config.random_seed}'
     config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str, '')
     config.DiffeoInvariantNet_model_save_path = os.path.join(config.output_save_path, 'model.ckpt')
     config.log_path = os.path.join(config.output_save_path, 'log.txt')

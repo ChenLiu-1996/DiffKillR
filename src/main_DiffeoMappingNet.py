@@ -879,7 +879,7 @@ def main(config):
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
-    DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_hard-{config.hard_example_ratio}_epoch-{config.max_epochs}_smoothness-{config.coeff_smoothness}_seed{config.random_seed}'
+    DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_cellIsolation-{config.cell_isolation}_hard-{config.hard_example_ratio}_epoch-{config.max_epochs}_smoothness-{config.coeff_smoothness}_seed{config.random_seed}'
     config.output_save_path = os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, '')
     config.DiffeoMappingNet_model_save_path = os.path.join(config.output_save_path, 'model.ckpt')
     config.log_path = os.path.join(config.output_save_path, 'log.txt')

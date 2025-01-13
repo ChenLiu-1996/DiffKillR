@@ -473,6 +473,7 @@ if __name__ == '__main__':
     parser.add_argument('--train-val-test-ratio', default='6:2:2', type=str)
     parser.add_argument('--n-plot-per-epoch', default=2, type=int)
     parser.add_argument('--n-views', default=10, type=int)
+    parser.add_argument('--cell-isolation', action='store_true')
 
     config = parser.parse_args()
     assert config.mode in ['train', 'test', 'infer']
@@ -485,9 +486,9 @@ if __name__ == '__main__':
             setattr(config, key, getattr(config, key).replace('$ROOT', ROOT))
 
     model_name = f'dataset-{config.dataset_name}_fewShot-{config.percentage:.1f}%_organ-{config.organ}'
-    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_latentLoss-{config.latent_loss}_nviews-{config.n_views}_epoch-{config.DiffeoInvariantNet_max_epochs}_seed-{config.random_seed}'
+    DiffeoInvariantNet_str = f'DiffeoInvariantNet_model-{config.DiffeoInvariantNet_model}_depth-{config.depth}_cellIsolation-{config.cell_isolation}_latentLoss-{config.latent_loss}_nviews-{config.n_views}_epoch-{config.DiffeoInvariantNet_max_epochs}_seed-{config.random_seed}'
     config.DiffeoInvariantNet_model_save_path = os.path.join(os.path.join(config.output_save_folder, model_name, DiffeoInvariantNet_str, ''), 'model.ckpt')
-    DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_hard-{config.hard_example_ratio}_epoch-{config.DiffeoMappingNet_max_epochs}_smoothness-{config.coeff_smoothness}_seed{config.random_seed}'
+    DiffeoMappingNet_str = f'DiffeoMappingNet_model-{config.DiffeoMappingNet_model}_cellIsolation-{config.cell_isolation}_hard-{config.hard_example_ratio}_epoch-{config.DiffeoMappingNet_max_epochs}_smoothness-{config.coeff_smoothness}_seed{config.random_seed}'
     config.DiffeoMappingNet_model_save_path = os.path.join(os.path.join(config.output_save_folder, model_name, DiffeoMappingNet_str, ''), 'model.ckpt')
 
     print(config)

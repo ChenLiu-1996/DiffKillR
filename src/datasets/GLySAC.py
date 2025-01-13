@@ -94,8 +94,10 @@ class GLySACDataset(Dataset):
             if self.cell_isolation:
                 # This image patch only contains the center cell.
                 canonical_pose_image = isolate_cell(image=canonical_pose_image, label=canonical_pose_label)
+            # This label patch only contains the center cell.
             center_cell_idx = nonzero_value_closest_to_center(canonical_pose_label)
-            canonical_pose_label = np.uint8(canonical_pose_label == center_cell_idx * 255)
+            canonical_pose_label = canonical_pose_label == center_cell_idx
+            canonical_pose_label = np.uint8(canonical_pose_label * 255)
         else:
             # NOTE: we will not downsample the canonical images or labels.
             canonical_pose_image = load_image(path=self.background_img_paths[idx - self.num_cells], target_dim=None)
