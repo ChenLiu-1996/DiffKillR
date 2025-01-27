@@ -236,7 +236,8 @@ def test(config):
     try:
         model = globals()[config.DiffeoInvariantNet_model](num_filters=config.num_filters,
                                                            in_channels=3,
-                                                           out_channels=3)
+                                                           out_channels=3,
+                                                           depth=config.depth)
     except:
         raise ValueError('`config.DiffeoInvariantNet_model`: %s not supported.' % config.DiffeoInvariantNet_model)
     model = model.to(device)
