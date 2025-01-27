@@ -33,6 +33,7 @@ def build_diffeomappingnet(config):
             num_filters=config.num_filters,
             in_channels=6,
             out_channels=4,
+            depth=config.depth
         )
     elif config.DiffeoMappingNet_model == 'VM':
         warp_predictor = VoxelMorph(
