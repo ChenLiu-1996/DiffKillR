@@ -5,24 +5,18 @@ Main file for DiffeoInvariantNet.
 import argparse
 import numpy as np
 import torch
-import sklearn.metrics
-import pandas as pd
 import wandb
 
 import os
-from glob import glob
-from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 import ast
 
 from model.scheduler import LinearWarmupCosineAnnealingLR
-from model.autoencoder import AutoEncoder
-from utils.attribute_hashmap import AttributeHashmap
+from model.autoencoder import AutoEncoder  # This is actually used!
 from utils.prepare_dataset import prepare_dataset
 from utils.log_util import log
 from utils.metrics import clustering_accuracy, topk_accuracy, embedding_mAP
-from utils.parse import parse_settings
 from utils.seed import seed_everything
 from utils.early_stop import EarlyStopping
 from loss.supervised_contrastive import SupConLoss

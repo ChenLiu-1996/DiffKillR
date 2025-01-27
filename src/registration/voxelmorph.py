@@ -152,11 +152,22 @@ class VxmDense(BaseNetwork):
         return pos_flow, neg_flow
 
 
-def default_unet_features():
-    nb_features = [
-        [16, 32, 32, 32],             # encoder
-        [32, 32, 32, 32, 32, 16, 16]  # decoder
-    ]
+def default_unet_features(smallest_dim: int):
+    if smallest_dim < 16:
+        nb_features = [
+            [16, 32],     # encoder
+            [32, 16, 16]  # decoder
+        ]
+    elif smallest_dim < 32:
+        nb_features = [
+            [16, 32, 32],         # encoder
+            [32, 32, 32, 16, 16]  # decoder
+        ]
+    else:
+        nb_features = [
+            [16, 32, 32, 32],             # encoder
+            [32, 32, 32, 32, 32, 16, 16]  # decoder
+        ]
     return nb_features
 
 class SpatialTransformer(nn.Module):
@@ -298,7 +309,7 @@ class Unet(nn.Module):
 
         # default encoder and decoder layer features if nothing provided
         if nb_features is None:
-            nb_features = default_unet_features()
+            nb_features = default_unet_features(np.min(inshape))
 
         # build feature list automatically
         if isinstance(nb_features, int):
@@ -413,8 +424,9 @@ if __name__ == '__main__':
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    rectangle = random_rectangle(rectangle_size=(32, 32), center=(32, 32))
-    star = random_star(center=(32, 32))
+    image_size = (64, 64)
+    rectangle = random_rectangle(image_size=image_size, rectangle_size=(32, 32), center=(32, 32))
+    star = random_star(image_size=image_size, center=(32, 32))
 
     moving_image, fixed_image = rectangle, star
     moving_image = radially_color_mask_with_colormap(moving_image)
@@ -422,7 +434,7 @@ if __name__ == '__main__':
 
     # NOTE: `int_steps=0` gives VM (non-diffeomorphic) and `int_steps=7` gives VM-Diff (diffeomorphic)
     DiffeoMappingNet = VxmDense(
-        inshape=(64, 64),
+        inshape=image_size,
         src_feats=3,
         trg_feats=3,
         int_steps=0,

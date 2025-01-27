@@ -36,7 +36,7 @@ def build_diffeomappingnet(config):
         )
     elif config.DiffeoMappingNet_model == 'VM':
         warp_predictor = VoxelMorph(
-            inshape=(32, 32),
+            inshape=config.target_dim,
             src_feats=3,
             trg_feats=3,
             int_steps=0,  # non-diffeomorphic
@@ -44,7 +44,7 @@ def build_diffeomappingnet(config):
         )
     elif config.DiffeoMappingNet_model == 'VM-Diff':
         warp_predictor = VoxelMorph(
-            inshape=(32, 32),
+            inshape=config.target_dim,
             src_feats=3,
             trg_feats=3,
             bidir=True,
