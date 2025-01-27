@@ -1,12 +1,13 @@
 import cv2
 import numpy as np
+import torch
 from simple_lama_inpainting import SimpleLama
 
 
 __all__ = ['isolate_cell', 'nonzero_value_closest_to_center']
 
 
-def isolate_cell(image: np.ndarray, label: np.ndarray, return_intermediates: bool = False) -> np.ndarray:
+def isolate_cell(image: np.ndarray, label: np.ndarray, return_intermediates: bool = False, inpainting_model=None) -> np.ndarray:
     '''
     This function aims to clean the archetype cell image by removing any other cell in the region.
 
@@ -42,8 +43,11 @@ def isolate_cell(image: np.ndarray, label: np.ndarray, return_intermediates: boo
     all_cell_mask_255 = cv2.dilate(all_cell_mask_255, structure_element, iterations=4)
     archetype_mask_255 = cv2.dilate(archetype_mask_255, structure_element, iterations=1)
 
-    simple_lama = SimpleLama()
-    inpainted_image = np.array(simple_lama(image, all_cell_mask_255))
+    if inpainting_model is None:
+        inpainting_model = SimpleLama(device=torch.device('cpu'))
+
+    with torch.no_grad():
+        inpainted_image = np.array(inpainting_model(image, all_cell_mask_255))
 
     if return_intermediates:
         background_image = image.copy()

@@ -2,6 +2,7 @@ import os
 import sys
 from glob import glob
 from typing import List, Tuple
+from simple_lama_inpainting import SimpleLama
 
 import cv2
 import random
@@ -47,6 +48,8 @@ class GLySACDataset(Dataset):
         self.n_views = n_views
         self.percentage = percentage
         self.cell_isolation = cell_isolation
+        if self.cell_isolation:
+            self.inpainting_model = SimpleLama(device=torch.device('cpu'))
         self.deterministic = False  # For infinite possibilities during training.
 
         self.img_paths = sorted(glob(os.path.join(base_path, organ, subset, 'images', '*.png')))
@@ -93,7 +96,9 @@ class GLySACDataset(Dataset):
             canonical_pose_label = load_label(path=self.label_paths[idx], target_dim=None)
             if self.cell_isolation:
                 # This image patch only contains the center cell.
-                canonical_pose_image = isolate_cell(image=canonical_pose_image, label=canonical_pose_label)
+                canonical_pose_image = isolate_cell(image=canonical_pose_image,
+                                                    label=canonical_pose_label,
+                                                    inpainting_model=self.inpainting_model)
             # This label patch only contains the center cell.
             center_cell_idx = nonzero_value_closest_to_center(canonical_pose_label)
             canonical_pose_label = canonical_pose_label == center_cell_idx
