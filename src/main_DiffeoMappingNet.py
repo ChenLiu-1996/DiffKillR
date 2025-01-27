@@ -379,7 +379,7 @@ def train(config, wandb_run=None):
                         unannotated_labels[0], annotated_labels[0],
                         labels_A2U[0]), metric_name_list, metric_list)
 
-            loss_forward = loss_fn_mse(annotated_images, images_U2A)
+            loss_forward = loss_fn_mse(annotated_images_fliprot, images_U2A)
             loss_cyclic = loss_fn_mse(unannotated_images, images_U2A_A2U)
             loss = loss_forward + loss_cyclic
 
@@ -529,7 +529,7 @@ def train(config, wandb_run=None):
                             unannotated_labels[0], annotated_labels[0],
                             labels_A2U[0]), metric_name_list, metric_list)
 
-                loss_forward = loss_fn_mse(annotated_images, images_U2A)
+                loss_forward = loss_fn_mse(annotated_images_fliprot, images_U2A)
                 loss_cyclic = loss_fn_mse(unannotated_images, images_U2A_A2U)
                 loss = loss_forward + loss_cyclic
                 if config.coeff_smoothness:
@@ -710,7 +710,7 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
                     unannotated_labels[0], annotated_labels[0],
                     labels_A2U[0]), metric_name_list, metric_list)
 
-        loss_forward = loss_fn_mse(annotated_images, images_U2A)
+        loss_forward = loss_fn_mse(annotated_images_fliprot, images_U2A)
         loss_cyclic = loss_fn_mse(unannotated_images, images_U2A_A2U)
         loss = loss_forward + loss_cyclic
         if config.coeff_smoothness:
