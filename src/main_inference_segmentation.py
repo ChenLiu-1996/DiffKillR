@@ -358,11 +358,11 @@ def infer(config: AttributeHashmap, n_plot_per_epoch: int = None):
 
         # Detect cells in the image.
         if config.use_gt_loc:
-            save_path = f'../comparison/results/{dataset_folder}/{config.organ}/Ours_gt_loc_seed{config.random_seed}/{os.path.basename(infer_image_path)}'
+            save_path = f'../comparison/results/{dataset_folder}/{config.organ}/DiffKillR_gt_loc_cellIsolation-{config.cell_isolation}_seed{config.random_seed}/{os.path.basename(infer_image_path)}'
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             cell_centroid_list = mask_to_cell_centroid(infer_mask)
         else:
-            save_path = f'../comparison/results/{dataset_folder}/{config.organ}/Ours_seed{config.random_seed}/{os.path.basename(infer_image_path)}'
+            save_path = f'../comparison/results/{dataset_folder}/{config.organ}/DiffKillR_cellIsolation-{config.cell_isolation}_seed{config.random_seed}/{os.path.basename(infer_image_path)}'
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             detections = detect_cells(infer_image, latent_extractor, torch.cat([item[None, ...] for item in bank_images], dim=0), bank_is_foreground,
                                       config.target_dim[0], stride=2, nms_threshold=0.1)

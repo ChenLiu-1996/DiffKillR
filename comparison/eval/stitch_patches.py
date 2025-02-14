@@ -27,8 +27,7 @@ if __name__ == '__main__':
         directory_list = sorted(glob('../results/%s/*/' % folder))
         for directory in tqdm(directory_list):
             # for model in ['UNet', 'nnUNet', 'MedT', 'PSM', 'LACSS', 'Ours_gt_loc', 'Ours']:
-            for model in ['UNet', 'nnUNet', 'MedT', 'PSM', 'LACSS']:
-            # for model in ['Ours_gt_loc', 'Ours']:
+            for model in ['DiffKillR_cellIsolation-True', 'DiffKillR_cellIsolation-False', 'DiffKillR_gt_loc_cellIsolation-True', 'DiffKillR_gt_loc_cellIsolation-False']:
                 for seed in range(1, 4):
 
                     if model in ['LACSS']:

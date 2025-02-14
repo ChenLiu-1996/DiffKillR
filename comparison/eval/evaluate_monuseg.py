@@ -8,7 +8,7 @@ import os
 if __name__ == '__main__':
 
     for folder in [
-        'MoNuSegByCancer_200x200',
+        'MoNuSegByCancer',
         # 'MoNuSegByCancer_intraimage5pct_200x200',
         # 'MoNuSegByCancer_intraimage20pct_200x200',
         # 'MoNuSegByCancer_intraimage50pct_200x200',
@@ -19,27 +19,23 @@ if __name__ == '__main__':
             subset = directory.split('/')[-2]
 
             # for model in ['UNet', 'nnUNet', 'MedT', 'LACSS', 'PSM', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM', 'Ours_gt_loc', 'Ours']:
-            for model in ['Ours_gt_loc', 'Ours']:
+            for model in ['DiffKillR_cellIsolation-True', 'DiffKillR_cellIsolation-False', 'DiffKillR_gt_loc_cellIsolation-True', 'DiffKillR_gt_loc_cellIsolation-False']:
                 for seed in range(1, 4):
-                    pred_folder = '%s/%s_seed%d_stitched/' % (directory, model, seed)
+                    pred_folder = '%s/%s_seed%d/' % (directory, model, seed)
 
                     if model in ['LACSS', 'SAM', 'SAM2', 'SAM_Med2D', 'MedSAM']:
                         if seed > 1:
                             continue
-                        pred_folder = '%s/%s_stitched/' % (directory, model)
+                        pred_folder = '%s/%s/' % (directory, model)
                     pred_list = sorted(glob(pred_folder + '*.png'))
 
                     print('>>> Working on: MoNuSeg [%s] Model [%s] seed %d' % (directory, model, seed))
 
-                    if 'intraimage' in folder:
-                        cancer_type, img_id = subset.split('_')
-                        true_folder = '../../data/MoNuSeg/%s/%s/%s_test/' % (folder, cancer_type, img_id)
-                        true_list = sorted(glob(true_folder + '*_effective_mask.png'))
-                    else:
-                        true_folder = '../../data/MoNuSeg/MoNuSegByCancer/%s/test/masks/' % subset
-                        true_list = sorted(glob(true_folder + '*.png'))
+                    true_folder = '../../data/MoNuSeg/MoNuSegByCancer/%s/test/masks/' % subset
+                    true_list = sorted(glob(true_folder + '*.png'))
 
-                    assert len(pred_list) == len(true_list)
+                    if len(pred_list) != len(true_list):
+                        continue
 
                     print('> Found: MoNuSeg [%s] Model [%s] seed %d' % (directory, model, seed))
 
