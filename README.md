@@ -10,6 +10,7 @@
 
 [![ArXiv](https://img.shields.io/badge/ArXiv-DiffKillR-firebrick)](https://arxiv.org/abs/2410.03058)
 [![Slides](https://img.shields.io/badge/Slides-yellow)](https://chenliu-1996.github.io/slides/DiffKillR_slides.pdf)
+[![ICASSP](https://img.shields.io/badge/DiffKillR-blue)](https://ieeexplore.ieee.org/abstract/document/10888526)
 [![Twitter](https://img.shields.io/twitter/follow/KrishnaswamyLab.svg?style=social)](https://twitter.com/KrishnaswamyLab)
 [![Twitter](https://img.shields.io/twitter/follow/ChenLiu-1996.svg?style=social)](https://twitter.com/ChenLiu_1996)
 [![Twitter](https://img.shields.io/twitter/follow/DanqiLiao.svg?style=social)](https://x.com/DanqiLiao73090)
