@@ -1,5 +1,5 @@
 <h1 align="center">
-[ICASSP 2025] DiffKillR
+[ICASSP 2025 Oral] DiffKillR
 </h1>
 
 <p align="center">
@@ -20,7 +20,7 @@
 
 ### Krishnaswamy Lab, Yale University
 
-This is the authors' PyTorch implementation of [DiffKillR](https://arxiv.org/abs/2410.03058), ICASSP 2025.
+This is the authors' PyTorch implementation of [DiffKillR](https://arxiv.org/abs/2410.03058), **ICASSP 2025 (Oral)**.
 
 The official version is maintained in the [Lab GitHub repo](https://github.com/KrishnaswamyLab/DiffKillR).
 
