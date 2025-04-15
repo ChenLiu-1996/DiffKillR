@@ -153,6 +153,13 @@ python main_monuseg.py --mode 'test' --crop_edge_size 200 --dataset_name MoNuSeg
 
 ```
 
+## LACSS
+```
+cd LACSS
+python seg_monuseg.py
+python seg_glysac.py
+```
+
 
 ### SAM
 

@@ -208,7 +208,18 @@ done
 </details>
 
 <details>
-<summary>1.3 SAM, MedSAM, SAM-Med2D, SAM2.</summary>
+<summary>1.3 LACSS.</summary>
+
+```
+cd /gpfs/gibbs/pi/krishnaswamy_smita/cl2482/DiffKillR/comparison/LACSS/
+python seg_monuseg.py
+python seg_glysac.py
+```
+
+</details>
+
+<details>
+<summary>1.4 SAM, MedSAM, SAM-Med2D, SAM2.</summary>
 
 ```
 for cancer in Bladdar Brain Breast Colon Kidney Liver Lung Prostate Stomach;
@@ -320,9 +331,9 @@ python -m pip install ml_collections
 python -m pip install ttach
 
 ## LACSS
-#python -m pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-python -m pip install jax==0.4.24
-python -m pip install lacss
+python -m pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+python -m pip install --upgrade flax
+python -m pip install --upgrade lacss
 #python -m pip install ml_dtypes==0.2.0
 
 ## StarDist
