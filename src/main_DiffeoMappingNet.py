@@ -9,6 +9,8 @@ from tqdm import tqdm
 from matplotlib import pyplot as plt
 from functools import partial
 import wandb
+import re
+from glob import glob
 
 from model.scheduler import LinearWarmupCosineAnnealingLR
 from registration.registration_loss import GradLoss as SmoothnessLoss
@@ -740,12 +742,8 @@ def test(config: AttributeHashmap, n_plot_per_epoch: int = None):
     log(log_str,
         filepath=config.log_path,
         to_console=False)
-
     return
 
-
-import re
-from glob import glob
 
 def extract_h_w(file_path):
     h_w = re.findall('H(-?\d+)_W(-?\d+)', file_path)

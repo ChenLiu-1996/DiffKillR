@@ -1,4 +1,4 @@
-from typing import Tuple, List, Literal
+from typing import Tuple, List
 import argparse
 import numpy as np
 import torch
@@ -6,25 +6,19 @@ import cv2
 import ast
 import os
 from tqdm import tqdm
-from matplotlib import pyplot as plt
-from functools import partial
 from sklearn.metrics import pairwise_distances
 from glob import glob
 import skimage.measure
 from skimage import morphology
 
+from main_DiffeoInvariantNet import build_diffeoinvariantnet
 from main_DiffeoMappingNet import build_diffeomappingnet, apply_flipping_rotation, predict_flipping_rotation
 from blob_detector import detect_nuclei as blob_detect_nuclei
 
-from model.autoencoder import AutoEncoder
 from registration.spatial_transformer import SpatialTransformer as Warper
-from registration.unet import UNet
-from registration.voxelmorph import VxmDense as VoxelMorph
-from registration.corrmlp import CorrMLP
 
 from utils.attribute_hashmap import AttributeHashmap
 from utils.prepare_dataset import prepare_dataset
-from utils.log_util import log
 from utils.seed import seed_everything
 
 from datasets.MoNuSeg import normalize_image, fix_channel_dimension, load_image, load_label
@@ -104,7 +98,7 @@ def mask_to_cell_centroid(mask):
     return cell_loc_list
 
 def extract_patches(image: np.array, patch_size: int, stride: int) -> Tuple[List[np.array], List[Tuple[int, int, int, int]]]:
-    """Extract patches from the image. image: (H, W, C).
+    '''Extract patches from the image. image: (H, W, C).
     Args:
         image (np.array): The input image, shape (H, W, C).
         patch_size (int): The size of the patches to extract.
@@ -112,7 +106,7 @@ def extract_patches(image: np.array, patch_size: int, stride: int) -> Tuple[List
     Returns:
         List[np.array]: The patches, each patch is (patch_size, patch_size, C).
         List[Tuple[int, int, int, int]]: The coordinates of the patches, each coordinate is (min_x, min_y, max_x, max_y).
-    """
+    '''
     patches = []
     coordinates = []
     for i in range(0, image.shape[0] - patch_size + 1, stride):
@@ -126,7 +120,7 @@ def detect_cells(image: np.array, model: torch.nn.Module,
                  cell_bank_patches: torch.Tensor, cell_bank_is_foreground: np.array,
                  patch_size: int, stride: int, nms_threshold: float = 0.5, voting_k: int = 1,
                  device: str = 'cpu') -> List[Tuple[int, int, int, int, float]]:
-    """
+    '''
     Detect cells in the image using the DiffeoInvariantNet model.
     Args:
         image (np.array): The input image, shape (H, W, C).
@@ -137,7 +131,7 @@ def detect_cells(image: np.array, model: torch.nn.Module,
         stride (int): The stride of the patches.
     Returns:
         List[Tuple[int, int, int, int, float]]: The detections, each detection is (min_x, min_y, max_x, max_y, score).
-    """
+    '''
 
     assert cell_bank_patches.shape[1] == image.shape[2]
     assert cell_bank_patches.shape[2] == cell_bank_patches.shape[3] == patch_size
@@ -244,16 +238,16 @@ def detect_cells(image: np.array, model: torch.nn.Module,
     return detections
 
 def non_max_suppression(boxes: List[Tuple[int, int, int, int, float]], threshold: float) -> List[Tuple[int, int, int, int, float]]:
-    """Perform non-maximum suppression on the detections. Discard boxes with high IoUs.
+    '''Perform non-maximum suppression on the detections. Discard boxes with high IoUs.
     Args:
         boxes (List[Tuple[int, int, int, int, float]]): The boxes, each box is (min_x, min_y, max_x, max_y, score).
         threshold (float): The threshold for non-maximum suppression.
     Returns:
         List[Tuple[int, int, int, int, float]]: The final boxes after NMS.
-    """
+    '''
 
     def _compute_iou(box1: Tuple[int, int, int, int, float], box2: Tuple[int, int, int, int, float]) -> float:
-        """Compute the IoU between two boxes. Each box is (min_x, min_y, max_x, max_y, score)"""
+        '''Compute the IoU between two boxes. Each box is (min_x, min_y, max_x, max_y, score)'''
         x1_min, y1_min, x1_max, y1_max = box1[:4]
         x2_min, y2_min, x2_max, y2_max = box2[:4]
 
@@ -293,18 +287,8 @@ def infer(config: AttributeHashmap, n_plot_per_epoch: int = None):
     _, _, _, test_set = prepare_dataset(config=config)
 
     # Build the model
-    try:
-        latent_extractor = globals()[config.DiffeoInvariantNet_model](num_filters=config.num_filters,
-                                                                      depth=config.depth,
-                                                                      in_channels=3,
-                                                                      out_channels=3)
-    except:
-        raise ValueError('`config.DiffeoInvariantNet_model`: %s not supported.' % config.DiffeoInvariantNet_model)
-
-    try:
-        warp_predictor = build_diffeomappingnet(config)
-    except:
-        raise ValueError('`config.DiffeoMappingNet_model`: %s not supported.' % config.DiffeoMappingNet_model)
+    latent_extractor = build_diffeoinvariantnet(config)
+    warp_predictor = build_diffeomappingnet(config)
 
     latent_extractor.load_weights(config.DiffeoInvariantNet_model_save_path, device=device)
     latent_extractor.to(device)

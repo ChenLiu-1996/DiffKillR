@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 import ast
 
 from model.scheduler import LinearWarmupCosineAnnealingLR
-from model.autoencoder import AutoEncoder  # This is actually used!
+from model.autoencoder import AutoEncoder
 from utils.prepare_dataset import prepare_dataset
 from utils.log_util import log
 from utils.metrics import clustering_accuracy, topk_accuracy, embedding_mAP
@@ -22,6 +22,17 @@ from utils.early_stop import EarlyStopping
 from loss.supervised_contrastive import SupConLoss
 from loss.triplet_loss import TripletLoss
 
+
+def build_diffeoinvariantnet(config):
+    if config.DiffeoInvariantNet_model == 'AutoEncoder':
+        model = AutoEncoder(
+            num_filters=config.num_filters,
+            depth=config.depth,
+            in_channels=3,
+            out_channels=3)
+    else:
+        raise ValueError(f'`config.DiffeoInvariantNet_model`: {config.DiffeoInvariantNet_model} not supported.')
+    return model
 
 def train(config, wandb_run=None):
     device = torch.device(
@@ -32,14 +43,7 @@ def train(config, wandb_run=None):
     dataset, train_loader, val_loader, _ = prepare_dataset(config=config)
 
     # Build the model
-    try:
-        model = globals()[config.DiffeoInvariantNet_model](num_filters=config.num_filters,
-                                                           depth=config.depth,
-                                                           in_channels=3,
-                                                           out_channels=3)
-    except:
-        raise ValueError('`config.DiffeoInvariantNet_model`: %s not supported.' % config.DiffeoInvariantNet_model)
-
+    model = build_diffeoinvariantnet(config)
     model = model.to(device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate)
