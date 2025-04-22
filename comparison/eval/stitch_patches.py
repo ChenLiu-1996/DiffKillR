@@ -26,19 +26,11 @@ if __name__ == '__main__':
 
         directory_list = sorted(glob('../results/%s/*/' % folder))
         for directory in tqdm(directory_list):
-            for model in ['UNet', 'nnUNet', 'MedT', 'PSM', 'LACSS', 'DiffKillR_cellIsolation-True', 'DiffKillR_cellIsolation-False', 'DiffKillR_gt_loc_cellIsolation-True', 'DiffKillR_gt_loc_cellIsolation-False']:
+            for model in ['UNet', 'nnUNet', 'MedT', 'PSM']:
                 for seed in range(1, 4):
 
-                    if model in ['LACSS']:
-                        if seed > 1:
-                            continue
-                        source_folder = '%s/%s/' % (directory, model)
-                        # stitched_folder = '%s/%s_stitched/' % (directory, model)
-                        stitched_folder = source_folder.replace('_200x200', '')
-                    else:
-                        source_folder = '%s/%s_seed%d/' % (directory, model, seed)
-                        # stitched_folder = '%s/%s_seed%d_stitched/' % (directory, model, seed)
-                        stitched_folder = source_folder.replace('_200x200', '')
+                    source_folder = '%s/%s_seed%d/' % (directory, model, seed)
+                    stitched_folder = source_folder.replace('_200x200', '')
 
                     os.makedirs(stitched_folder, exist_ok=True)
 

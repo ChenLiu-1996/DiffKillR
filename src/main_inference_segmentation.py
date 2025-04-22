@@ -42,13 +42,13 @@ def numpy_variables(*tensors: torch.Tensor) -> Tuple[np.array]:
     assert all([len(t.shape) == 3 for t in results])
     return results
 
-def get_sample_image(image_path, image_shape = (256, 256)):
+def get_sample_image(image_path, image_shape=None):
     image = normalize_image(load_image(image_path))
     if image_shape:
         image = image[:image_shape[0], :image_shape[1], ...]
     return image
 
-def get_sample_label(label_path, image_shape = (256, 256)):
+def get_sample_label(label_path, image_shape=None):
     label = load_label(label_path)
     if label.max() == 255:
         label = label / 255.0
@@ -349,7 +349,7 @@ def infer(config: AttributeHashmap, n_plot_per_epoch: int = None):
             save_path = f'../comparison/results/{dataset_folder}/{config.organ}/DiffKillR_cellIsolation-{config.cell_isolation}_seed{config.random_seed}/{os.path.basename(infer_image_path)}'
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             detections = detect_cells(infer_image, latent_extractor, torch.cat([item[None, ...] for item in bank_images], dim=0), bank_is_foreground,
-                                      config.target_dim[0], stride=2, nms_threshold=0.1)
+                                      config.target_dim[0], stride=4, nms_threshold=0.4)
             cell_centroid_list = [((item[0] + item[2])//2, (item[1] + item[3])//2) for item in detections]
             # detections = blob_detect_nuclei(np.uint8((infer_image + 1) / 2 * 255), return_overlay=False)
             # cell_centroid_list = [((item[0] + item[2])//2, (item[1] + item[3])//2) for item in detections]
@@ -434,7 +434,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--dataset-name', default='MoNuSeg', type=str)
     parser.add_argument('--dataset-path', default='$ROOT/data/MoNuSeg/MoNuSegByCancer_patch_96x96/', type=str)
-    parser.add_argument('--infer-dataset-path', default='$ROOT/data/MoNuSeg/MoNuSegByCancer_200x200/', type=str)
+    parser.add_argument('--infer-dataset-path', default='$ROOT/data/MoNuSeg/MoNuSegByCancer/', type=str)
     parser.add_argument('--model-save-folder', default='$ROOT/checkpoints/', type=str)
     parser.add_argument('--output-save-folder', default='$ROOT/results/', type=str)
 
